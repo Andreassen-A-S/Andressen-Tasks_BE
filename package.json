@@ -1,0 +1,19 @@
+{
+  "dependencies": {},
+  "name": "andressentask-be",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch run src/index.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "prettier": "3.8.1"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
