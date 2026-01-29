@@ -13,7 +13,23 @@ generator client {
 
 datasource db {
   provider = "mysql"
-  // url = env("DATABASE_URL")
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum TaskStatus {
+  DONE 
+  PENDING
+  REJECTED
+}
+
+enum UserRole {
+  USER
+  ADMIN
 }
 
 model User {
@@ -21,7 +37,7 @@ model User {
   name String
   email String @unique
   password String
-  role String @default("USER")
+  role UserRole @default(USER)
   position String
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -36,8 +52,8 @@ model Task {
   created_by String 
   title String
   description String
-  priority Int
-  status String @default("PENDING")
+  priority TaskPriority @default(MEDIUM)
+  status TaskStatus @default(PENDING)
   deadline DateTime
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -52,7 +68,6 @@ model TaskAssignment {
   user_id String
   assigned_at DateTime @default(now())
   completed_at DateTime?
-  is_completed Boolean @default(false)
 
   task Task @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
   user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
