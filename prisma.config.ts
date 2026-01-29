@@ -6,6 +6,8 @@ export default defineConfig({
   migrations: {
     path: "prisma/migrations",
   },
+  // DATABASE_URL must be a MySQL connection string, for example:
+  // mysql://user:password@db:3306/database
   datasource: {
     url: env("DATABASE_URL"),
   },
