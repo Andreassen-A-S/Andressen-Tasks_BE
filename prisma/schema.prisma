@@ -1,0 +1,59 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+  engineType = "client"
+  runtime = "bun"
+}
+
+datasource db {
+  provider = "mysql"
+  // url = env("DATABASE_URL")
+}
+
+model User {
+  user_id String @id @default(uuid())
+  name String
+  email String @unique
+  password String
+  role String @default("USER")
+  position String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tasks Task[]
+  taskAssignments TaskAssignment[]
+
+}
+
+model Task {
+  task_id String @id @default(uuid())
+  created_by String 
+  title String
+  description String
+  priority Int
+  status String @default("PENDING")
+  deadline DateTime
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  creator User @relation(fields: [created_by], references: [user_id])
+  assignments TaskAssignment[]
+}
+
+model TaskAssignment {
+  assignment_id String @id @default(uuid())
+  task_id String
+  user_id String
+  assigned_at DateTime @default(now())
+  completed_at DateTime?
+  is_completed Boolean @default(false)
+
+  task Task @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+}

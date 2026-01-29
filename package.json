@@ -1,5 +1,8 @@
 {
-  "dependencies": {},
+  "dependencies": {
+    "@prisma/adapter-libsql": "^7.3.0",
+    "@prisma/client": "^7.3.0"
+  },
   "name": "andressentask-be",
   "module": "src/index.ts",
   "type": "module",
@@ -11,7 +14,8 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "prettier": "3.8.1"
+    "prettier": "3.8.1",
+    "prisma": "^7.3.0"
   },
   "peerDependencies": {
     "typescript": "^5"
