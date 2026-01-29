@@ -1,6 +1,5 @@
 {
   "dependencies": {
-    "@prisma/adapter-libsql": "^7.3.0",
     "@prisma/client": "^7.3.0"
   },
   "name": "andressentask-be",
