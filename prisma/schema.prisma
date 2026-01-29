@@ -56,4 +56,6 @@ model TaskAssignment {
 
   task Task @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
   user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@unique([task_id, user_id])
 }
