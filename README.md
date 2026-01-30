@@ -7,3 +7,9 @@ to run Prisma migrations inside of the Docker container, use the following comma
 ```bash
 docker compose exec backend bunx --bun prisma migrate dev
 ```
+
+to populate the database with seed data, use the following command:
+
+```bash
+docker compose exec backend bun run prisma/seed/populateDB.ts
+```

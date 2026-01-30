@@ -1,8 +1,12 @@
 services:
   backend:
     build: .
+    command: bun run dev #Only for development
     ports:
-      - "9000:9000"
+      - "9000:3000"
+    volumes:
+      - ./:/app
+      - /app/node_modules
     depends_on:
       - db
     env_file:

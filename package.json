@@ -1,20 +1,25 @@
 {
   "dependencies": {
-    "@prisma/client": "^7.3.0"
+    "@prisma/client": "6.10.0",
+    "express": "^5.2.1",
+    "mysql2": "^3.16.2"
   },
   "name": "andressentask-be",
   "module": "src/index.ts",
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "bun run src/index.ts",
-    "dev": "bun --watch run src/index.ts",
-    "test": "bun test"
+    "start": "bun run src/server.ts",
+    "dev": "bun --watch src/server.ts",
+    "test": "bun test",
+    "seed": "bun run prisma/seed/populateDB.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/express": "^5.0.6",
     "prettier": "3.8.1",
-    "prisma": "^7.3.0"
+    "prisma": "6.10.0",
+    "tsx": "^4.21.0"
   },
   "peerDependencies": {
     "typescript": "^5"

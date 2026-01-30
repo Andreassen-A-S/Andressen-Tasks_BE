@@ -1,5 +1,4 @@
-import type { TaskPriority } from "./taskPriority";
-import type { TaskStatus } from "./taskStatus";
+import { TaskPriority, TaskStatus } from "../generated/prisma/client";
 
 export interface Task {
   id: string;
@@ -8,4 +7,21 @@ export interface Task {
   priority: TaskPriority;
   status: TaskStatus;
   deadline: Date;
+}
+
+export interface UpdateTaskInput {
+  title?: string;
+  description?: string;
+  priority?: TaskPriority;
+  status?: TaskStatus;
+  deadline?: Date;
+}
+
+export interface CreateTaskInput {
+  title: string;
+  description: string;
+  priority: TaskPriority;
+  status?: TaskStatus;
+  deadline: Date;
+  created_by: string;
 }
