@@ -1,4 +1,4 @@
-import { TaskPriority, TaskStatus } from "../generated/prisma/client";
+import type { TaskPriority, TaskStatus } from "../generated/prisma/client";
 
 export interface Task {
   id: string;

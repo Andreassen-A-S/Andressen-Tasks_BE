@@ -1,9 +1,5 @@
 import { prisma } from "../db/prisma";
-import {
-  TaskPriority,
-  TaskStatus,
-  type Task,
-} from "../generated/prisma/client";
+import type { Task } from "../generated/prisma/client";
 import type { CreateTaskInput, UpdateTaskInput } from "../types/task";
 
 export async function getAllTasks(): Promise<Task[]> {
