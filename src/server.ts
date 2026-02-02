@@ -10,7 +10,7 @@ const PORT = process.env.PORT;
 app.use(
   cors({
     origin: process.env.FRONTEND_URL,
-    credentials: true, // Allow cookies if needed
+    credentials: false, // Set to true only if using cookies or other credentials
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   }),
