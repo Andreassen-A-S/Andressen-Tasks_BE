@@ -1,9 +1,20 @@
 import express from "express";
+import cors from "cors";
 import taskRoutes from "./routes/task.routes.ts";
 import userRoutes from "./routes/user.routes.ts";
 
 const app = express();
 const PORT = process.env.PORT;
+
+// CORS configuration
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL,
+    credentials: false, // Set to true only if using cookies or other credentials
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
 
 app.use(express.json());
 
