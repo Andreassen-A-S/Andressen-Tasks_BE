@@ -40,7 +40,8 @@ export async function createTask(req: Request, res: Response) {
       });
     }
 
-    const task = await taskRepo.createTask(body);
+    // Use the new function that supports assignments
+    const task = await taskRepo.createTaskWithAssignments(body);
     res.status(201).json({ success: true, data: task });
   } catch (error) {
     console.error("Error in createTask:", error);
