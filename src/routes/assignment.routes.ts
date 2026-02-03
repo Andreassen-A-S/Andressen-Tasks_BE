@@ -1,5 +1,5 @@
 import { Router } from "express";
-import * as assignmentController from "../controllers/assignmentController";
+import * as assignmentController from "../controllers/assignmentController.ts";
 
 const router = Router();
 

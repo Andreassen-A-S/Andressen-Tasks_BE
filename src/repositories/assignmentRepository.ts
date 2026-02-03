@@ -1,6 +1,5 @@
 import { prisma } from "../db/prisma";
 import type {
-  // TaskAssignment,
   CreateTaskAssignmentInput,
   UpdateTaskAssignmentInput,
 } from "../types/assignment";
@@ -110,27 +109,6 @@ export async function getUserAssignments(
     orderBy: { assigned_at: "desc" },
   });
 }
-
-// export async function markAssignmentComplete(
-//   assignmentId: string,
-// ): Promise<TaskAssignment> {
-//   return prisma.taskAssignment.update({
-//     where: { assignment_id: assignmentId },
-//     data: { completed_at: new Date() },
-//   });
-// }
-
-// export async function unassignUserFromTask(
-//   taskId: string,
-//   userId: string,
-// ): Promise<void> {
-//   await prisma.taskAssignment.deleteMany({
-//     where: {
-//       task_id: taskId,
-//       user_id: userId,
-//     },
-//   });
-// }
 
 export async function updateAssignment(
   assignmentId: string,
