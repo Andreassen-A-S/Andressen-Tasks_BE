@@ -32,6 +32,7 @@ export async function authenticateUser(credentials: LoginRequest) {
     userId: user.user_id,
     role: user.role,
     email: user.email,
+    name: user.name,
   };
 
   const token = jwt.sign(payload, secret, {
