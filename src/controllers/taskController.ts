@@ -51,15 +51,24 @@ export async function createTask(req: Request, res: Response) {
 
 export async function updateTask(req: Request<TaskParams>, res: Response) {
   try {
-    const body = req.body as UpdateTaskInput;
-    const task = await taskRepo.updateTask(req.params.id, body);
+    const updateData = req.body as UpdateTaskInput;
+
+    // Check if task exists first
+    const existingTask = await taskRepo.getTaskById(req.params.id);
+    if (!existingTask) {
+      return res.status(404).json({ success: false, error: "Task not found" });
+    }
+
+    // Use the function with assignments if assigned_users is provided
+    const task =
+      updateData.assigned_users !== undefined
+        ? await taskRepo.updateTaskWithAssignments(req.params.id, updateData)
+        : await taskRepo.updateTask(req.params.id, updateData);
+
     res.json({ success: true, data: task });
   } catch (error) {
     console.error("Error in updateTask:", error);
-    res.status(404).json({
-      success: false,
-      error: "Task not found or update failed",
-    });
+    res.status(500).json({ success: false, error: "Failed to update task" });
   }
 }
 
