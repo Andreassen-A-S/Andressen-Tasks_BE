@@ -53,12 +53,6 @@ export async function updateTask(req: Request<TaskParams>, res: Response) {
   try {
     const updateData = req.body as UpdateTaskInput;
 
-    // Check if task exists first
-    const existingTask = await taskRepo.getTaskById(req.params.id);
-    if (!existingTask) {
-      return res.status(404).json({ success: false, error: "Task not found" });
-    }
-
     // Use the function with assignments if assigned_users is provided
     const task =
       updateData.assigned_users !== undefined

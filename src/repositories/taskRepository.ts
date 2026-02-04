@@ -70,16 +70,12 @@ export async function updateTaskWithAssignments(
   data: UpdateTaskInput,
 ): Promise<Task | null> {
   return prisma.$transaction(async (tx) => {
+    // Separate assignment-related data from task fields
+    const { assigned_users, ...taskUpdateData } = data;
     // Update the task
     const task = await tx.task.update({
       where: { task_id: id },
-      data: {
-        title: data.title,
-        description: data.description,
-        priority: data.priority,
-        status: data.status,
-        deadline: data.deadline,
-      },
+      data: taskUpdateData,
     });
 
     // Handle completion status change
