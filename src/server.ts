@@ -3,6 +3,7 @@ import cors from "cors";
 import taskRoutes from "./routes/task.routes.ts";
 import userRoutes from "./routes/user.routes.ts";
 import assignmentRoutes from "./routes/assignment.routes.ts";
+import authRoutes from "./routes/auth.routes.ts";
 
 const app = express();
 const PORT = process.env.PORT;
@@ -33,6 +34,7 @@ app.get("/api/status", (req, res) => {
 app.use("/api/tasks", taskRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/assignments", assignmentRoutes);
+app.use("/api/auth", authRoutes);
 
 // 404 handler
 app.use((req, res) => {
