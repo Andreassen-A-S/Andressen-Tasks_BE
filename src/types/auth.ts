@@ -19,7 +19,7 @@ export interface LoginResponse {
 }
 
 export interface JWTPayload {
-  userId: string;
+  user_id: string;
   role: string;
   email: string;
   name: string;
