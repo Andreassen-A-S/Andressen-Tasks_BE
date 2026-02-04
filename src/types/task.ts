@@ -15,6 +15,7 @@ export interface UpdateTaskInput {
   priority?: TaskPriority;
   status?: TaskStatus;
   deadline?: Date;
+  assigned_users?: string[];
 }
 
 export interface CreateTaskInput {
