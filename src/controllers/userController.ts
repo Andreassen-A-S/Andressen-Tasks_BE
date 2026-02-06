@@ -1,6 +1,6 @@
-import * as userRepo from "../repositories/userRepository.ts";
+import * as userRepo from "../repositories/userRepository";
 import type { Request, Response } from "express";
-import type { CreateUserInput, UpdateUserInput } from "../types/user.ts";
+import type { CreateUserInput, UpdateUserInput } from "../types/user";
 
 interface UserParams {
   id: string;

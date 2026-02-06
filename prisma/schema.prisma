@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
   output   = "../src/generated/prisma/client"
@@ -32,44 +29,76 @@ enum UserRole {
 }
 
 model User {
-  user_id String @id @default(uuid())
-  name String
-  email String @unique
-  password String
-  role UserRole @default(USER)
-  position String
+  user_id         String           @id @default(uuid())
+  name            String?
+  email           String           @unique
+  password        String
+  role            UserRole         @default(USER)
+  position        String?
+  created_at      DateTime         @default(now())
+  updated_at      DateTime         @updatedAt
+
+  // Relations
+  taskComments    TaskComment[]
+  createdTasks    Task[]           @relation("TaskCreator")
+  taskAssignments TaskAssignment[]
+
+  @@map("users")
+}
+
+model TaskComment {
+  comment_id String   @id @default(uuid())
+  task_id    String   
+  user_id    String   
+  message    String   @db.Text
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  tasks Task[]
-  taskAssignments TaskAssignment[]
+  // Relations
+  task       Task     @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
+  author     User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
 
+  @@index([task_id])
+  @@index([user_id])
+  @@index([created_at])
+  @@map("task_comments")
 }
 
 model Task {
-  task_id String @id @default(uuid())
-  created_by String 
-  title String
-  description String
-  priority TaskPriority @default(MEDIUM)
-  status TaskStatus @default(PENDING)
-  deadline DateTime
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  task_id     String       @id @default(uuid())
+  created_by  String 
+  title       String
+  description String       @db.Text
+  priority    TaskPriority @default(MEDIUM)
+  status      TaskStatus   @default(PENDING)
+  deadline    DateTime
+  created_at  DateTime     @default(now())
+  updated_at  DateTime     @updatedAt
 
-  creator User @relation(fields: [created_by], references: [user_id])
+  // Relations
+  comments    TaskComment[]
+  creator     User              @relation("TaskCreator", fields: [created_by], references: [user_id])
   assignments TaskAssignment[]
+
+  @@index([created_by])
+  @@index([status])
+  @@index([deadline])
+  @@map("tasks")
 }
 
 model TaskAssignment {
-  assignment_id String @id @default(uuid())
-  task_id String
-  user_id String
-  assigned_at DateTime @default(now())
-  completed_at DateTime?
+  assignment_id String    @id @default(uuid())
+  task_id       String
+  user_id       String
+  assigned_at   DateTime  @default(now())
+  completed_at  DateTime?
 
-  task Task @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
-  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  // Relations
+  task          Task      @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
+  user          User      @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
 
   @@unique([task_id, user_id])
+  @@index([user_id])
+  @@index([task_id])
+  @@map("task_assignments")
 }
