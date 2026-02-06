@@ -1,179 +1,179 @@
+/* prisma/seed.ts */
 import {
   PrismaClient,
+  UserRole,
   TaskPriority,
   TaskStatus,
-  UserRole,
 } from "../../src/generated/prisma/client";
+import bcrypt from "bcrypt";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("🌱 Starting database seed...");
-
-  // Clear existing data
-  console.log("🧹 Cleaning existing data...");
+  // Clean existing data (order matters due to FK constraints)
+  await prisma.taskComment.deleteMany();
   await prisma.taskAssignment.deleteMany();
   await prisma.task.deleteMany();
   await prisma.user.deleteMany();
 
+  // Password for all seeded users (change if you want)
+  const passwordHash = await bcrypt.hash("Password123!", 10);
+
   // Create users
-  console.log("👥 Creating users...");
-  const admin = await prisma.user.create({
-    data: {
-      name: "Admin User",
-      email: "admin@example.com",
-      password: "$2a$10$YourHashedPasswordHere", // In production, use bcrypt
-      role: UserRole.ADMIN,
-      position: "System Administrator",
-    },
-  });
+  const [henrik, tommy, christian, sebastian] = await Promise.all([
+    prisma.user.create({
+      data: {
+        name: "Henrik Andreassen",
+        email: "henrik@andreassen.dk",
+        password: passwordHash,
+        role: UserRole.ADMIN,
+        position: "CEO",
+      },
+    }),
+    prisma.user.create({
+      data: {
+        name: "Tommy Liberkind",
+        email: "tommy@andreassen.dk",
+        password: passwordHash,
+        role: UserRole.USER,
+        position: "Håndmand",
+      },
+    }),
+    prisma.user.create({
+      data: {
+        name: "Christian Larsen",
+        email: "christian@andreassen.dk",
+        password: passwordHash,
+        role: UserRole.USER,
+        position: "Maskinfører",
+      },
+    }),
+    prisma.user.create({
+      data: {
+        name: "Sebastian Bartoldy",
+        email: "sebastian@andreassen.dk",
+        password: passwordHash,
+        role: UserRole.USER,
+        position: "Håndmand",
+      },
+    }),
+  ]);
 
-  const developer1 = await prisma.user.create({
-    data: {
-      name: "John Doe",
-      email: "john.doe@example.com",
-      password: "$2a$10$YourHashedPasswordHere",
-      role: UserRole.USER,
-      position: "Senior Developer",
-    },
-  });
+  // Create tasks (created_by must reference user.user_id)
+  const tasks = await Promise.all([
+    prisma.task.create({
+      data: {
+        created_by: henrik.user_id,
+        title: "Forbered ugentlig rapport",
+        description:
+          "Indsaml data fra alle afdelinger og udarbejd den ugentlige rapport.",
+        priority: TaskPriority.HIGH,
+        status: TaskStatus.PENDING,
+        deadline: new Date("2026-02-14"),
+      },
+    }),
+    prisma.task.create({
+      data: {
+        created_by: henrik.user_id,
+        title: "Tjek materiel på pladsen",
+        description: "Gennemgå værktøj/materiel og meld mangler til lager.",
+        priority: TaskPriority.MEDIUM,
+        status: TaskStatus.PENDING,
+        deadline: new Date("2026-02-08"),
+      },
+    }),
+    prisma.task.create({
+      data: {
+        created_by: henrik.user_id,
+        title: "Kør grus til område B",
+        description: "Flyt 2 læs grus til område B før frokost.",
+        priority: TaskPriority.HIGH,
+        status: TaskStatus.PENDING,
+        deadline: new Date("2026-02-07"),
+      },
+    }),
+    prisma.task.create({
+      data: {
+        created_by: henrik.user_id,
+        title: "Ryd op i container",
+        description:
+          "Sorter materialer, smid affald ud og gør klar til næste levering.",
+        priority: TaskPriority.LOW,
+        status: TaskStatus.PENDING,
+        deadline: new Date("2026-02-10"),
+      },
+    }),
+    prisma.task.create({
+      data: {
+        created_by: henrik.user_id,
+        title: "Sikkerhedstjek af maskiner",
+        description: "Tjek olie, dæktryk og sikkerhedsudstyr på maskinerne.",
+        priority: TaskPriority.MEDIUM,
+        status: TaskStatus.DONE,
+        deadline: new Date("2026-02-03"),
+      },
+    }),
+    prisma.task.create({
+      data: {
+        created_by: henrik.user_id,
+        title: "Planlæg bemanding til næste uge",
+        description: "Fordel opgaver og bemanding for næste uge.",
+        priority: TaskPriority.LOW,
+        status: TaskStatus.REJECTED,
+        deadline: new Date("2026-02-05"),
+      },
+    }),
+  ]);
 
-  const developer2 = await prisma.user.create({
-    data: {
-      name: "Jane Smith",
-      email: "jane.smith@example.com",
-      password: "$2a$10$YourHashedPasswordHere",
-      role: UserRole.USER,
-      position: "Frontend Developer",
-    },
-  });
-
-  const designer = await prisma.user.create({
-    data: {
-      name: "Alice Johnson",
-      email: "alice.johnson@example.com",
-      password: "$2a$10$YourHashedPasswordHere",
-      role: UserRole.USER,
-      position: "UI/UX Designer",
-    },
-  });
-
-  console.log(`✅ Created ${4} users`);
-
-  // Create tasks
-  console.log("📋 Creating tasks...");
-  const task1 = await prisma.task.create({
-    data: {
-      title: "Implement authentication system",
-      description: "Add JWT-based authentication with login and registration",
-      priority: TaskPriority.HIGH,
-      status: TaskStatus.PENDING,
-      deadline: new Date("2026-02-15"),
-      created_by: admin.user_id,
-    },
-  });
-
-  const task2 = await prisma.task.create({
-    data: {
-      title: "Design landing page",
-      description: "Create modern and responsive landing page design",
-      priority: TaskPriority.MEDIUM,
-      status: TaskStatus.PENDING,
-      deadline: new Date("2026-02-10"),
-      created_by: admin.user_id,
-    },
-  });
-
-  const task3 = await prisma.task.create({
-    data: {
-      title: "Fix database migration issues",
-      description: "Resolve conflicts in Prisma schema migrations",
-      priority: TaskPriority.HIGH,
-      status: TaskStatus.DONE,
-      deadline: new Date("2026-01-25"),
-      created_by: developer1.user_id,
-    },
-  });
-
-  const task4 = await prisma.task.create({
-    data: {
-      title: "Write API documentation",
-      description: "Document all REST API endpoints with examples",
-      priority: TaskPriority.LOW,
-      status: TaskStatus.PENDING,
-      deadline: new Date("2026-03-01"),
-      created_by: admin.user_id,
-    },
-  });
-
-  const task5 = await prisma.task.create({
-    data: {
-      title: "Optimize database queries",
-      description: "Improve performance of slow queries in user dashboard",
-      priority: TaskPriority.MEDIUM,
-      status: TaskStatus.REJECTED,
-      deadline: new Date("2026-02-20"),
-      created_by: developer1.user_id,
-    },
-  });
-
-  const task6 = await prisma.task.create({
-    data: {
-      title: "Setup CI/CD pipeline",
-      description:
-        "Configure GitHub Actions for automated testing and deployment",
-      priority: TaskPriority.HIGH,
-      status: TaskStatus.PENDING,
-      deadline: new Date("2026-02-05"),
-      created_by: admin.user_id,
-    },
-  });
-
-  console.log(`✅ Created ${6} tasks`);
-
-  // Create task assignments
-  console.log("🔗 Creating task assignments...");
+  // Assign tasks
   await prisma.taskAssignment.createMany({
     data: [
+      { task_id: tasks[0].task_id, user_id: henrik.user_id }, // report -> Henrik
+      { task_id: tasks[1].task_id, user_id: tommy.user_id }, // equipment -> Tommy
+      { task_id: tasks[2].task_id, user_id: christian.user_id }, // gravel -> Christian
+      { task_id: tasks[3].task_id, user_id: sebastian.user_id }, // container -> Sebastian
+      { task_id: tasks[4].task_id, user_id: christian.user_id }, // safety -> Christian
+      { task_id: tasks[4].task_id, user_id: tommy.user_id }, // safety -> Tommy (2 assignees)
+      { task_id: tasks[5].task_id, user_id: henrik.user_id }, // staffing -> Henrik
+    ],
+  });
+
+  // Add comments
+  await prisma.taskComment.createMany({
+    data: [
       {
-        task_id: task1.task_id,
-        user_id: developer1.user_id,
+        task_id: tasks[2].task_id,
+        user_id: christian.user_id,
+        message: "Jeg tager den efter morgenmødet.",
       },
       {
-        task_id: task2.task_id,
-        user_id: designer.user_id,
+        task_id: tasks[2].task_id,
+        user_id: henrik.user_id,
+        message: "Husk at tjekke adgangsvej til område B først.",
       },
       {
-        task_id: task3.task_id,
-        user_id: developer1.user_id,
-        completed_at: new Date("2026-01-24"),
+        task_id: tasks[1].task_id,
+        user_id: tommy.user_id,
+        message: "Der mangler handsker i størrelse L.",
       },
       {
-        task_id: task4.task_id,
-        user_id: developer2.user_id,
-      },
-      {
-        task_id: task5.task_id,
-        user_id: developer1.user_id,
-      },
-      {
-        task_id: task6.task_id,
-        user_id: developer1.user_id,
-      },
-      {
-        task_id: task6.task_id,
-        user_id: developer2.user_id,
+        task_id: tasks[3].task_id,
+        user_id: sebastian.user_id,
+        message: "Kan jeg få en ekstra sæk affaldsposer?",
       },
     ],
   });
 
-  console.log(`✅ Created ${7} task assignments`);
-  console.log("🎉 Database seeded successfully!");
+  console.log("✅ Seed complete:");
+  console.log(`- Users: 4`);
+  console.log(`- Tasks: ${tasks.length}`);
+  console.log(`- Assignments: 7`);
+  console.log(`- Comments: 4`);
 }
 
 main()
   .catch((e) => {
-    console.error("❌ Error seeding database:", e);
+    console.error("❌ Seed failed:", e);
     process.exit(1);
   })
   .finally(async () => {

@@ -2,9 +2,9 @@ import type { UserRole } from "../generated/prisma/client";
 
 export interface SafeUser {
   user_id: string;
-  name: string;
+  name: string | null;
   email: string;
-  position: string;
+  position: string | null;
   role: UserRole;
   created_at: Date;
   updated_at: Date;

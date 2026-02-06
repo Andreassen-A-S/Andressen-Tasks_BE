@@ -62,7 +62,7 @@ export async function verifyToken(req: Request, res: Response) {
 
     // Log successful verification for audit purposes
     console.info("Token verified successfully", {
-      userId: payload.user_id,
+      user_id: payload.user_id,
       email: payload.email,
       role: payload.role,
       timestamp: new Date().toISOString(),

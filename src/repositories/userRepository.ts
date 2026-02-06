@@ -1,12 +1,12 @@
 import { prisma } from "../db/prisma";
 import type { User } from "../generated/prisma/client";
-import { hashPassword } from "../helper/helpers.ts";
+import { hashPassword } from "../helper/helpers";
 import {
   userSelect,
   type CreateUserInput,
   type SafeUser,
   type UpdateUserInput,
-} from "../types/user.ts";
+} from "../types/user";
 
 export async function getAllUsers(): Promise<SafeUser[]> {
   return prisma.user.findMany({

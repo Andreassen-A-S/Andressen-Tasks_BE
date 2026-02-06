@@ -1,4 +1,4 @@
-import * as taskRepo from "../repositories/taskRepository.ts";
+import * as taskRepo from "../repositories/taskRepository";
 import type { CreateTaskInput, UpdateTaskInput } from "../types/task.ts";
 import type { Request, Response } from "express";
 

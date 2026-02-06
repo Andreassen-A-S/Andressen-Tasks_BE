@@ -3,7 +3,7 @@ services:
     build: .
     command: bun run dev #Only for development
     ports:
-      - "9000:3000"
+      - "9000:9000"
     volumes:
       - ./:/app
       - /app/node_modules

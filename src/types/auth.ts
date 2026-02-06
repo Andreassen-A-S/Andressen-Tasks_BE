@@ -9,10 +9,10 @@ export interface LoginResponse {
     token: string;
     user: {
       user_id: string;
-      name: string;
+      name: string | null;
       email: string;
       role: string;
-      position: string;
+      position: string | null;
     };
   };
   error?: string;
@@ -22,5 +22,5 @@ export interface JWTPayload {
   user_id: string;
   role: string;
   email: string;
-  name: string;
+  name: string | null;
 }
