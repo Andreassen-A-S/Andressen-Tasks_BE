@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
-import { PrismaClient, UserRole } from "../generated/prisma/client";
-
-const prisma = new PrismaClient();
+import { UserRole } from "../generated/prisma/client";
+import * as commentRepo from "../repositories/commentRepository";
+import { prisma } from "../db/prisma";
 
 export async function listTaskComments(req: Request, res: Response) {
   try {
@@ -30,20 +30,7 @@ export async function listTaskComments(req: Request, res: Response) {
       return res.status(403).json({ success: false, error: "Access denied" });
     }
 
-    const comments = await prisma.taskComment.findMany({
-      where: { task_id: taskId },
-      include: {
-        author: {
-          select: {
-            user_id: true,
-            name: true,
-            email: true,
-            role: true,
-          },
-        },
-      },
-      orderBy: { created_at: "asc" },
-    });
+    const comments = await commentRepo.getCommentsByTaskId(taskId);
 
     res.json({ success: true, data: comments });
   } catch (error) {
@@ -59,12 +46,10 @@ export async function createComment(req: Request, res: Response) {
     const userId = req.user?.user_id;
 
     if (!userId) {
-      return res
-        .status(401)
-        .json({
-          success: false,
-          error: "Unauthorized: user not found in token",
-        });
+      return res.status(401).json({
+        success: false,
+        error: "Unauthorized: user not found in token",
+      });
     }
 
     if (!message?.trim()) {
@@ -103,22 +88,10 @@ export async function createComment(req: Request, res: Response) {
       return res.status(403).json({ success: false, error: "Access denied" });
     }
 
-    const comment = await prisma.taskComment.create({
-      data: {
-        task_id: taskId,
-        user_id: userId!,
-        message: message.trim(),
-      },
-      include: {
-        author: {
-          select: {
-            user_id: true,
-            name: true,
-            email: true,
-            role: true,
-          },
-        },
-      },
+    const comment = await commentRepo.createComment({
+      task_id: taskId,
+      user_id: userId,
+      message: message.trim(),
     });
 
     res.status(201).json({ success: true, data: comment });
@@ -134,9 +107,7 @@ export async function deleteComment(req: Request, res: Response) {
     const userId = req.user?.user_id;
     const userRole = req.user?.role;
 
-    const comment = await prisma.taskComment.findUnique({
-      where: { comment_id: commentId },
-    });
+    const comment = await commentRepo.getCommentById(commentId);
 
     if (!comment) {
       return res
@@ -145,16 +116,14 @@ export async function deleteComment(req: Request, res: Response) {
     }
 
     // Check if user owns the comment or is admin
-    if (comment.user_id !== userId && userRole !== "ADMIN") {
+    if (comment.user_id !== userId && userRole !== UserRole.ADMIN) {
       return res.status(403).json({
         success: false,
         error: "Not authorized to delete this comment",
       });
     }
 
-    await prisma.taskComment.delete({
-      where: { comment_id: commentId },
-    });
+    await commentRepo.deleteComment(commentId);
 
     res.status(204).json({ success: true });
   } catch (error) {
@@ -166,6 +135,11 @@ export async function deleteComment(req: Request, res: Response) {
 export async function updateComment(req: Request, res: Response) {
   try {
     const commentId = req.params.commentId as string;
+    if (!req.body) {
+      return res
+        .status(400)
+        .json({ success: false, error: "Missing request body" });
+    }
     const { message } = req.body;
     const userId = req.user?.user_id;
     const userRole = req.user?.role;
@@ -183,9 +157,7 @@ export async function updateComment(req: Request, res: Response) {
       });
     }
 
-    const comment = await prisma.taskComment.findUnique({
-      where: { comment_id: commentId },
-    });
+    const comment = await commentRepo.getCommentById(commentId);
 
     if (!comment) {
       return res
@@ -194,26 +166,16 @@ export async function updateComment(req: Request, res: Response) {
     }
 
     // Check if user owns the comment or is admin
-    if (comment.user_id !== userId && userRole !== "ADMIN") {
+    if (comment.user_id !== userId && userRole !== UserRole.ADMIN) {
       return res
         .status(403)
         .json({ success: false, error: "Not authorized to edit this comment" });
     }
 
-    const updatedComment = await prisma.taskComment.update({
-      where: { comment_id: commentId },
-      data: { message: message.trim() },
-      include: {
-        author: {
-          select: {
-            user_id: true,
-            name: true,
-            email: true,
-            role: true,
-          },
-        },
-      },
-    });
+    const updatedComment = await commentRepo.updateComment(
+      commentId,
+      message.trim(),
+    );
 
     res.json({ success: true, data: updatedComment });
   } catch (error) {

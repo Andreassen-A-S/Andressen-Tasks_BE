@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import * as authService from "../services/authService";
-import "../types/express"; // Add this line
+import "../types/express";
+import { UserRole } from "../generated/prisma/client";
 
 export function authenticateToken(
   req: Request,
@@ -19,8 +20,11 @@ export function authenticateToken(
 
     const payload = authService.verifyToken(token);
 
-    // Add user data to request object
-    req.user = payload;
+    // Convert role to UserRole enum
+    req.user = {
+      ...payload,
+      role: payload.role as UserRole,
+    };
 
     next();
   } catch (error) {

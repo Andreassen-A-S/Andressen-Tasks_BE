@@ -1,9 +1,11 @@
-declare namespace Express {
+import { UserRole } from "../generated/prisma/client";
+
+declare module "express" {
   interface Request {
     user?: {
       user_id: string;
       email: string;
-      role: string;
+      role: UserRole;
       name: string | null;
     };
   }
