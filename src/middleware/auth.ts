@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import * as authService from "../services/authService";
-import "../types/express";
+// import "../types/express";
 import { UserRole } from "../generated/prisma/client";
 
 export function authenticateToken(
