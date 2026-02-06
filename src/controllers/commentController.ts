@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "../generated/prisma/client";
+import { PrismaClient, UserRole } from "../generated/prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -18,16 +18,16 @@ export async function listTaskComments(req: Request, res: Response) {
     });
 
     if (!task) {
-      return res.status(404).json({ error: "Task not found" });
+      return res.status(404).json({ success: false, error: "Task not found" });
     }
 
     // Check if user is creator, assigned to task, or admin
     const isCreator = task.created_by === req.user?.user_id;
     const isAssigned = task.assignments.length > 0;
-    const isAdmin = req.user?.role === "ADMIN";
+    const isAdmin = req.user?.role === UserRole.ADMIN;
 
     if (!isCreator && !isAssigned && !isAdmin) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ success: false, error: "Access denied" });
     }
 
     const comments = await prisma.taskComment.findMany({
@@ -45,10 +45,10 @@ export async function listTaskComments(req: Request, res: Response) {
       orderBy: { created_at: "asc" },
     });
 
-    res.json(comments);
+    res.json({ success: true, data: comments });
   } catch (error) {
     console.error("Error fetching comments:", error);
-    res.status(500).json({ error: "Failed to fetch comments" });
+    res.status(500).json({ success: false, error: "Failed to fetch comments" });
   }
 }
 
@@ -58,14 +58,26 @@ export async function createComment(req: Request, res: Response) {
     const { message } = req.body;
     const userId = req.user?.user_id;
 
+    if (!userId) {
+      return res
+        .status(401)
+        .json({
+          success: false,
+          error: "Unauthorized: user not found in token",
+        });
+    }
+
     if (!message?.trim()) {
-      return res.status(400).json({ error: "Message is required" });
+      return res
+        .status(400)
+        .json({ success: false, error: "Message is required" });
     }
 
     if (message.trim().length > 2000) {
-      return res
-        .status(400)
-        .json({ error: "Message too long (max 2000 characters)" });
+      return res.status(400).json({
+        success: false,
+        error: "Message too long (max 2000 characters)",
+      });
     }
 
     // Verify task exists and user has access
@@ -79,16 +91,16 @@ export async function createComment(req: Request, res: Response) {
     });
 
     if (!task) {
-      return res.status(404).json({ error: "Task not found" });
+      return res.status(404).json({ success: false, error: "Task not found" });
     }
 
     // Check if user is creator, assigned to task, or admin
     const isCreator = task.created_by === userId;
     const isAssigned = task.assignments.length > 0;
-    const isAdmin = req.user?.role === "ADMIN";
+    const isAdmin = req.user?.role === UserRole.ADMIN;
 
     if (!isCreator && !isAssigned && !isAdmin) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ success: false, error: "Access denied" });
     }
 
     const comment = await prisma.taskComment.create({
@@ -109,10 +121,10 @@ export async function createComment(req: Request, res: Response) {
       },
     });
 
-    res.status(201).json(comment);
+    res.status(201).json({ success: true, data: comment });
   } catch (error) {
     console.error("Error creating comment:", error);
-    res.status(500).json({ error: "Failed to create comment" });
+    res.status(500).json({ success: false, error: "Failed to create comment" });
   }
 }
 
@@ -127,24 +139,27 @@ export async function deleteComment(req: Request, res: Response) {
     });
 
     if (!comment) {
-      return res.status(404).json({ error: "Comment not found" });
+      return res
+        .status(404)
+        .json({ success: false, error: "Comment not found" });
     }
 
     // Check if user owns the comment or is admin
     if (comment.user_id !== userId && userRole !== "ADMIN") {
-      return res
-        .status(403)
-        .json({ error: "Not authorized to delete this comment" });
+      return res.status(403).json({
+        success: false,
+        error: "Not authorized to delete this comment",
+      });
     }
 
     await prisma.taskComment.delete({
       where: { comment_id: commentId },
     });
 
-    res.status(204).send();
+    res.status(204).json({ success: true });
   } catch (error) {
     console.error("Error deleting comment:", error);
-    res.status(500).json({ error: "Failed to delete comment" });
+    res.status(500).json({ success: false, error: "Failed to delete comment" });
   }
 }
 
@@ -156,13 +171,16 @@ export async function updateComment(req: Request, res: Response) {
     const userRole = req.user?.role;
 
     if (!message?.trim()) {
-      return res.status(400).json({ error: "Message is required" });
+      return res
+        .status(400)
+        .json({ success: false, error: "Message is required" });
     }
 
     if (message.trim().length > 2000) {
-      return res
-        .status(400)
-        .json({ error: "Message too long (max 2000 characters)" });
+      return res.status(400).json({
+        success: false,
+        error: "Message too long (max 2000 characters)",
+      });
     }
 
     const comment = await prisma.taskComment.findUnique({
@@ -170,14 +188,16 @@ export async function updateComment(req: Request, res: Response) {
     });
 
     if (!comment) {
-      return res.status(404).json({ error: "Comment not found" });
+      return res
+        .status(404)
+        .json({ success: false, error: "Comment not found" });
     }
 
     // Check if user owns the comment or is admin
     if (comment.user_id !== userId && userRole !== "ADMIN") {
       return res
         .status(403)
-        .json({ error: "Not authorized to edit this comment" });
+        .json({ success: false, error: "Not authorized to edit this comment" });
     }
 
     const updatedComment = await prisma.taskComment.update({
@@ -195,9 +215,9 @@ export async function updateComment(req: Request, res: Response) {
       },
     });
 
-    res.json(updatedComment);
+    res.json({ success: true, data: updatedComment });
   } catch (error) {
     console.error("Error updating comment:", error);
-    res.status(500).json({ error: "Failed to update comment" });
+    res.status(500).json({ success: false, error: "Failed to update comment" });
   }
 }
