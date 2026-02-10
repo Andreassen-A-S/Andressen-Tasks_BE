@@ -5,9 +5,9 @@ import type { TaskAssignment } from "../generated/prisma/client";
 import * as taskEventRepo from "../repositories/taskEventRepository";
 import { TaskEventType } from "../generated/prisma/client";
 
-interface AssignmentParams {
-  id: string;
-}
+// interface AssignmentParams {
+//   id: string;
+// }
 
 // List all assignments (with optional filters)
 export async function listAssignments(req: Request, res: Response) {
@@ -59,12 +59,14 @@ export async function assignTask(req: Request, res: Response) {
 }
 
 // Get specific assignment by ID
-export async function getAssignment(
-  req: Request<AssignmentParams>,
-  res: Response,
-) {
+export async function getAssignment(req: Request, res: Response) {
   try {
-    const assignment = await assignmentRepo.getAssignmentById(req.params.id);
+    const { id } = req.params;
+    if (!id || Array.isArray(id)) {
+      return res.status(400).json({ error: "Missing or invalid id" });
+    }
+
+    const assignment = await assignmentRepo.getAssignmentById(id);
 
     if (!assignment) {
       return res
@@ -81,17 +83,17 @@ export async function getAssignment(
 }
 
 // Update assignment (e.g., mark as complete)
-export async function updateAssignment(
-  req: Request<AssignmentParams>,
-  res: Response,
-) {
+export async function updateAssignment(req: Request, res: Response) {
   try {
     const updateData = req.body;
 
     // Validate that the assignment exists first
-    const existingAssignment = await assignmentRepo.getAssignmentById(
-      req.params.id,
-    );
+    const { id } = req.params;
+    if (!id || Array.isArray(id)) {
+      return res.status(400).json({ error: "Missing or invalid id" });
+    }
+
+    const existingAssignment = await assignmentRepo.getAssignmentById(id);
 
     if (!existingAssignment) {
       return res
@@ -100,10 +102,7 @@ export async function updateAssignment(
     }
 
     // Update the assignment
-    const assignment = await assignmentRepo.updateAssignment(
-      req.params.id,
-      updateData,
-    );
+    const assignment = await assignmentRepo.updateAssignment(id, updateData);
 
     // TaskEvent logic
     await taskEventRepo.createTaskEvent({
@@ -134,15 +133,15 @@ export async function updateAssignment(
 }
 
 // Delete assignment by ID
-export async function deleteAssignment(
-  req: Request<AssignmentParams>,
-  res: Response,
-) {
+export async function deleteAssignment(req: Request, res: Response) {
   try {
     // Fetch the assignment before deleting
-    const existingAssignment = await assignmentRepo.getAssignmentById(
-      req.params.id,
-    );
+    const { id } = req.params;
+    if (!id || Array.isArray(id)) {
+      return res.status(400).json({ error: "Missing or invalid id" });
+    }
+
+    const existingAssignment = await assignmentRepo.getAssignmentById(id);
     if (!existingAssignment) {
       return res
         .status(404)
@@ -150,7 +149,7 @@ export async function deleteAssignment(
     }
 
     // Delete the assignment
-    const assignment = await assignmentRepo.deleteAssignment(req.params.id);
+    await assignmentRepo.deleteAssignment(id);
 
     // TaskEvent logic
     await taskEventRepo.createTaskEvent({

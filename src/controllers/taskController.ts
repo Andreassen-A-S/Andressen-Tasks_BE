@@ -123,9 +123,6 @@ export async function deleteTask(req: Request, res: Response) {
     if (!task) {
       return res.status(404).json({ success: false, error: "Task not found" });
     }
-
-    await taskRepo.deleteTask(id);
-
     // TaskEvent logic
     await taskEventRepo.createTaskEvent({
       task: { connect: { task_id: task.task_id } },
@@ -136,12 +133,16 @@ export async function deleteTask(req: Request, res: Response) {
       after_json: {},
     });
 
+    await taskRepo.deleteTask(id);
+
     res.status(204).send();
   } catch (error) {
     console.error("Error in deleteTask:", error);
     res.status(404).json({ success: false, error: "Task not found" });
   }
 }
+
+// TODO: This is probably redundant with the new event logging in the progress log upsert. We can decide to remove it or keep it for more granular events.
 
 export async function upsertProgressLog(req: Request, res: Response) {
   const { id: taskId } = req.params;
@@ -171,7 +172,7 @@ export async function upsertProgressLog(req: Request, res: Response) {
     await taskEventRepo.createTaskEvent({
       task: { connect: { task_id: taskId } },
       actor: { connect: { user_id: userId } },
-      type: "PROGRESS_LOGGED",
+      type: TaskEventType.PROGRESS_LOGGED,
       message: "Progress logged",
       before_json: {},
       after_json: progressLog,
