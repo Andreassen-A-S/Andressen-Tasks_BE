@@ -2,6 +2,8 @@ import * as assignmentRepo from "../repositories/assignmentRepository";
 import type { Request, Response } from "express";
 import type { CreateTaskAssignmentInput } from "../types/assignment";
 import type { TaskAssignment } from "../generated/prisma/client";
+import * as taskEventRepo from "../repositories/taskEventRepository";
+import { TaskEventType } from "../generated/prisma/client";
 
 interface AssignmentParams {
   id: string;
@@ -36,6 +38,17 @@ export async function assignTask(req: Request, res: Response) {
   try {
     const body = req.body as CreateTaskAssignmentInput;
     const assignment = await assignmentRepo.assignTaskToUser(body);
+
+    // TaskEvent logic
+    await taskEventRepo.createTaskEvent({
+      task: { connect: { task_id: assignment.task_id } },
+      actor: { connect: { user_id: req.user?.user_id } },
+      type: TaskEventType.ASSIGNMENT_CREATED,
+      message: "Assignment created",
+      before_json: {},
+      after_json: assignment,
+    });
+
     res.status(201).json({ success: true, data: assignment });
   } catch (error) {
     console.error("Error in assignTask:", error);
@@ -52,6 +65,7 @@ export async function getAssignment(
 ) {
   try {
     const assignment = await assignmentRepo.getAssignmentById(req.params.id);
+
     if (!assignment) {
       return res
         .status(404)
@@ -78,6 +92,7 @@ export async function updateAssignment(
     const existingAssignment = await assignmentRepo.getAssignmentById(
       req.params.id,
     );
+
     if (!existingAssignment) {
       return res
         .status(404)
@@ -89,6 +104,16 @@ export async function updateAssignment(
       req.params.id,
       updateData,
     );
+
+    // TaskEvent logic
+    await taskEventRepo.createTaskEvent({
+      task: { connect: { task_id: assignment.task_id } },
+      actor: { connect: { user_id: req.user?.user_id } },
+      type: TaskEventType.ASSIGNMENT_UPDATED,
+      message: "Assignment updated",
+      before_json: existingAssignment,
+      after_json: assignment,
+    });
 
     res.json({ success: true, data: assignment });
   } catch (error) {
@@ -114,7 +139,29 @@ export async function deleteAssignment(
   res: Response,
 ) {
   try {
-    await assignmentRepo.deleteAssignment(req.params.id);
+    // Fetch the assignment before deleting
+    const existingAssignment = await assignmentRepo.getAssignmentById(
+      req.params.id,
+    );
+    if (!existingAssignment) {
+      return res
+        .status(404)
+        .json({ success: false, error: "Assignment not found" });
+    }
+
+    // Delete the assignment
+    const assignment = await assignmentRepo.deleteAssignment(req.params.id);
+
+    // TaskEvent logic
+    await taskEventRepo.createTaskEvent({
+      task: { connect: { task_id: existingAssignment.task_id } },
+      actor: { connect: { user_id: req.user?.user_id } },
+      type: TaskEventType.ASSIGNMENT_DELETED,
+      message: "Assignment deleted",
+      before_json: existingAssignment,
+      after_json: {},
+    });
+
     res.status(204).send();
   } catch (error) {
     console.error("Error in deleteAssignment:", error);

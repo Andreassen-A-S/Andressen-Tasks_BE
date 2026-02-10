@@ -11,6 +11,15 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum TaskUnit {
+  NONE
+  HOURS
+  METERS
+  KILOMETERS
+  LITERS
+  KILOGRAMS
+}
+
 enum TaskPriority {
   LOW
   MEDIUM
@@ -23,9 +32,31 @@ enum TaskStatus {
   REJECTED
 }
 
+enum TaskGoalType {
+ OPEN
+ FIXED
+}
+
 enum UserRole {
   USER
   ADMIN
+}
+
+enum TaskEventType {
+  TASK_CREATED
+  TASK_UPDATED
+  TASK_DELETED
+  TASK_STATUS_CHANGED
+  TASK_PRIORITY_CHANGED
+  ASSIGNMENT_CREATED
+  ASSIGNMENT_UPDATED
+  ASSIGNMENT_DELETED
+  COMMENT_CREATED
+  COMMENT_UPDATED
+  COMMENT_DELETED
+  PROGRESS_LOGGED
+  SUBTASK_ADDED
+  SUBTASK_REMOVED
 }
 
 model User {
@@ -41,6 +72,7 @@ model User {
   // Relations
   taskComments    TaskComment[]
   createdTasks    Task[]           @relation("TaskCreator")
+  taskEvents      TaskEvent[]      @relation("TaskEventActor")
   taskAssignments TaskAssignment[]
 
   @@map("users")
@@ -48,8 +80,8 @@ model User {
 
 model TaskComment {
   comment_id String   @id @default(uuid())
-  task_id    String   
-  user_id    String   
+  task_id    String
+  user_id    String
   message    String   @db.Text
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -58,6 +90,8 @@ model TaskComment {
   task       Task     @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
   author     User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
 
+  events     TaskEvent[]
+
   @@index([task_id])
   @@index([user_id])
   @@index([created_at])
@@ -65,40 +99,103 @@ model TaskComment {
 }
 
 model Task {
-  task_id     String       @id @default(uuid())
-  created_by  String 
-  title       String
-  description String       @db.Text
-  priority    TaskPriority @default(MEDIUM)
-  status      TaskStatus   @default(PENDING)
-  deadline    DateTime
-  created_at  DateTime     @default(now())
-  updated_at  DateTime     @updatedAt
+  task_id           String       @id @default(uuid())
+  created_by        String
+  title             String
+  description       String       @db.Text
+  priority          TaskPriority @default(MEDIUM)
+  status            TaskStatus   @default(PENDING)
+  deadline          DateTime
+  created_at        DateTime     @default(now())
+  updated_at        DateTime     @updatedAt
 
-  // Relations
-  comments    TaskComment[]
-  creator     User              @relation("TaskCreator", fields: [created_by], references: [user_id])
-  assignments TaskAssignment[]
+  parent_task_id    String?
+  parent            Task?        @relation("Subtasks", fields: [parent_task_id], references: [task_id], onDelete: Cascade)
+  subtasks          Task[]       @relation("Subtasks")
+
+  scheduled_date    DateTime
+  unit              TaskUnit     @default(NONE)
+  goal_type         TaskGoalType @default(OPEN)
+  target_quantity   Float?
+  current_quantity  Float        @default(0)
+
+  comments          TaskComment[]
+  creator           User         @relation("TaskCreator", fields: [created_by], references: [user_id])
+  assignments       TaskAssignment[]
+  events            TaskEvent[]
 
   @@index([created_by])
   @@index([status])
   @@index([deadline])
+  @@index([parent_task_id])
+  @@index([scheduled_date])
   @@map("tasks")
 }
 
 model TaskAssignment {
-  assignment_id String    @id @default(uuid())
+  assignment_id String           @id @default(uuid())
   task_id       String
   user_id       String
-  assigned_at   DateTime  @default(now())
+  assigned_at   DateTime         @default(now())
   completed_at  DateTime?
 
-  // Relations
-  task          Task      @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
-  user          User      @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  task          Task             @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
+  user          User             @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  progressLogs  TaskProgressLog[]
+  taskEvents    TaskEvent[]
 
   @@unique([task_id, user_id])
   @@index([user_id])
   @@index([task_id])
   @@map("task_assignments")
+}
+
+model TaskProgressLog {
+  progress_id   String         @id @default(uuid())
+  assignment_id String
+  quantity_done Float
+  note          String?        @db.Text
+  created_at    DateTime       @default(now())
+
+  assignment    TaskAssignment @relation(fields: [assignment_id], references: [assignment_id], onDelete: Cascade)
+
+  events        TaskEvent[]
+
+  @@index([assignment_id])
+  @@index([created_at])
+  @@map("task_progress_logs")
+}
+
+
+model TaskEvent {
+  event_id      String        @id @default(uuid())
+  task_id       String
+  actor_id      String?
+  type          TaskEventType
+  message       String?       @db.Text
+
+  // Links to “what happened”
+  comment_id    String?
+  progress_id   String?
+  assignment_id String?
+
+  before_json   Json?
+  after_json    Json?
+
+  created_at    DateTime      @default(now())
+
+  task          Task           @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
+  actor         User?          @relation("TaskEventActor", fields: [actor_id], references: [user_id], onDelete: SetNull)
+
+  comment       TaskComment?     @relation(fields: [comment_id], references: [comment_id], onDelete: SetNull)
+  progress      TaskProgressLog? @relation(fields: [progress_id], references: [progress_id], onDelete: SetNull)
+  assignment    TaskAssignment?  @relation(fields: [assignment_id], references: [assignment_id], onDelete: SetNull)
+
+  @@index([task_id, created_at])
+  @@index([type, created_at])
+  @@index([comment_id])
+  @@index([progress_id])
+  @@index([assignment_id])
+  @@map("task_events")
 }

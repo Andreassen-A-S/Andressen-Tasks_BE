@@ -31,6 +31,10 @@ export async function createTaskWithAssignments(data: CreateTaskInput) {
         status: data.status,
         deadline: data.deadline,
         created_by: data.created_by,
+        parent_task_id: data.parent_task_id ?? null,
+        scheduled_date: data.scheduled_date,
+        unit: data.unit ?? "NONE",
+        target_quantity: data.target_quantity ?? null,
       },
     });
 
@@ -162,5 +166,27 @@ export async function updateTask(
 export async function deleteTask(id: string): Promise<void> {
   await prisma.task.delete({
     where: { task_id: id },
+  });
+}
+
+export async function upsertProgressLog(
+  taskId: string,
+  userId: string,
+  quantity_done: number,
+  note?: string,
+) {
+  // Find assignment
+  const assignment = await prisma.taskAssignment.findUnique({
+    where: {
+      task_id_user_id: {
+        task_id: taskId,
+        user_id: userId,
+      },
+    },
+  });
+  if (!assignment) throw new Error("Assignment not found");
+
+  return prisma.taskProgressLog.create({
+    data: { assignment_id: assignment.assignment_id, quantity_done, note },
   });
 }
