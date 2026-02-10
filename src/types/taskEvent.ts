@@ -1,0 +1,3 @@
+interface createTaskEvent {
+  id: string;
+}

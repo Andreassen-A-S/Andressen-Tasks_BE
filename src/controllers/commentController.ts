@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
-import { UserRole } from "../generated/prisma/client";
+import { TaskEventType, UserRole } from "../generated/prisma/client";
 import * as commentRepo from "../repositories/commentRepository";
 import { prisma } from "../db/prisma";
+import * as taskEventRepo from "../repositories/taskEventRepository";
 
 export async function listTaskComments(req: Request, res: Response) {
   try {
@@ -94,6 +95,17 @@ export async function createComment(req: Request, res: Response) {
       message: message.trim(),
     });
 
+    // TaskEvent logic
+    await taskEventRepo.createTaskEvent({
+      task: { connect: { task_id: comment.task_id } },
+      actor: { connect: { user_id: req.user?.user_id } },
+      type: TaskEventType.COMMENT_CREATED,
+      message: "Comment created",
+      comment: { connect: { comment_id: comment.comment_id } },
+      before_json: {},
+      after_json: comment,
+    });
+
     res.status(201).json({ success: true, data: comment });
   } catch (error) {
     console.error("Error creating comment:", error);
@@ -124,6 +136,17 @@ export async function deleteComment(req: Request, res: Response) {
     }
 
     await commentRepo.deleteComment(commentId);
+
+    // TaskEvent logic
+    await taskEventRepo.createTaskEvent({
+      task: { connect: { task_id: comment.task_id } },
+      actor: { connect: { user_id: req.user?.user_id } },
+      type: TaskEventType.COMMENT_DELETED,
+      message: "Comment deleted",
+      comment: { connect: { comment_id: comment.comment_id } },
+      before_json: comment,
+      after_json: {},
+    });
 
     res.status(204).json({ success: true });
   } catch (error) {
@@ -176,6 +199,17 @@ export async function updateComment(req: Request, res: Response) {
       commentId,
       message.trim(),
     );
+
+    // TaskEvent logic
+    await taskEventRepo.createTaskEvent({
+      task: { connect: { task_id: comment.task_id } },
+      actor: { connect: { user_id: req.user?.user_id } },
+      type: TaskEventType.COMMENT_UPDATED,
+      message: "Comment updated",
+      comment: { connect: { comment_id: comment.comment_id } },
+      before_json: comment,
+      after_json: updatedComment,
+    });
 
     res.json({ success: true, data: updatedComment });
   } catch (error) {
