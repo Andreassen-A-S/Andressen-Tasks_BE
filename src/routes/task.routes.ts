@@ -5,9 +5,9 @@ import { authenticateToken } from "../middleware/auth";
 
 const router = Router();
 
-router.get("/", taskController.listTasks);
+router.get("/", authenticateToken, taskController.listTasks);
 router.post("/", authenticateToken, taskController.createTask);
-router.get("/:id", taskController.getTask);
+router.get("/:id", authenticateToken, taskController.getTask);
 router.patch("/:id", authenticateToken, taskController.updateTask);
 router.delete("/:id", authenticateToken, taskController.deleteTask);
 
