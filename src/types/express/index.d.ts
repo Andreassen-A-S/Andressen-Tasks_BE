@@ -1,4 +1,4 @@
-import { UserRole } from "../generated/prisma/client";
+import { UserRole } from "../../generated/prisma/client";
 
 declare module "express" {
   interface Request {

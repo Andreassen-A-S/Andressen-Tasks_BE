@@ -45,6 +45,7 @@ export async function assignTask(req: Request, res: Response) {
       actor: { connect: { user_id: req.user?.user_id } },
       type: TaskEventType.ASSIGNMENT_CREATED,
       message: "Assignment created",
+      assignment: { connect: { assignment_id: assignment.assignment_id } },
       before_json: {},
       after_json: assignment,
     });
@@ -110,6 +111,7 @@ export async function updateAssignment(req: Request, res: Response) {
       actor: { connect: { user_id: req.user?.user_id } },
       type: TaskEventType.ASSIGNMENT_UPDATED,
       message: "Assignment updated",
+      assignment: { connect: { assignment_id: assignment.assignment_id } },
       before_json: existingAssignment,
       after_json: assignment,
     });
@@ -148,18 +150,21 @@ export async function deleteAssignment(req: Request, res: Response) {
         .json({ success: false, error: "Assignment not found" });
     }
 
-    // Delete the assignment
-    await assignmentRepo.deleteAssignment(id);
-
     // TaskEvent logic
     await taskEventRepo.createTaskEvent({
       task: { connect: { task_id: existingAssignment.task_id } },
       actor: { connect: { user_id: req.user?.user_id } },
       type: TaskEventType.ASSIGNMENT_DELETED,
       message: "Assignment deleted",
+      assignment: {
+        connect: { assignment_id: existingAssignment.assignment_id }, // Used in the future for soft deletes
+      },
       before_json: existingAssignment,
       after_json: {},
     });
+
+    // Delete the assignment
+    await assignmentRepo.deleteAssignment(id);
 
     res.status(204).send();
   } catch (error) {
