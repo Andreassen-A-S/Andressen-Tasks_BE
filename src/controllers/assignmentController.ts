@@ -150,9 +150,6 @@ export async function deleteAssignment(req: Request, res: Response) {
         .json({ success: false, error: "Assignment not found" });
     }
 
-    // Delete the assignment
-    await assignmentRepo.deleteAssignment(id);
-
     // TaskEvent logic
     await taskEventRepo.createTaskEvent({
       task: { connect: { task_id: existingAssignment.task_id } },
@@ -160,11 +157,14 @@ export async function deleteAssignment(req: Request, res: Response) {
       type: TaskEventType.ASSIGNMENT_DELETED,
       message: "Assignment deleted",
       assignment: {
-        connect: { assignment_id: existingAssignment.assignment_id },
+        connect: { assignment_id: existingAssignment.assignment_id }, // Used in the future for soft deletes
       },
       before_json: existingAssignment,
       after_json: {},
     });
+
+    // Delete the assignment
+    await assignmentRepo.deleteAssignment(id);
 
     res.status(204).send();
   } catch (error) {
