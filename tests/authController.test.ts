@@ -26,11 +26,16 @@ function createMockResponse(): MockResponse {
 }
 
 function createRequest(overrides: Record<string, any> = {}): Request {
+  const get = ((name: string) => {
+    if (name === "set-cookie") return [] as string[];
+    return "test-agent";
+  }) as Request["get"];
+
   return {
     params: {},
     body: {},
     headers: {},
-    get: mock(() => "test-agent") as Request["get"],
+    get,
     ip: "127.0.0.1",
     ...overrides,
   } as Request;

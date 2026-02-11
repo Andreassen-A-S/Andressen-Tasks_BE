@@ -97,11 +97,39 @@ describe("taskController.createTask", () => {
     expect(res.body).toEqual({ success: false, error: "Unauthorized" });
   });
 
-  test("returns 400 when created_by is missing", async () => {
-    const repoSpy = spyOn(taskRepo, "createTaskWithAssignments");
+  test("sets created_by to authenticated user when missing", async () => {
+    const repoSpy = spyOn(
+      taskRepo,
+      "createTaskWithAssignments",
+    ).mockResolvedValue({
+      task_id: "t1",
+      title: "Task",
+      created_by: "u1",
+      assignments: [],
+    } as any);
+
+    // Mock the event repo to prevent real DB calls
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as any);
+
     const req = createRequest({
       user: { user_id: "u1" },
       body: { title: "Task" },
+    });
+    const res = createMockResponse();
+
+    await taskController.createTask(req, res);
+
+    expect(repoSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ created_by: "u1", title: "Task" }),
+    );
+    expect(res.statusCode).toBe(201);
+  });
+  test("returns 400 when created_by does not match authenticated user", async () => {
+    const repoSpy = spyOn(taskRepo, "createTaskWithAssignments");
+
+    const req = createRequest({
+      user: { user_id: "u1" },
+      body: { title: "Task", created_by: "u2" },
     });
     const res = createMockResponse();
 
@@ -111,7 +139,7 @@ describe("taskController.createTask", () => {
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({
       success: false,
-      error: "Missing required field: created_by",
+      error: "created_by must match the authenticated user",
     });
   });
 

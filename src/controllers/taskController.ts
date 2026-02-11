@@ -77,14 +77,21 @@ export async function createTask(req: Request, res: Response) {
   try {
     const body = req.body as CreateTaskInput;
 
-    if (!body.created_by) {
+    // Reject if client sends a mismatching created_by
+    if (body.created_by && body.created_by !== userId) {
       return res.status(400).json({
         success: false,
-        error: "Missing required field: created_by",
+        error: "created_by must match the authenticated user",
       });
     }
 
-    const task = await taskRepo.createTaskWithAssignments(body);
+    // Always set created_by to the authenticated user
+    const input: CreateTaskInput = {
+      ...body,
+      created_by: userId,
+    };
+
+    const task = await taskRepo.createTaskWithAssignments(input);
     if (!task)
       return res
         .status(500)

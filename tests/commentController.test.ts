@@ -68,7 +68,7 @@ describe("commentController.listTaskComments", () => {
     findUniqueMock.mockResolvedValueOnce({
       created_by: "another-user",
       assignments: [],
-    });
+    } as any);
 
     const req = createRequest({
       params: { taskId: "t1" } as Request["params"],
@@ -102,7 +102,7 @@ describe("commentController.createComment", () => {
     findUniqueMock.mockResolvedValueOnce({
       created_by: "u1",
       assignments: [],
-    });
+    } as any);
 
     const createSpy = spyOn(commentRepo, "createComment").mockResolvedValue({
       comment_id: "c1",
