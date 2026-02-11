@@ -69,11 +69,11 @@ export async function createTask(req: Request, res: Response) {
           actor: req.user?.user_id
             ? { connect: { user_id: req.user.user_id } }
             : undefined,
+          type: TaskEventType.ASSIGNMENT_CREATED,
+          message: "Created assignment",
           assignment: {
             connect: { assignment_id: assignment.assignment_id },
           },
-          type: TaskEventType.ASSIGNMENT_CREATED,
-          message: `Created assignment`,
           before_json: undefined,
           after_json: assignment,
         });
@@ -133,9 +133,9 @@ export async function updateTask(req: Request, res: Response) {
           actor: req.user?.user_id
             ? { connect: { user_id: req.user.user_id } }
             : undefined,
-          assignment: { connect: { assignment_id: assignment.assignment_id } },
           type: TaskEventType.ASSIGNMENT_CREATED,
-          message: `Created assignment`,
+          message: "Created assignment",
+          assignment: { connect: { assignment_id: assignment.assignment_id } },
           before_json: undefined,
           after_json: assignment,
         });
@@ -149,7 +149,8 @@ export async function updateTask(req: Request, res: Response) {
             ? { connect: { user_id: req.user.user_id } }
             : undefined,
           type: TaskEventType.ASSIGNMENT_DELETED,
-          message: `Deleted assignment`,
+          message: "Deleted assignment",
+          assignment: { connect: { assignment_id: assignment.assignment_id } },
           before_json: assignment,
           after_json: {},
         });
@@ -234,7 +235,8 @@ export async function upsertProgressLog(req: Request, res: Response) {
       task: { connect: { task_id: taskId } },
       actor: { connect: { user_id: userId } },
       type: TaskEventType.PROGRESS_LOGGED,
-      message: `Logged progress`,
+      message: "Logged progress",
+      progress: { connect: { progress_id: progressLog.progress_id } },
       before_json: {},
       after_json: progressLog,
     });

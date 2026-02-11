@@ -45,6 +45,7 @@ export async function assignTask(req: Request, res: Response) {
       actor: { connect: { user_id: req.user?.user_id } },
       type: TaskEventType.ASSIGNMENT_CREATED,
       message: "Assignment created",
+      assignment: { connect: { assignment_id: assignment.assignment_id } },
       before_json: {},
       after_json: assignment,
     });
@@ -110,6 +111,7 @@ export async function updateAssignment(req: Request, res: Response) {
       actor: { connect: { user_id: req.user?.user_id } },
       type: TaskEventType.ASSIGNMENT_UPDATED,
       message: "Assignment updated",
+      assignment: { connect: { assignment_id: assignment.assignment_id } },
       before_json: existingAssignment,
       after_json: assignment,
     });
@@ -157,6 +159,9 @@ export async function deleteAssignment(req: Request, res: Response) {
       actor: { connect: { user_id: req.user?.user_id } },
       type: TaskEventType.ASSIGNMENT_DELETED,
       message: "Assignment deleted",
+      assignment: {
+        connect: { assignment_id: existingAssignment.assignment_id },
+      },
       before_json: existingAssignment,
       after_json: {},
     });
