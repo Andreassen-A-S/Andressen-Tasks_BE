@@ -155,6 +155,7 @@ model TaskProgressLog {
   progress_id   String         @id @default(uuid())
   assignment_id String
   quantity_done Float
+  unit          TaskUnit?
   note          String?        @db.Text
   created_at    DateTime       @default(now())
 

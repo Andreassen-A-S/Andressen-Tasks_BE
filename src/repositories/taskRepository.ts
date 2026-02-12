@@ -1,5 +1,5 @@
 import { prisma } from "../db/prisma";
-import type { Task, Prisma } from "../generated/prisma/client";
+import type { Task, Prisma, TaskUnit } from "../generated/prisma/client";
 import type { CreateTaskInput, UpdateTaskInput } from "../types/task";
 
 export async function getAllTasks(): Promise<Task[]> {
@@ -166,6 +166,7 @@ export async function upsertProgressLog(
   taskId: string,
   userId: string,
   quantity_done: number,
+  unit?: TaskUnit,
   note?: string,
 ) {
   const assignment = await prisma.taskAssignment.findUnique({
@@ -179,7 +180,12 @@ export async function upsertProgressLog(
   if (!assignment) throw new Error("Assignment not found");
 
   return prisma.taskProgressLog.create({
-    data: { assignment_id: assignment.assignment_id, quantity_done, note },
+    data: {
+      assignment_id: assignment.assignment_id,
+      quantity_done,
+      unit,
+      note,
+    },
   });
 }
 

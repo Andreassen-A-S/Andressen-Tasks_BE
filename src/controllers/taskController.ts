@@ -120,11 +120,7 @@ export async function createTask(req: Request, res: Response) {
               connect: { assignment_id: assignment.assignment_id },
             },
             before_json: undefined,
-            after_json: {
-              assignment_id: assignment.assignment_id,
-              task_id: task.task_id,
-              user_id: assignment.user_id,
-            },
+            after_json: assignment,
           }),
         ),
       );
@@ -298,13 +294,14 @@ export async function upsertProgressLog(req: Request, res: Response) {
     return res.status(400).json({ success: false, error: "Invalid task ID" });
   }
 
-  const { quantity_done, note } = req.body;
+  const { quantity_done, unit, note } = req.body;
 
   try {
     const progressLog = await taskRepo.upsertProgressLog(
       taskId,
       userId,
       quantity_done,
+      unit,
       note,
     );
 
