@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { Request, Response } from "express";
-import { TaskEventType } from "../src/generated/prisma/client";
+import { TaskEventType, TaskUnit } from "../src/generated/prisma/client";
 import * as taskController from "../src/controllers/taskController";
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
 import * as taskRepo from "../src/repositories/taskRepository";
@@ -285,7 +285,7 @@ describe("taskController.upsertProgressLog", () => {
     const req = createRequest({
       user: { user_id: "u1" },
       params: { id: "t1" } as Request["params"],
-      body: { quantity_done: 1, note: "done" },
+      body: { quantity_done: 1, note: "done", unit: TaskUnit.METERS },
     });
     const res = createMockResponse();
 
@@ -296,7 +296,11 @@ describe("taskController.upsertProgressLog", () => {
   });
 
   test("upserts progress and logs PROGRESS_LOGGED", async () => {
-    const progressLog = { progress_id: "p1", quantity_done: 5 };
+    const progressLog = {
+      progress_id: "p1",
+      quantity_done: 5,
+      unit: TaskUnit.METERS,
+    };
     spyOn(taskRepo, "upsertProgressLog").mockResolvedValue(
       progressLog as never,
     );
@@ -307,7 +311,7 @@ describe("taskController.upsertProgressLog", () => {
     const req = createRequest({
       user: { user_id: "u1" },
       params: { id: "t1" } as Request["params"],
-      body: { quantity_done: 5, note: "good" },
+      body: { quantity_done: 5, note: "good", unit: TaskUnit.METERS },
     });
     const res = createMockResponse();
 
