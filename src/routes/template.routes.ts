@@ -4,8 +4,15 @@ import { authenticateToken } from "../middleware/auth";
 
 const router = Router();
 
-// List all active templates
+// GET /api/recurring-templates - List all templates
 router.get("/", authenticateToken, templateController.listTemplates);
+
+// List all active templates
+router.get(
+  "/active",
+  authenticateToken,
+  templateController.listActiveTemplates,
+);
 
 // Create new template
 router.post("/", authenticateToken, templateController.createTemplate);

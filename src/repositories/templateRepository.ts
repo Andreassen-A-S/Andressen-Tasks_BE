@@ -1,6 +1,10 @@
 import { prisma } from "../db/prisma";
 import type { Prisma } from "../generated/prisma/client";
 
+export async function getAllTemplates() {
+  return prisma.recurringTaskTemplate.findMany();
+}
+
 export async function createTemplate(
   data: Prisma.RecurringTaskTemplateCreateInput,
 ) {

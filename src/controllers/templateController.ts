@@ -32,17 +32,32 @@ function actorConnect(userId: string) {
 
 /**
  * GET /api/recurring-templates
- * List all active recurring templates
+ * List all recurring templates
  */
 export async function listTemplates(_req: Request, res: Response) {
   try {
-    const templates = await recurringService.getActiveTemplates();
+    const templates = await recurringService.getAllTemplates();
     return res.json({ success: true, data: templates });
   } catch (error) {
     console.error("Error in listTemplates:", error);
     return res
       .status(500)
       .json({ success: false, error: "Failed to fetch templates" });
+  }
+}
+/**
+ * GET /api/recurring-templates/active
+ * List all active recurring templates
+ */
+export async function listActiveTemplates(_req: Request, res: Response) {
+  try {
+    const templates = await recurringService.getActiveTemplates();
+    return res.json({ success: true, data: templates });
+  } catch (error) {
+    console.error("Error in listActiveTemplates:", error);
+    return res
+      .status(500)
+      .json({ success: false, error: "Failed to fetch active templates" });
   }
 }
 

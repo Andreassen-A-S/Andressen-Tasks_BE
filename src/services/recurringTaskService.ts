@@ -4,7 +4,9 @@ import {
   addMonths,
   addYears,
   startOfDay,
+  differenceInWeeks,
   isBefore,
+  isAfter,
 } from "date-fns";
 import { prisma } from "../db/prisma";
 import * as templateRepository from "../repositories/templateRepository";
@@ -13,41 +15,58 @@ import {
   TaskEventType,
   TaskStatus,
   type Prisma,
+  type RecurringTaskTemplate,
 } from "../generated/prisma/client";
+
+// Type for template with relations
+type TemplateWithRelations = Prisma.RecurringTaskTemplateGetPayload<{
+  include: {
+    creator: true;
+    default_assignees: {
+      include: { user: true };
+    };
+  };
+}>;
 
 export class RecurringTaskService {
   /**
    * Create a new recurring template and generate initial instances
    */
-  async createTemplate(data: Prisma.RecurringTaskTemplateCreateInput) {
-    const template = await templateRepository.createTemplate(data);
+  async createTemplate(
+    data: Prisma.RecurringTaskTemplateCreateInput,
+  ): Promise<RecurringTaskTemplate> {
+    return await prisma.$transaction(async (tx) => {
+      const template = await templateRepository.createTemplate(data);
 
-    // Generate first 12 instances
-    await this.generateInstances(template.id, 12);
+      // Generate first 12 instances
+      await this.generateInstances(template.id, 12);
 
-    // Log event - get first task if it exists
-    const firstTask = await prisma.task.findFirst({
-      where: { recurring_template_id: template.id },
-    });
-
-    if (firstTask) {
-      await prisma.taskEvent.create({
-        data: {
-          task_id: firstTask.task_id,
-          actor_id: template.created_by,
-          type: TaskEventType.RECURRING_TEMPLATE_CREATED,
-          message: `Created recurring template: ${template.title}`,
-        },
+      // Log event - get first task if it exists
+      const firstTask = await prisma.task.findFirst({
+        where: { recurring_template_id: template.id },
       });
-    }
 
-    return template;
+      if (firstTask) {
+        await prisma.taskEvent.create({
+          data: {
+            task_id: firstTask.task_id,
+            actor_id: template.created_by,
+            type: TaskEventType.RECURRING_TEMPLATE_CREATED,
+            message: `Created recurring template: ${template.title}`,
+          },
+        });
+      }
+
+      return template;
+    });
   }
 
   /**
    * Get template by ID with relations
    */
-  async getTemplateById(templateId: string) {
+  async getTemplateById(
+    templateId: string,
+  ): Promise<TemplateWithRelations | null> {
     return prisma.recurringTaskTemplate.findUnique({
       where: { id: templateId },
       include: {
@@ -60,9 +79,23 @@ export class RecurringTaskService {
   }
 
   /**
+   * Get all templates
+   */
+  async getAllTemplates(): Promise<TemplateWithRelations[]> {
+    return prisma.recurringTaskTemplate.findMany({
+      include: {
+        creator: true,
+        default_assignees: {
+          include: { user: true },
+        },
+      },
+    });
+  }
+
+  /**
    * Get all active templates
    */
-  async getActiveTemplates() {
+  async getActiveTemplates(): Promise<TemplateWithRelations[]> {
     return prisma.recurringTaskTemplate.findMany({
       where: { is_active: true },
       include: {
@@ -77,7 +110,10 @@ export class RecurringTaskService {
   /**
    * Set default assignees for a template
    */
-  async setDefaultAssignees(templateId: string, userIds: string[]) {
+  async setDefaultAssignees(
+    templateId: string,
+    userIds: string[],
+  ): Promise<void> {
     // Validate that all user IDs exist
     if (userIds.length > 0) {
       const existingUsers = await prisma.user.findMany({
@@ -121,7 +157,7 @@ export class RecurringTaskService {
   /**
    * Delete template and all its instances
    */
-  async deleteTemplate(templateId: string) {
+  async deleteTemplate(templateId: string): Promise<RecurringTaskTemplate> {
     // Cascade will handle deleting instances and assignees
     return prisma.recurringTaskTemplate.delete({
       where: { id: templateId },
@@ -131,63 +167,135 @@ export class RecurringTaskService {
   /**
    * Generate task instances for the next N periods
    */
-  async generateInstances(templateId: string, count: number = 12) {
-    const template = await templateRepository.getTemplateById(templateId);
+  async generateInstances(
+    templateId: string,
+    count: number = 12,
+  ): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      const template = await tx.recurringTaskTemplate.findUnique({
+        where: { id: templateId },
+      });
 
-    if (!template || !template.is_active) {
-      return;
-    }
+      if (!template || !template.is_active) {
+        return;
+      }
 
-    // Get existing instances
-    const existingInstances = await prisma.task.findMany({
-      where: { recurring_template_id: templateId },
-      orderBy: { occurrence_date: "desc" },
-    });
+      // Get existing occurrence dates (only what we need)
+      const existingInstances = await tx.task.findMany({
+        where: { recurring_template_id: templateId },
+        select: { occurrence_date: true },
+      });
 
-    // Find the last occurrence date, or use start_date
-    const lastOccurrence =
-      existingInstances[0]?.occurrence_date || template.start_date;
-
-    // Calculate next occurrence dates
-    const occurrences = this.calculateOccurrences(
-      template,
-      lastOccurrence,
-      count,
-    );
-
-    // Create task instances
-    for (const occurrenceDate of occurrences) {
-      // Check if instance already exists
-      const exists = existingInstances.some(
-        (t) => t.occurrence_date?.getTime() === occurrenceDate.getTime(),
+      // Create efficient Set for O(1) duplicate checking
+      const existingDates = new Set(
+        existingInstances
+          .map((t) => t.occurrence_date?.getTime())
+          .filter((t): t is number => t !== undefined && t !== null),
       );
 
-      if (!exists) {
-        await this.createTaskInstance(template, occurrenceDate);
+      // Calculate next occurrences (starting from start_date, skipping existing)
+      const occurrences = this.calculateOccurrences(
+        template,
+        count,
+        existingDates,
+      );
+
+      // Batch create all instances
+      const taskData = occurrences.map((occurrenceDate) => {
+        // Create deadline as a Date object
+        const deadlineDate = new Date(occurrenceDate);
+        deadlineDate.setHours(23, 59, 59, 999);
+
+        return {
+          title: template.title,
+          description: template.description || "",
+          priority: template.priority,
+          status: TaskStatus.PENDING,
+          deadline: deadlineDate, // Now it's a Date object, not a number
+          scheduled_date: occurrenceDate,
+          occurrence_date: occurrenceDate,
+          unit: template.unit,
+          goal_type: template.goal_type,
+          target_quantity: template.target_quantity,
+          current_quantity: 0,
+          created_by: template.created_by,
+          recurring_template_id: template.id,
+        };
+      });
+
+      // Batch create tasks
+      if (taskData.length > 0) {
+        // Note: createMany doesn't return created records, so we need to fetch them
+        await tx.task.createMany({ data: taskData });
+
+        // Get the newly created tasks
+        const createdTasks = await tx.task.findMany({
+          where: {
+            recurring_template_id: templateId,
+            occurrence_date: { in: occurrences },
+          },
+        });
+
+        // Get assignees
+        const assignees = await tx.recurringTaskTemplateAssignee.findMany({
+          where: { template_id: templateId },
+        });
+
+        // Batch create assignments
+        if (assignees.length > 0) {
+          const assignmentData = createdTasks.flatMap((task) =>
+            assignees.map((assignee) => ({
+              task_id: task.task_id,
+              user_id: assignee.user_id,
+            })),
+          );
+
+          await tx.taskAssignment.createMany({ data: assignmentData });
+        }
+
+        // Batch create events
+        const eventData = createdTasks.map((task) => ({
+          task_id: task.task_id,
+          actor_id: template.created_by,
+          type: TaskEventType.RECURRING_INSTANCE_GENERATED,
+          message: `Generated instance for ${task.occurrence_date?.toISOString().split("T")[0]}`,
+        }));
+
+        await tx.taskEvent.createMany({ data: eventData });
       }
-    }
+    });
   }
 
   /**
    * Calculate next occurrence dates based on recurrence rule
    */
   private calculateOccurrences(
-    template: any,
-    fromDate: Date,
+    template: RecurringTaskTemplate,
     count: number,
+    existingDates: Set<number>, // For efficient lookup
   ): Date[] {
     const occurrences: Date[] = [];
-    let currentDate = startOfDay(fromDate);
+    let currentDate = startOfDay(template.start_date);
+    const endDate = template.end_date ? startOfDay(template.end_date) : null;
 
-    while (occurrences.length < count) {
+    // Safety limit to prevent infinite loops
+    const maxIterations = count * 100;
+    let iterations = 0;
+
+    while (occurrences.length < count && iterations < maxIterations) {
+      iterations++;
+
       currentDate = this.getNextOccurrence(template, currentDate);
 
-      // Stop if we've passed the end_date
-      if (template.end_date && isBefore(template.end_date, currentDate)) {
+      // Check if past end_date BEFORE adding
+      if (endDate && isAfter(currentDate, endDate)) {
         break;
       }
 
-      occurrences.push(currentDate);
+      // Skip if this occurrence already exists (efficient Set lookup)
+      if (!existingDates.has(currentDate.getTime())) {
+        occurrences.push(currentDate);
+      }
     }
 
     return occurrences;
@@ -196,7 +304,10 @@ export class RecurringTaskService {
   /**
    * Get the next occurrence date based on frequency
    */
-  private getNextOccurrence(template: any, fromDate: Date): Date {
+  private getNextOccurrence(
+    template: RecurringTaskTemplate,
+    fromDate: Date,
+  ): Date {
     const { frequency, interval } = template;
 
     switch (frequency) {
@@ -216,33 +327,59 @@ export class RecurringTaskService {
   /**
    * Handle weekly recurrence with specific days
    */
-  private getNextWeeklyOccurrence(template: any, fromDate: Date): Date {
+  private getNextWeeklyOccurrence(
+    template: RecurringTaskTemplate,
+    fromDate: Date,
+  ): Date {
     const daysOfWeek = template.days_of_week as number[] | null;
 
     if (!daysOfWeek || daysOfWeek.length === 0) {
-      // Default: same day of week, N weeks later
       return addWeeks(fromDate, template.interval);
     }
 
-    // Find next matching day
-    let nextDate = addDays(fromDate, 1);
-    const maxIterations = 7 * template.interval;
+    const sortedDays = [...daysOfWeek].sort((a, b) => a - b);
+    const currentDayOfWeek = fromDate.getDay();
+    const startDate = startOfDay(template.start_date);
 
-    for (let i = 0; i < maxIterations; i++) {
-      const dayOfWeek = nextDate.getDay();
-      if (daysOfWeek.includes(dayOfWeek)) {
-        return nextDate;
+    // Calculate which week we're in relative to start_date
+    const weeksSinceStart = differenceInWeeks(fromDate, startDate);
+    const currentCycle = Math.floor(weeksSinceStart / template.interval);
+
+    // Check if there's a later day in the SAME week (and we're in a valid cycle week)
+    if (weeksSinceStart % template.interval === 0) {
+      const laterDayInSameWeek = sortedDays.find(
+        (day) => day > currentDayOfWeek,
+      );
+
+      if (laterDayInSameWeek !== undefined) {
+        return addDays(fromDate, laterDayInSameWeek - currentDayOfWeek);
       }
-      nextDate = addDays(nextDate, 1);
     }
 
-    return addWeeks(fromDate, template.interval);
+    // Move to next valid cycle week
+    const weeksToNextCycle =
+      template.interval - (weeksSinceStart % template.interval);
+    const nextCycleWeek = addWeeks(fromDate, weeksToNextCycle);
+
+    // Find the first target day in that week
+    const nextCycleDayOfWeek = nextCycleWeek.getDay();
+    const firstTargetDay = sortedDays[0]!;
+
+    let daysToTarget = firstTargetDay - nextCycleDayOfWeek;
+    if (daysToTarget < 0) {
+      daysToTarget += 7;
+    }
+
+    return addDays(nextCycleWeek, daysToTarget);
   }
 
   /**
    * Handle monthly recurrence
    */
-  private getNextMonthlyOccurrence(template: any, fromDate: Date): Date {
+  private getNextMonthlyOccurrence(
+    template: RecurringTaskTemplate,
+    fromDate: Date,
+  ): Date {
     const dayOfMonth = template.day_of_month;
 
     if (!dayOfMonth) {
@@ -266,11 +403,15 @@ export class RecurringTaskService {
   /**
    * Create a task instance from template
    */
-  private async createTaskInstance(template: any, occurrenceDate: Date) {
+  private async createTaskInstance(
+    tx: Prisma.TransactionClient,
+    template: RecurringTaskTemplate,
+    occurrenceDate: Date,
+  ): Promise<Prisma.TaskGetPayload<{}>> {
     const deadlineDate = new Date(occurrenceDate);
     deadlineDate.setHours(23, 59, 59);
 
-    const task = await prisma.task.create({
+    const task = await tx.task.create({
       data: {
         title: template.title,
         description: template.description || "",
@@ -289,12 +430,12 @@ export class RecurringTaskService {
     });
 
     // Auto-assign default assignees
-    const assignees = await prisma.recurringTaskTemplateAssignee.findMany({
+    const assignees = await tx.recurringTaskTemplateAssignee.findMany({
       where: { template_id: template.id },
     });
 
     for (const assignee of assignees) {
-      await prisma.taskAssignment.create({
+      await tx.taskAssignment.create({
         data: {
           task_id: task.task_id,
           user_id: assignee.user_id,
@@ -303,7 +444,7 @@ export class RecurringTaskService {
     }
 
     // Log event
-    await prisma.taskEvent.create({
+    await tx.taskEvent.create({
       data: {
         task_id: task.task_id,
         actor_id: template.created_by,
@@ -321,7 +462,7 @@ export class RecurringTaskService {
   async updateTemplate(
     templateId: string,
     updates: Prisma.RecurringTaskTemplateUpdateInput,
-  ) {
+  ): Promise<RecurringTaskTemplate> {
     const template = await templateRepository.updateTemplate(
       templateId,
       updates,
@@ -361,7 +502,7 @@ export class RecurringTaskService {
   /**
    * Delete future unstarted instances and regenerate
    */
-  private async regenerateFutureInstances(templateId: string) {
+  private async regenerateFutureInstances(templateId: string): Promise<void> {
     const today = startOfDay(new Date());
 
     // Delete future PENDING instances that haven't been worked on
@@ -381,7 +522,7 @@ export class RecurringTaskService {
   /**
    * Deactivate template (stops generating new instances)
    */
-  async deactivateTemplate(templateId: string) {
+  async deactivateTemplate(templateId: string): Promise<RecurringTaskTemplate> {
     const template = await templateRepository.updateTemplate(templateId, {
       is_active: false,
     });
@@ -408,7 +549,7 @@ export class RecurringTaskService {
   /**
    * Reactivate template and generate instances
    */
-  async reactivateTemplate(templateId: string) {
+  async reactivateTemplate(templateId: string): Promise<RecurringTaskTemplate> {
     const template = await templateRepository.updateTemplate(templateId, {
       is_active: true,
     });
@@ -421,7 +562,15 @@ export class RecurringTaskService {
   /**
    * Get all instances for a template
    */
-  async getTemplateInstances(templateId: string) {
+  async getTemplateInstances(templateId: string): Promise<
+    Prisma.TaskGetPayload<{
+      include: {
+        assignments: {
+          include: { user: true };
+        };
+      };
+    }>[]
+  > {
     return prisma.task.findMany({
       where: { recurring_template_id: templateId },
       orderBy: { occurrence_date: "asc" },
@@ -437,7 +586,10 @@ export class RecurringTaskService {
    * Check if instance generation is needed and top up
    * Called by cron job or after task completion
    */
-  async ensureInstanceBuffer(templateId: string, minBuffer: number = 12) {
+  async ensureInstanceBuffer(
+    templateId: string,
+    minBuffer: number = 12,
+  ): Promise<void> {
     const template = await templateRepository.getTemplateById(templateId);
 
     if (!template || !template.is_active) {
@@ -462,7 +614,7 @@ export class RecurringTaskService {
    * Ensure all active templates have enough future instances
    * Called by cron job
    */
-  async ensureAllTemplatesHaveInstances() {
+  async ensureAllTemplatesHaveInstances(): Promise<void> {
     const activeTemplates = await templateRepository.getActiveTemplates();
 
     for (const template of activeTemplates) {
