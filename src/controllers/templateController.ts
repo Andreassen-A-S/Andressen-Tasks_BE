@@ -26,10 +26,6 @@ function requireUserId(req: Request, res: Response): string | null {
   return userId;
 }
 
-function actorConnect(userId: string) {
-  return { connect: { user_id: userId } } as const;
-}
-
 /**
  * GET /api/recurring-templates
  * List all recurring templates
