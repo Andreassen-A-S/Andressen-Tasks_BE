@@ -536,4 +536,136 @@ describe("validateRecurringTemplateData", () => {
     expect(result.isValid).toBe(false);
     expect(result.error).toContain("between 0 and 6");
   });
+
+  // --- Additional tests for frequency changes and field requirements ---
+
+  describe("frequency change validation", () => {
+    test("WEEKLY: valid with days_of_week", () => {
+      const result = validateRecurringTemplateData({
+        title: "Weekly Task",
+        frequency: RecurrenceFrequency.WEEKLY,
+        start_date: "2026-02-01",
+        days_of_week: [1, 3, 5],
+      });
+      expect(result.isValid).toBe(true);
+    });
+
+    test("MONTHLY: valid with day_of_month", () => {
+      const result = validateRecurringTemplateData({
+        title: "Monthly Task",
+        frequency: RecurrenceFrequency.MONTHLY,
+        start_date: "2026-02-01",
+        day_of_month: 10,
+      });
+      expect(result.isValid).toBe(true);
+    });
+
+    test("DAILY: valid without frequency-specific fields", () => {
+      const result = validateRecurringTemplateData({
+        title: "Daily Task",
+        frequency: RecurrenceFrequency.DAILY,
+        start_date: "2026-02-01",
+      });
+      expect(result.isValid).toBe(true);
+    });
+
+    test("YEARLY: valid without frequency-specific fields", () => {
+      const result = validateRecurringTemplateData({
+        title: "Yearly Task",
+        frequency: RecurrenceFrequency.YEARLY,
+        start_date: "2026-02-01",
+      });
+      expect(result.isValid).toBe(true);
+    });
+
+    test("DAILY: rejects days_of_week", () => {
+      const result = validateRecurringTemplateData({
+        title: "Daily Task",
+        frequency: RecurrenceFrequency.DAILY,
+        start_date: "2026-02-01",
+        days_of_week: [1, 3, 5], // ← Should not be here
+      });
+      expect(result.isValid).toBe(false);
+      expect(result.error).toContain("should not be set for daily");
+    });
+
+    test("DAILY: rejects day_of_month", () => {
+      const result = validateRecurringTemplateData({
+        title: "Daily Task",
+        frequency: RecurrenceFrequency.DAILY,
+        start_date: "2026-02-01",
+        day_of_month: 15, // ← Should not be here
+      });
+      expect(result.isValid).toBe(false);
+      expect(result.error).toContain("should not be set for daily");
+    });
+
+    test("MONTHLY: rejects days_of_week", () => {
+      const result = validateRecurringTemplateData({
+        title: "Monthly Task",
+        frequency: RecurrenceFrequency.MONTHLY,
+        start_date: "2026-02-01",
+        day_of_month: 15,
+        days_of_week: [1, 3, 5], // ← Should not be here
+      });
+      expect(result.isValid).toBe(false);
+      expect(result.error).toContain("should not be set for monthly");
+    });
+
+    test("WEEKLY: rejects day_of_month", () => {
+      const result = validateRecurringTemplateData({
+        title: "Weekly Task",
+        frequency: RecurrenceFrequency.WEEKLY,
+        start_date: "2026-02-01",
+        days_of_week: [1, 3, 5],
+        day_of_month: 15, // ← Should not be here
+      });
+      expect(result.isValid).toBe(false);
+      expect(result.error).toContain("should not be set for weekly");
+    });
+
+    test("WEEKLY: requires days_of_week", () => {
+      const result = validateRecurringTemplateData({
+        title: "Weekly Task",
+        frequency: RecurrenceFrequency.WEEKLY,
+        start_date: "2026-02-01",
+        // Missing days_of_week
+      });
+      expect(result.isValid).toBe(false);
+      expect(result.error).toContain("days_of_week is required for weekly");
+    });
+
+    test("MONTHLY: requires day_of_month", () => {
+      const result = validateRecurringTemplateData({
+        title: "Monthly Task",
+        frequency: RecurrenceFrequency.MONTHLY,
+        start_date: "2026-02-01",
+        // Missing day_of_month
+      });
+      expect(result.isValid).toBe(false);
+      expect(result.error).toContain("day_of_month is required for monthly");
+    });
+
+    test("YEARLY: rejects days_of_week", () => {
+      const result = validateRecurringTemplateData({
+        title: "Yearly Task",
+        frequency: RecurrenceFrequency.YEARLY,
+        start_date: "2026-02-01",
+        days_of_week: [1], // ← Should not be here
+      });
+      expect(result.isValid).toBe(false);
+      expect(result.error).toContain("should not be set for yearly");
+    });
+
+    test("YEARLY: rejects day_of_month", () => {
+      const result = validateRecurringTemplateData({
+        title: "Yearly Task",
+        frequency: RecurrenceFrequency.YEARLY,
+        start_date: "2026-02-01",
+        day_of_month: 15, // ← Should not be here
+      });
+      expect(result.isValid).toBe(false);
+      expect(result.error).toContain("should not be set for yearly");
+    });
+  });
 });

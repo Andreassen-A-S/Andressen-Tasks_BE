@@ -230,76 +230,6 @@ export function validateInterval(interval: unknown): ValidationResult {
 }
 
 /**
- * Validates recurrence-specific requirements based on frequency
- * @param frequency - Recurrence frequency
- * @param data - Request body data
- * @returns ValidationResult
- */
-export function validateRecurrenceRequirements(
-  frequency: RecurrenceFrequency,
-  data: {
-    days_of_week?: unknown;
-    day_of_month?: unknown;
-    interval?: unknown;
-  },
-): ValidationResult {
-  // Validate interval if provided (optional, defaults to 1)
-  if (data.interval !== undefined) {
-    const intervalValidation = validateInterval(data.interval);
-    if (!intervalValidation.isValid) {
-      return intervalValidation;
-    }
-  }
-
-  // Frequency-specific validation
-  switch (frequency) {
-    case RecurrenceFrequency.WEEKLY:
-      // Weekly requires days_of_week
-      if (!data.days_of_week) {
-        return {
-          isValid: false,
-          error: "days_of_week is required for weekly recurrence",
-        };
-      }
-      return validateDaysOfWeek(data.days_of_week);
-
-    case RecurrenceFrequency.MONTHLY:
-      // Monthly requires day_of_month
-      if (!data.day_of_month) {
-        return {
-          isValid: false,
-          error: "day_of_month is required for monthly recurrence",
-        };
-      }
-      return validateDayOfMonth(data.day_of_month);
-
-    case RecurrenceFrequency.DAILY:
-    case RecurrenceFrequency.YEARLY:
-      // Daily and Yearly don't require additional fields
-      // But we should reject unexpected fields
-      if (data.days_of_week !== undefined) {
-        return {
-          isValid: false,
-          error: `days_of_week should not be set for ${frequency.toLowerCase()} recurrence`,
-        };
-      }
-      if (data.day_of_month !== undefined) {
-        return {
-          isValid: false,
-          error: `day_of_month should not be set for ${frequency.toLowerCase()} recurrence`,
-        };
-      }
-      return { isValid: true };
-
-    default:
-      return {
-        isValid: false,
-        error: `Unknown frequency: ${frequency}`,
-      };
-  }
-}
-
-/**
  * Comprehensive validation for recurring template data
  * Combines all validation rules
  * @param data - Template data to validate
@@ -354,4 +284,118 @@ export function validateRecurringTemplateData(data: {
     day_of_month: data.day_of_month,
     interval: data.interval,
   });
+}
+
+/**
+ * Validates recurrence-specific requirements based on frequency
+ * @param frequency - Recurrence frequency
+ * @param data - Request body data
+ * @returns ValidationResult
+ */
+
+export function validateRecurrenceRequirements(
+  frequency: RecurrenceFrequency,
+  data: {
+    days_of_week?: unknown;
+    day_of_month?: unknown;
+    interval?: unknown;
+  },
+): ValidationResult {
+  // Validate interval if provided (applies to all frequencies)
+  if (data.interval !== undefined) {
+    const intervalValidation = validateInterval(data.interval);
+    if (!intervalValidation.isValid) {
+      return intervalValidation;
+    }
+  }
+
+  switch (frequency) {
+    case RecurrenceFrequency.DAILY:
+      // DAILY should NOT have days_of_week or day_of_month
+      if (data.days_of_week !== undefined && data.days_of_week !== null) {
+        return {
+          isValid: false,
+          error: "days_of_week should not be set for daily recurrence",
+        };
+      }
+      if (data.day_of_month !== undefined && data.day_of_month !== null) {
+        return {
+          isValid: false,
+          error: "day_of_month should not be set for daily recurrence",
+        };
+      }
+      return { isValid: true };
+
+    case RecurrenceFrequency.WEEKLY:
+      // WEEKLY requires days_of_week
+      if (!data.days_of_week) {
+        return {
+          isValid: false,
+          error: "days_of_week is required for weekly recurrence",
+        };
+      }
+
+      // Validate days_of_week
+      const daysValidation = validateDaysOfWeek(data.days_of_week);
+      if (!daysValidation.isValid) {
+        return daysValidation;
+      }
+
+      // WEEKLY should NOT have day_of_month
+      if (data.day_of_month !== undefined && data.day_of_month !== null) {
+        return {
+          isValid: false,
+          error: "day_of_month should not be set for weekly recurrence",
+        };
+      }
+
+      return { isValid: true };
+
+    case RecurrenceFrequency.MONTHLY:
+      // MONTHLY requires day_of_month
+      if (!data.day_of_month) {
+        return {
+          isValid: false,
+          error: "day_of_month is required for monthly recurrence",
+        };
+      }
+
+      // Validate day_of_month
+      const dayValidation = validateDayOfMonth(data.day_of_month);
+      if (!dayValidation.isValid) {
+        return dayValidation;
+      }
+
+      // MONTHLY should NOT have days_of_week
+      if (data.days_of_week !== undefined && data.days_of_week !== null) {
+        return {
+          isValid: false,
+          error: "days_of_week should not be set for monthly recurrence",
+        };
+      }
+
+      return { isValid: true };
+
+    case RecurrenceFrequency.YEARLY:
+      // YEARLY should NOT have days_of_week or day_of_month
+      if (data.days_of_week !== undefined && data.days_of_week !== null) {
+        return {
+          isValid: false,
+          error: "days_of_week should not be set for yearly recurrence",
+        };
+      }
+      if (data.day_of_month !== undefined && data.day_of_month !== null) {
+        return {
+          isValid: false,
+          error: "day_of_month should not be set for yearly recurrence",
+        };
+      }
+      return { isValid: true };
+
+    default:
+      return {
+        isValid: false,
+        error: `Unknown frequency: ${frequency}`,
+      };
+  }
 }
