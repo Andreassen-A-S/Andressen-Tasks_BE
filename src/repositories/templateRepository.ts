@@ -1,27 +1,40 @@
 import { prisma } from "../db/prisma";
-import type { Prisma } from "../generated/prisma/client";
+import type { Prisma, RecurringTaskTemplate } from "../generated/prisma/client";
 
-export async function getAllTemplates() {
-  return prisma.recurringTaskTemplate.findMany();
+/**
+ * Template repository with transaction support
+ * All methods accept an optional transaction client
+ */
+
+type TransactionClient = Prisma.TransactionClient;
+type PrismaClient = typeof prisma | TransactionClient;
+
+export async function getAllTemplates(client: PrismaClient = prisma) {
+  return client.recurringTaskTemplate.findMany();
 }
 
 export async function createTemplate(
   data: Prisma.RecurringTaskTemplateCreateInput,
+  client: PrismaClient = prisma,
 ) {
-  return prisma.recurringTaskTemplate.create({ data });
+  return client.recurringTaskTemplate.create({ data });
 }
 
 export async function updateTemplate(
   id: string,
   data: Prisma.RecurringTaskTemplateUpdateInput,
+  client: PrismaClient = prisma,
+): Promise<RecurringTaskTemplate> {
+  return client.recurringTaskTemplate.update({ where: { id }, data });
+}
+
+export async function getActiveTemplates(client: PrismaClient = prisma) {
+  return client.recurringTaskTemplate.findMany({ where: { is_active: true } });
+}
+
+export async function getTemplateById(
+  id: string,
+  client: PrismaClient = prisma,
 ) {
-  return prisma.recurringTaskTemplate.update({ where: { id }, data });
-}
-
-export async function getActiveTemplates() {
-  return prisma.recurringTaskTemplate.findMany({ where: { is_active: true } });
-}
-
-export async function getTemplateById(id: string) {
-  return prisma.recurringTaskTemplate.findUnique({ where: { id } });
+  return client.recurringTaskTemplate.findUnique({ where: { id } });
 }

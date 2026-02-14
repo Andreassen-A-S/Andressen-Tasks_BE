@@ -266,7 +266,7 @@ describe("recurringTemplateController.createTemplate", () => {
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({
       success: false,
-      error: "Missing required fields: title, frequency, start_date",
+      error: "title is required and must be a non-empty string",
     });
   });
 

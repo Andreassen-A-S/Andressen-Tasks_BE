@@ -1,30 +1,17 @@
-// controllers/templateController.ts
 import type { Request, Response } from "express";
-import { TaskEventType } from "../generated/prisma/client";
-import * as taskEventRepo from "../repositories/taskEventRepository";
 import { RecurringTaskService } from "../services/recurringTaskService";
 import type { Prisma } from "../generated/prisma/client";
+import {
+  validateRecurringTemplateData,
+  requireUserId,
+  getParamId,
+} from "../helper/helpers";
 
 const recurringService = new RecurringTaskService();
 
 /**
  * These routes are protected by auth middleware.
  */
-
-function getParamId(req: Request, key: string = "id"): string | null {
-  const raw = req.params[key];
-  if (typeof raw !== "string" || raw.trim().length === 0) return null;
-  return raw;
-}
-
-function requireUserId(req: Request, res: Response): string | null {
-  const userId = req.user?.user_id;
-  if (!userId) {
-    res.status(401).json({ success: false, error: "Unauthorized" });
-    return null;
-  }
-  return userId;
-}
 
 /**
  * GET /api/recurring-templates
@@ -41,6 +28,7 @@ export async function listTemplates(_req: Request, res: Response) {
       .json({ success: false, error: "Failed to fetch templates" });
   }
 }
+
 /**
  * GET /api/recurring-templates/active
  * List all active recurring templates
@@ -88,6 +76,8 @@ export async function getTemplate(req: Request, res: Response) {
 /**
  * POST /api/recurring-templates
  * Create a new recurring template
+ *
+ * All operations are atomic - template, assignees, and instances are created together
  */
 export async function createTemplate(req: Request, res: Response) {
   const userId = requireUserId(req, res);
@@ -96,11 +86,21 @@ export async function createTemplate(req: Request, res: Response) {
   try {
     const body = req.body;
 
-    // Validate required fields
-    if (!body.title || !body.frequency || !body.start_date) {
+    // Validate the template data
+    const validation = validateRecurringTemplateData({
+      title: body.title,
+      frequency: body.frequency,
+      start_date: body.start_date,
+      end_date: body.end_date,
+      interval: body.interval,
+      days_of_week: body.days_of_week,
+      day_of_month: body.day_of_month,
+    });
+
+    if (!validation.isValid) {
       return res.status(400).json({
         success: false,
-        error: "Missing required fields: title, frequency, start_date",
+        error: validation.error,
       });
     }
 
@@ -130,33 +130,21 @@ export async function createTemplate(req: Request, res: Response) {
       creator: { connect: { user_id: userId } },
     };
 
-    const template = await recurringService.createTemplate(templateData);
+    // Extract assignees from body (if provided)
+    const assigneeUserIds =
+      body.assigned_users && Array.isArray(body.assigned_users)
+        ? body.assigned_users
+        : undefined;
 
-    // Handle default assignees if provided
-    if (body.assigned_users && Array.isArray(body.assigned_users)) {
-      try {
-        await recurringService.setDefaultAssignees(
-          template.id,
-          body.assigned_users,
-        );
-      } catch (error) {
-        // If assignees fail, delete the template and return error
-        await recurringService.deleteTemplate(template.id);
+    // Create template with assignees atomically
+    // This single call handles: template creation, assignee setup, and instance generation
+    // If any step fails, everything rolls back automatically
+    const template = await recurringService.createTemplate(
+      templateData,
+      assigneeUserIds,
+    );
 
-        if (
-          error instanceof Error &&
-          error.message.includes("Invalid user IDs")
-        ) {
-          return res.status(400).json({
-            success: false,
-            error: error.message,
-          });
-        }
-        throw error;
-      }
-    }
-
-    // Fetch complete template with assignees
+    // Fetch complete template with assignees to return to client
     const completeTemplate = await recurringService.getTemplateById(
       template.id,
     );
@@ -164,6 +152,17 @@ export async function createTemplate(req: Request, res: Response) {
     return res.status(201).json({ success: true, data: completeTemplate });
   } catch (error) {
     console.error("Error in createTemplate:", error);
+
+    // Check for specific error types
+    if (error instanceof Error) {
+      if (error.message.includes("Invalid user IDs")) {
+        return res.status(400).json({
+          success: false,
+          error: error.message,
+        });
+      }
+    }
+
     return res
       .status(500)
       .json({ success: false, error: "Failed to create template" });
@@ -173,6 +172,8 @@ export async function createTemplate(req: Request, res: Response) {
 /**
  * PATCH /api/recurring-templates/:id
  * Update a recurring template
+ *
+ * All operations are atomic - template update, assignee changes, and instance regeneration
  */
 export async function updateTemplate(req: Request, res: Response) {
   const userId = requireUserId(req, res);
@@ -203,6 +204,45 @@ export async function updateTemplate(req: Request, res: Response) {
       });
     }
 
+    // Validate updated fields
+    if (
+      body.frequency !== undefined ||
+      body.days_of_week !== undefined ||
+      body.day_of_month !== undefined ||
+      body.interval !== undefined ||
+      body.start_date !== undefined ||
+      body.end_date !== undefined
+    ) {
+      const validationData = {
+        title: body.title !== undefined ? body.title : existing.title,
+        frequency:
+          body.frequency !== undefined ? body.frequency : existing.frequency,
+        start_date:
+          body.start_date !== undefined ? body.start_date : existing.start_date,
+        end_date:
+          body.end_date !== undefined ? body.end_date : existing.end_date,
+        interval:
+          body.interval !== undefined ? body.interval : existing.interval,
+        days_of_week:
+          body.days_of_week !== undefined
+            ? body.days_of_week
+            : existing.days_of_week,
+        day_of_month:
+          body.day_of_month !== undefined
+            ? body.day_of_month
+            : existing.day_of_month,
+      };
+
+      const validation = validateRecurringTemplateData(validationData);
+
+      if (!validation.isValid) {
+        return res.status(400).json({
+          success: false,
+          error: validation.error,
+        });
+      }
+    }
+
     // Build update data
     const updateData: Prisma.RecurringTaskTemplateUpdateInput = {};
 
@@ -225,28 +265,20 @@ export async function updateTemplate(req: Request, res: Response) {
     if (body.end_date !== undefined)
       updateData.end_date = body.end_date ? new Date(body.end_date) : null;
 
-    const template = await recurringService.updateTemplate(id, updateData);
+    // Extract assignees (only if explicitly provided)
+    const assigneeUserIds =
+      body.assigned_users !== undefined && Array.isArray(body.assigned_users)
+        ? body.assigned_users
+        : undefined;
 
-    // Handle assignees update if provided
-    if (
-      body.assigned_users !== undefined &&
-      Array.isArray(body.assigned_users)
-    ) {
-      try {
-        await recurringService.setDefaultAssignees(id, body.assigned_users);
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          error.message.includes("Invalid user IDs")
-        ) {
-          return res.status(400).json({
-            success: false,
-            error: error.message,
-          });
-        }
-        throw error; // Re-throw if it's a different error
-      }
-    }
+    // Update template atomically
+    // This single call handles: template update, assignee changes, and instance regeneration
+    // If any step fails, everything rolls back automatically
+    const template = await recurringService.updateTemplate(
+      id,
+      updateData,
+      assigneeUserIds,
+    );
 
     // Fetch updated template with assignees
     const updatedTemplate = await recurringService.getTemplateById(id);
@@ -254,6 +286,17 @@ export async function updateTemplate(req: Request, res: Response) {
     return res.json({ success: true, data: updatedTemplate });
   } catch (error) {
     console.error("Error in updateTemplate:", error);
+
+    // Check for specific error types
+    if (error instanceof Error) {
+      if (error.message.includes("Invalid user IDs")) {
+        return res.status(400).json({
+          success: false,
+          error: error.message,
+        });
+      }
+    }
+
     return res
       .status(500)
       .json({ success: false, error: "Failed to update template" });
