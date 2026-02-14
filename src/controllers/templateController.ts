@@ -6,6 +6,7 @@ import {
   requireUserId,
   getParamId,
 } from "../helper/helpers";
+import { RecurrenceFrequency } from "../generated/prisma/client";
 
 const recurringService = new RecurringTaskService();
 
@@ -213,6 +214,10 @@ export async function updateTemplate(req: Request, res: Response) {
       body.start_date !== undefined ||
       body.end_date !== undefined
     ) {
+      // Determine which frequency we're validating against
+      const targetFrequency =
+        body.frequency !== undefined ? body.frequency : existing.frequency;
+
       const validationData = {
         title: body.title !== undefined ? body.title : existing.title,
         frequency:
@@ -224,13 +229,17 @@ export async function updateTemplate(req: Request, res: Response) {
         interval:
           body.interval !== undefined ? body.interval : existing.interval,
         days_of_week:
-          body.days_of_week !== undefined
-            ? body.days_of_week
-            : existing.days_of_week,
+          targetFrequency === RecurrenceFrequency.WEEKLY
+            ? body.days_of_week !== undefined
+              ? body.days_of_week
+              : existing.days_of_week
+            : undefined, // Don't validate days_of_week for non-WEEKLY frequencies
         day_of_month:
-          body.day_of_month !== undefined
-            ? body.day_of_month
-            : existing.day_of_month,
+          targetFrequency === RecurrenceFrequency.MONTHLY
+            ? body.day_of_month !== undefined
+              ? body.day_of_month
+              : existing.day_of_month
+            : undefined, // Don't validate day_of_month for non-MONTHLY frequencies
       };
 
       const validation = validateRecurringTemplateData(validationData);
