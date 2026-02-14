@@ -3,26 +3,12 @@ import { TaskEventType } from "../generated/prisma/client";
 import * as taskEventRepo from "../repositories/taskEventRepository";
 import * as taskRepo from "../repositories/taskRepository";
 import type { CreateTaskInput, UpdateTaskInput } from "../types/task";
+import { getParamId, requireUserId } from "../helper/helpers";
 
 /**
  * These routes are protected by auth middleware.
  * Kept as a safety net for robust controller behavior.
  */
-
-function getParamId(req: Request, key: string = "id"): string | null {
-  const raw = req.params[key];
-  if (typeof raw !== "string" || raw.trim().length === 0) return null;
-  return raw;
-}
-
-function requireUserId(req: Request, res: Response): string | null {
-  const userId = req.user?.user_id;
-  if (!userId) {
-    res.status(401).json({ success: false, error: "Unauthorized" });
-    return null;
-  }
-  return userId;
-}
 
 function actorConnect(userId: string) {
   return { connect: { user_id: userId } } as const;

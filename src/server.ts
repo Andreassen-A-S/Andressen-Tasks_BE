@@ -8,6 +8,7 @@ import assignmentRoutes from "./routes/assignment.routes";
 import authRoutes from "./routes/auth.routes";
 import commentRoutes from "./routes/comment.routes";
 import taskEventRoutes from "./routes/taskEvent.routes";
+import templateRoutes from "./routes/template.routes";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -59,6 +60,7 @@ app.use("/api/assignments", assignmentRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/comments", commentRoutes);
 app.use("/api/task-events", taskEventRoutes);
+app.use("/api/recurring-templates", templateRoutes);
 
 // 404
 app.use((_req, res) => {
