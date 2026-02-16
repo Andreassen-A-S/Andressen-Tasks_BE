@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { TaskEventType } from "../generated/prisma/client";
+import { TaskEventType, TaskStatus } from "../generated/prisma/client";
 import * as taskEventRepo from "../repositories/taskEventRepository";
 import * as taskRepo from "../repositories/taskRepository";
 import type { CreateTaskInput, UpdateTaskInput } from "../types/task";
@@ -144,7 +144,7 @@ export async function updateTask(req: Request, res: Response) {
           .status(404)
           .json({ success: false, error: "Task not found" });
 
-      const updatedTask = await taskRepo.updateTask(id, updateData);
+      const updatedTask = await taskRepo.updateTask(id, updateData, userId);
       if (!updatedTask)
         return res
           .status(404)
@@ -159,6 +159,17 @@ export async function updateTask(req: Request, res: Response) {
         after_json: updatedTask,
       });
 
+      if (updateData.status && oldTask.status !== updatedTask.status) {
+        await taskEventRepo.createTaskEvent({
+          task: taskConnect(updatedTask.task_id),
+          actor,
+          type: TaskEventType.TASK_STATUS_CHANGED,
+          message: `Status changed from ${oldTask.status} to ${updatedTask.status}`,
+          before_json: { status: oldTask.status },
+          after_json: { status: updatedTask.status },
+        });
+      }
+
       return res.json({ success: true, data: updatedTask });
     }
 
@@ -170,6 +181,7 @@ export async function updateTask(req: Request, res: Response) {
     const updatedTask = await taskRepo.updateTaskWithAssignments(
       id,
       updateData,
+      userId,
     );
     if (!updatedTask)
       return res
@@ -223,6 +235,17 @@ export async function updateTask(req: Request, res: Response) {
       before_json: oldTask,
       after_json: updatedTask,
     });
+
+    if (updateData.status && oldTask.status !== updatedTask.status) {
+      await taskEventRepo.createTaskEvent({
+        task: taskConnect(updatedTask.task_id),
+        actor,
+        type: TaskEventType.TASK_STATUS_CHANGED,
+        message: `Status changed from ${oldTask.status} to ${updatedTask.status}`,
+        before_json: { status: oldTask.status },
+        after_json: { status: updatedTask.status },
+      });
+    }
 
     return res.json({ success: true, data: updatedTask });
   } catch (error) {
@@ -282,8 +305,16 @@ export async function upsertProgressLog(req: Request, res: Response) {
 
   const { quantity_done, unit, note } = req.body;
 
+  // Validate quantity_done
+  if (typeof quantity_done !== "number" || quantity_done <= 0) {
+    return res.status(400).json({
+      success: false,
+      error: "quantity_done must be a positive number",
+    });
+  }
+
   try {
-    const progressLog = await taskRepo.upsertProgressLog(
+    const { progressLog, updatedTask } = await taskRepo.upsertProgressLog(
       taskId,
       userId,
       quantity_done,
@@ -291,24 +322,45 @@ export async function upsertProgressLog(req: Request, res: Response) {
       note,
     );
 
-    // Add TaskEvent logic
+    // Log event
     await taskEventRepo.createTaskEvent({
       task: taskConnect(taskId),
       actor: actorConnect(userId),
       type: TaskEventType.PROGRESS_LOGGED,
-      message: "Logged progress",
+      message: `Logged progress: ${quantity_done} ${unit || "units"}`,
       progress: { connect: { progress_id: progressLog.progress_id } },
       before_json: emptyObj(),
       after_json: progressLog,
     });
 
-    return res.json({ success: true, data: progressLog });
+    return res.json({
+      success: true,
+      data: {
+        progressLog,
+        task: {
+          current_quantity: updatedTask.current_quantity,
+          status: updatedTask.status,
+        },
+      },
+    });
   } catch (error) {
     console.error("Error in upsertProgressLog:", error);
-    if (error instanceof Error && error.message === "Assignment not found") {
-      return res
-        .status(404)
-        .json({ success: false, error: "Assignment not found" });
+    if (error instanceof Error) {
+      if (error.message === "Assignment not found") {
+        return res
+          .status(404)
+          .json({ success: false, error: "Assignment not found" });
+      }
+      if (error.message === "Task not found") {
+        return res
+          .status(404)
+          .json({ success: false, error: "Task not found" });
+      }
+      if (error.message.startsWith("Cannot log progress")) {
+        return res
+          .status(400)
+          .json({ success: false, error: error.message });
+      }
     }
     return res
       .status(500)

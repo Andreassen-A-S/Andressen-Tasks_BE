@@ -36,7 +36,9 @@ enum TaskPriority {
 enum TaskStatus {
   DONE 
   PENDING
+  IN_PROGRESS
   REJECTED
+  ARCHIVED
 }
 
 enum TaskGoalType {
@@ -83,6 +85,7 @@ model User {
   // Relations
   taskComments    TaskComment[]
   createdTasks    Task[]           @relation("TaskCreator")
+  completedTasks  Task[]           @relation("TaskCompleter")
   taskEvents      TaskEvent[]      @relation("TaskEventActor")
   taskAssignments TaskAssignment[]
   createdRecurringTemplates RecurringTaskTemplate[] @relation("RecurringTaskCreator")
@@ -174,23 +177,28 @@ model Task {
   parent               Task?        @relation("Subtasks", fields: [parent_task_id], references: [task_id], onDelete: Cascade)
   subtasks             Task[]       @relation("Subtasks")
 
+  completed_by         String?
+  completed_at         DateTime?
+
   scheduled_date       DateTime
   unit                 TaskUnit     @default(NONE)
   goal_type            TaskGoalType @default(OPEN)
   target_quantity      Float?
   current_quantity     Float        @default(0)
 
-  recurring_template_id String? 
+  recurring_template_id String?
   occurrence_date       DateTime?
 
   comments             TaskComment[]
   creator              User         @relation("TaskCreator", fields: [created_by], references: [user_id])
+  completer            User?        @relation("TaskCompleter", fields: [completed_by], references: [user_id])
   assignments          TaskAssignment[]
   events               TaskEvent[]
   recurring_template   RecurringTaskTemplate? @relation("RecurringTemplateTasks", fields: [recurring_template_id], references: [id], onDelete: Cascade)  // Add onDelete
 
   @@unique([recurring_template_id, occurrence_date])
   @@index([created_by])
+  @@index([completed_by])
   @@index([status])
   @@index([deadline])
   @@index([parent_task_id])
