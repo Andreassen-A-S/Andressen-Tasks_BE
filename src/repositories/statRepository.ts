@@ -117,15 +117,16 @@ export async function getCompletionRates(client: PrismaClient = prisma) {
     },
     select: {
       created_at: true,
-      updated_at: true,
+      completed_at: true,
     },
   });
 
   let avgCompletionDays = 0;
   if (completedTasks.length > 0) {
     const totalDays = completedTasks.reduce((sum, task) => {
+      if (!task.completed_at) return sum;
       const days = Math.ceil(
-        (task.updated_at.getTime() - task.created_at.getTime()) /
+        (task.completed_at.getTime() - task.created_at.getTime()) /
           (1000 * 60 * 60 * 24),
       );
       return sum + days;
@@ -201,7 +202,7 @@ export async function getStatusStats(client: PrismaClient = prisma) {
   return {
     pending:
       statusGroups.find((s) => s.status === TaskStatus.PENDING)?._count || 0,
-    inProgress:
+    in_progress:
       statusGroups.find((s) => s.status === TaskStatus.IN_PROGRESS)?._count ||
       0,
     completed:
@@ -227,7 +228,7 @@ export async function getTopPerformers(
     where: {
       status: TaskStatus.DONE,
       completed_by: { not: null },
-      updated_at: { gte: monthStart },
+      completed_at: { gte: monthStart },
     },
     _count: { task_id: true },
     _sum: { current_quantity: true },
