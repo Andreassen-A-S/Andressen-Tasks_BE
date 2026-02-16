@@ -3,17 +3,17 @@
  */
 
 export interface OverviewStats {
-  totalTasks: number;
-  completedToday: number;
-  pendingTasks: number;
-  overdueTasks: number;
+  total_tasks: number;
+  completed_today: number;
+  pending_tasks: number;
+  overdue_tasks: number;
 }
 
 export interface CompletionRates {
-  todayRate: number;
-  weekRate: number;
-  monthRate: number;
-  avgCompletionDays: number;
+  today_rate: number;
+  week_rate: number;
+  month_rate: number;
+  avg_completion_days: number;
 }
 
 export interface PriorityBreakdown {
@@ -30,31 +30,32 @@ export interface PriorityStats {
 
 export interface StatusStats {
   pending: number;
-  inProgress: number;
+  in_progress: number;
   completed: number;
   archived: number;
+  rejected: number;
 }
 
 export interface TopPerformer {
-  userId: string;
+  user_id: string;
   name: string;
   email: string;
-  completedCount: number;
-  totalQuantity: number;
+  completed_count: number;
+  total_quantity: number;
 }
 
 export interface WorkloadUser {
-  userId: string;
+  user_id: string;
   name: string;
   email: string;
-  assignedTasks: number;
-  completedTasks: number;
+  assigned_tasks: number;
+  completed_tasks: number;
 }
 
 export interface RecurringStats {
-  activeTemplates: number;
-  upcomingInstances: number;
-  completionRate: number;
+  active_templates: number;
+  upcoming_instances: number;
+  completion_rate: number;
 }
 
 export interface TrendDataPoint {
@@ -64,12 +65,12 @@ export interface TrendDataPoint {
 }
 
 export interface UserStats {
-  userId: string;
+  user_id: string;
   name?: string;
   email?: string;
-  assignedTasks: number;
-  completedTasks: number;
-  completionRate: number;
+  assigned_tasks: number;
+  completed_tasks: number;
+  completion_rate: number;
 }
 
 export interface DashboardStats {
@@ -77,7 +78,7 @@ export interface DashboardStats {
   completion: CompletionRates;
   priority: PriorityStats;
   status: StatusStats;
-  topPerformers: TopPerformer[];
+  top_performers: TopPerformer[];
   workload: WorkloadUser[];
   recurring: RecurringStats;
   trends: TrendDataPoint[];

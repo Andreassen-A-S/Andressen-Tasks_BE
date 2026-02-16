@@ -57,10 +57,10 @@ export async function getOverviewStats(client: PrismaClient = prisma) {
     ]);
 
   return {
-    totalTasks,
-    completedToday,
-    pendingTasks,
-    overdueTasks,
+    total_tasks: totalTasks,
+    completed_today: completedToday,
+    pending_tasks: pendingTasks,
+    overdue_tasks: overdueTasks,
   };
 }
 
@@ -134,10 +134,10 @@ export async function getCompletionRates(client: PrismaClient = prisma) {
   }
 
   return {
-    todayRate: calculateRate(todayStats),
-    weekRate: calculateRate(weekStats),
-    monthRate: calculateRate(monthStats),
-    avgCompletionDays,
+    today_rate: calculateRate(todayStats),
+    week_rate: calculateRate(weekStats),
+    month_rate: calculateRate(monthStats),
+    avg_completion_days: avgCompletionDays,
   };
 }
 
@@ -206,6 +206,8 @@ export async function getStatusStats(client: PrismaClient = prisma) {
       0,
     completed:
       statusGroups.find((s) => s.status === TaskStatus.DONE)?._count || 0,
+    rejected:
+      statusGroups.find((s) => s.status === TaskStatus.REJECTED)?._count || 0,
     archived:
       statusGroups.find((s) => s.status === TaskStatus.ARCHIVED)?._count || 0,
   };
@@ -241,13 +243,13 @@ export async function getTopPerformers(
   });
 
   return performers.map((p) => {
-    const user = users.find((u) => u.user_id === p.completed_by);
+    const user = users.find((u) => u.user_id === p.completed_by!);
     return {
-      userId: p.completed_by,
+      user_id: p.completed_by,
       name: user?.name || "Unknown",
       email: user?.email || "",
-      completedCount: p._count.task_id,
-      totalQuantity: p._sum.current_quantity || 0,
+      completed_count: p._count.task_id,
+      total_quantity: p._sum.current_quantity || 0,
     };
   });
 }
@@ -281,14 +283,15 @@ export async function getWorkloadDistribution(client: PrismaClient = prisma) {
   return assignments.map((a) => {
     const user = users.find((u) => u.user_id === a.user_id);
     const completedCount =
-      completions.find((c) => c.completed_by === a.user_id)?._count.task_id || 0;
+      completions.find((c) => c.completed_by === a.user_id)?._count.task_id ||
+      0;
 
     return {
-      userId: a.user_id,
+      user_id: a.user_id,
       name: user?.name || "Unknown",
       email: user?.email || "",
-      assignedTasks: a._count.task_id,
-      completedTasks: completedCount,
+      assigned_tasks: a._count.task_id,
+      completed_tasks: completedCount,
     };
   });
 }
@@ -345,9 +348,9 @@ export async function getRecurringStats(client: PrismaClient = prisma) {
       : 0;
 
   return {
-    activeTemplates,
-    upcomingInstances,
-    completionRate,
+    active_templates: activeTemplates,
+    upcoming_instances: upcomingInstances,
+    completion_rate: completionRate,
   };
 }
 
@@ -375,7 +378,7 @@ export async function getTaskTrends(
         client.task.count({
           where: {
             status: TaskStatus.DONE,
-            updated_at: { gte: date, lt: nextDay },
+            completed_at: { gte: date, lt: nextDay },
           },
         }),
       ]);
@@ -420,7 +423,7 @@ export async function getAllStats(client: PrismaClient = prisma) {
     completion,
     priority,
     status,
-    topPerformers,
+    top_performers: topPerformers,
     workload,
     recurring,
     trends,

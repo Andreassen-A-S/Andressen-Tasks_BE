@@ -178,6 +178,7 @@ model Task {
   subtasks             Task[]       @relation("Subtasks")
 
   completed_by         String?
+  completed_at         DateTime?
 
   scheduled_date       DateTime
   unit                 TaskUnit     @default(NONE)

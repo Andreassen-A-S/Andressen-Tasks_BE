@@ -1,10 +1,9 @@
 import { prisma } from "../db/prisma";
 import {
   type Task,
-  type Prisma,
-  type TaskUnit,
   TaskGoalType,
   TaskStatus,
+  TaskUnit,
 } from "../generated/prisma/client";
 import type { CreateTaskInput, UpdateTaskInput } from "../types/task";
 
@@ -38,8 +37,8 @@ export async function createTaskWithAssignments(data: CreateTaskInput) {
         created_by: data.created_by,
         parent_task_id: data.parent_task_id ?? null,
         scheduled_date: data.scheduled_date,
-        unit: data.unit ?? "NONE",
-        goal_type: data.goal_type ?? "OPEN",
+        unit: data.unit ?? TaskUnit.NONE,
+        goal_type: data.goal_type ?? TaskGoalType.OPEN,
         target_quantity: data.target_quantity ?? null,
         current_quantity: data.current_quantity ?? 0,
       },
@@ -84,10 +83,14 @@ export async function updateTaskWithAssignments(
     const { assigned_users, ...taskUpdateData } = data;
 
     const updateData: Record<string, unknown> = { ...taskUpdateData };
-    if (data.status === TaskStatus.DONE && userId) {
+
+    if (data.status === undefined) {
+    } else if (data.status === TaskStatus.DONE && userId) {
       updateData.completed_by = userId;
-    } else if (data.status === TaskStatus.PENDING) {
+      updateData.completed_at = new Date();
+    } else {
       updateData.completed_by = null;
+      updateData.completed_at = null;
     }
 
     const task = await tx.task.update({
@@ -95,7 +98,7 @@ export async function updateTaskWithAssignments(
       data: updateData,
     });
 
-    if (data.status === "DONE") {
+    if (data.status === TaskStatus.DONE) {
       await tx.taskAssignment.updateMany({
         where: {
           task_id: id,
@@ -105,7 +108,7 @@ export async function updateTaskWithAssignments(
           completed_at: new Date(),
         },
       });
-    } else if (data.status === "PENDING" || data.status === "REJECTED") {
+    } else if (data.status !== undefined) {
       await tx.taskAssignment.updateMany({
         where: { task_id: id },
         data: {
@@ -120,7 +123,7 @@ export async function updateTaskWithAssignments(
       });
 
       if (assigned_users.length > 0) {
-        const completedAt = data.status === "DONE" ? new Date() : null;
+        const completedAt = data.status === TaskStatus.DONE ? new Date() : null;
 
         await tx.taskAssignment.createMany({
           data: assigned_users.map((userId) => ({
@@ -169,11 +172,11 @@ export async function updateTask(
     where: { task_id: id },
     data: {
       ...data,
-      ...(data.status === TaskStatus.DONE && userId
-        ? { completed_by: userId }
-        : data.status === TaskStatus.PENDING
-          ? { completed_by: null }
-          : {}),
+      ...(data.status === undefined
+        ? {}
+        : data.status === TaskStatus.DONE && userId
+          ? { completed_by: userId, completed_at: new Date() }
+          : { completed_by: null, completed_at: null }),
     },
   });
 }
@@ -198,6 +201,23 @@ export async function upsertProgressLog(
     });
 
     if (!task) throw new Error("Task not found");
+
+    // Validate that progress can only be logged on active tasks
+    if (task.status === TaskStatus.ARCHIVED) {
+      throw new Error("Cannot log progress on archived tasks");
+    }
+
+    if (task.status === TaskStatus.REJECTED) {
+      throw new Error("Cannot log progress on rejected tasks");
+    }
+
+    // Optional: prevent logging progress on completed tasks
+    // (remove this block if you want to allow additional progress on DONE tasks)
+    if (task.status === TaskStatus.DONE) {
+      throw new Error(
+        "Cannot log progress on completed tasks. Change status first.",
+      );
+    }
 
     // Find assignment
     const assignment = await tx.taskAssignment.findUnique({
@@ -225,12 +245,14 @@ export async function upsertProgressLog(
     const newCurrentQuantity = (task.current_quantity || 0) + quantity_done;
 
     // Determine new status
-    let newStatus = task.status;
+    let newStatus: TaskStatus = task.status;
+
+    // Only transition PENDING → IN_PROGRESS
     if (quantity_done > 0 && task.status === TaskStatus.PENDING) {
       newStatus = TaskStatus.IN_PROGRESS;
     }
 
-    // Check if task is complete
+    // Check if task is complete (only for FIXED goal types)
     if (
       task.goal_type === TaskGoalType.FIXED &&
       task.target_quantity &&
@@ -246,7 +268,9 @@ export async function upsertProgressLog(
         current_quantity: newCurrentQuantity,
         status: newStatus,
         updated_at: new Date(),
-        ...(newStatus === TaskStatus.DONE ? { completed_by: userId } : {}),
+        ...(newStatus === TaskStatus.DONE
+          ? { completed_by: userId, completed_at: new Date() }
+          : {}),
       },
     });
 

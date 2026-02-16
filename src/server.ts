@@ -9,7 +9,6 @@ import authRoutes from "./routes/auth.routes";
 import commentRoutes from "./routes/comment.routes";
 import taskEventRoutes from "./routes/taskEvent.routes";
 import templateRoutes from "./routes/template.routes";
-import { stat } from "fs";
 import statRoutes from "./routes/stat.routes";
 
 const app = express();

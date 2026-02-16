@@ -356,6 +356,11 @@ export async function upsertProgressLog(req: Request, res: Response) {
           .status(404)
           .json({ success: false, error: "Task not found" });
       }
+      if (error.message.startsWith("Cannot log progress")) {
+        return res
+          .status(400)
+          .json({ success: false, error: error.message });
+      }
     }
     return res
       .status(500)

@@ -80,30 +80,30 @@ export class StatsService {
   async getUserStats(userId: string) {
     // This could be extended with user-specific queries
     const workload = await statsRepository.getWorkloadDistribution();
-    const userWorkload = workload.find((w) => w.userId === userId);
+    const userWorkload = workload.find((w) => w.user_id === userId);
 
     if (!userWorkload) {
       return {
         userId,
-        assignedTasks: 0,
+        assigned_tasks: 0,
         completedTasks: 0,
         completionRate: 0,
       };
     }
 
     const completionRate =
-      userWorkload.assignedTasks > 0
+      userWorkload.assigned_tasks > 0
         ? Math.round(
-            (userWorkload.completedTasks / userWorkload.assignedTasks) * 100,
+            (userWorkload.completed_tasks / userWorkload.assigned_tasks) * 100,
           )
         : 0;
 
     return {
-      userId: userWorkload.userId,
+      userId: userWorkload.user_id,
       name: userWorkload.name,
       email: userWorkload.email,
-      assignedTasks: userWorkload.assignedTasks,
-      completedTasks: userWorkload.completedTasks,
+      assignedTasks: userWorkload.assigned_tasks,
+      completedTasks: userWorkload.completed_tasks,
       completionRate,
     };
   }
