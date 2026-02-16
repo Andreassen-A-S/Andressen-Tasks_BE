@@ -1,5 +1,11 @@
 import { prisma } from "../db/prisma";
-import type { Task, Prisma, TaskUnit } from "../generated/prisma/client";
+import {
+  type Task,
+  type Prisma,
+  type TaskUnit,
+  TaskGoalType,
+  TaskStatus,
+} from "../generated/prisma/client";
 import type { CreateTaskInput, UpdateTaskInput } from "../types/task";
 
 export async function getAllTasks(): Promise<Task[]> {
@@ -72,13 +78,21 @@ export async function createTaskWithAssignments(data: CreateTaskInput) {
 export async function updateTaskWithAssignments(
   id: string,
   data: UpdateTaskInput,
+  userId?: string,
 ) {
   return prisma.$transaction(async (tx) => {
     const { assigned_users, ...taskUpdateData } = data;
 
+    const updateData: Record<string, unknown> = { ...taskUpdateData };
+    if (data.status === TaskStatus.DONE && userId) {
+      updateData.completed_by = userId;
+    } else if (data.status === TaskStatus.PENDING) {
+      updateData.completed_by = null;
+    }
+
     const task = await tx.task.update({
       where: { task_id: id },
-      data: taskUpdateData,
+      data: updateData,
     });
 
     if (data.status === "DONE") {
@@ -149,10 +163,18 @@ export async function updateTaskWithAssignments(
 export async function updateTask(
   id: string,
   data: UpdateTaskInput,
+  userId?: string,
 ): Promise<Task> {
   return prisma.task.update({
     where: { task_id: id },
-    data,
+    data: {
+      ...data,
+      ...(data.status === TaskStatus.DONE && userId
+        ? { completed_by: userId }
+        : data.status === TaskStatus.PENDING
+          ? { completed_by: null }
+          : {}),
+    },
   });
 }
 
@@ -169,23 +191,66 @@ export async function upsertProgressLog(
   unit?: TaskUnit,
   note?: string,
 ) {
-  const assignment = await prisma.taskAssignment.findUnique({
-    where: {
-      task_id_user_id: {
-        task_id: taskId,
-        user_id: userId,
-      },
-    },
-  });
-  if (!assignment) throw new Error("Assignment not found");
+  return await prisma.$transaction(async (tx) => {
+    // Get the task to check current state
+    const task = await tx.task.findUnique({
+      where: { task_id: taskId },
+    });
 
-  return prisma.taskProgressLog.create({
-    data: {
-      assignment_id: assignment.assignment_id,
-      quantity_done,
-      unit,
-      note,
-    },
+    if (!task) throw new Error("Task not found");
+
+    // Find assignment
+    const assignment = await tx.taskAssignment.findUnique({
+      where: {
+        task_id_user_id: {
+          task_id: taskId,
+          user_id: userId,
+        },
+      },
+    });
+
+    if (!assignment) throw new Error("Assignment not found");
+
+    // Create progress log
+    const progressLog = await tx.taskProgressLog.create({
+      data: {
+        assignment_id: assignment.assignment_id,
+        quantity_done,
+        unit,
+        note,
+      },
+    });
+
+    // Calculate new current_quantity
+    const newCurrentQuantity = (task.current_quantity || 0) + quantity_done;
+
+    // Determine new status
+    let newStatus = task.status;
+    if (quantity_done > 0 && task.status === TaskStatus.PENDING) {
+      newStatus = TaskStatus.IN_PROGRESS;
+    }
+
+    // Check if task is complete
+    if (
+      task.goal_type === TaskGoalType.FIXED &&
+      task.target_quantity &&
+      newCurrentQuantity >= task.target_quantity
+    ) {
+      newStatus = TaskStatus.DONE;
+    }
+
+    // Update task
+    const updatedTask = await tx.task.update({
+      where: { task_id: taskId },
+      data: {
+        current_quantity: newCurrentQuantity,
+        status: newStatus,
+        updated_at: new Date(),
+        ...(newStatus === TaskStatus.DONE ? { completed_by: userId } : {}),
+      },
+    });
+
+    return { progressLog, updatedTask };
   });
 }
 

@@ -26,7 +26,7 @@ export interface UpdateTaskInput {
   assigned_users?: string[];
   unit?: TaskUnit;
   target_quantity?: number;
-  scheduled_date: Date;
+  scheduled_date?: Date;
 }
 
 export interface CreateTaskInput {
