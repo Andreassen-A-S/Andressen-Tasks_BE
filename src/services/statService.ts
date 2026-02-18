@@ -82,12 +82,15 @@ export class StatsService {
     const workload = await statsRepository.getWorkloadDistribution();
     const userWorkload = workload.find((w) => w.user_id === userId);
 
+    const overDueTasks = await statsRepository.getUserOverdueTasks(userId);
+
     if (!userWorkload) {
       return {
         userId,
         assigned_tasks: 0,
         completedTasks: 0,
         completionRate: 0,
+        overDueTasks: 0,
       };
     }
 
@@ -104,6 +107,7 @@ export class StatsService {
       email: userWorkload.email,
       assignedTasks: userWorkload.assigned_tasks,
       completedTasks: userWorkload.completed_tasks,
+      overDueTasks: overDueTasks,
       completionRate,
     };
   }

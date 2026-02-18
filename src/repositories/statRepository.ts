@@ -396,6 +396,27 @@ export async function getTaskTrends(
 }
 
 /**
+ * Get user overdue tasks count
+ */
+export async function getUserOverdueTasks(
+  userId: string,
+  client: PrismaClient = prisma,
+) {
+  const now = new Date();
+  return client.task.count({
+    where: {
+      deadline: { lt: now },
+      status: {
+        notIn: [TaskStatus.DONE, TaskStatus.ARCHIVED, TaskStatus.REJECTED],
+      },
+      assignments: {
+        some: { user_id: userId },
+      },
+    },
+  });
+}
+
+/**
  * Get all dashboard stats in a single call (optimized)
  */
 export async function getAllStats(client: PrismaClient = prisma) {
