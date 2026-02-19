@@ -11,6 +11,11 @@ import taskEventRoutes from "./routes/taskEvent.routes";
 import templateRoutes from "./routes/template.routes";
 import statRoutes from "./routes/stat.routes";
 
+if (!process.env.JWT_SECRET) {
+  console.error("FATAL: JWT_SECRET environment variable is not set");
+  process.exit(1);
+}
+
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -24,8 +29,8 @@ const allowedOrigins = (
 app.use(
   cors({
     origin: (origin, cb) => {
-      // Allow tools like curl/postman (no Origin header)
-      if (!origin) return cb(null, true);
+      // Allow tools like curl/postman in non-production (no Origin header)
+      if (!origin) return cb(null, process.env.NODE_ENV !== "production");
 
       if (allowedOrigins.includes(origin)) return cb(null, true);
 

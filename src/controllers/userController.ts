@@ -1,12 +1,13 @@
 import * as userRepo from "../repositories/userRepository";
 import type { Request, Response } from "express";
 import type { CreateUserInput, UpdateUserInput } from "../types/user";
+import { UserRole } from "../generated/prisma/client";
 
-interface UserParams {
-  id: string;
+function getAuthUser(req: Request) {
+  return (req as any).user as { user_id: string; role: UserRole } | undefined;
 }
 
-export async function listUsers(req: Request, res: Response) {
+export async function listUsers(_req: Request, res: Response) {
   try {
     const users = await userRepo.getAllUsers();
     res.json({ success: true, data: users });
@@ -16,9 +17,9 @@ export async function listUsers(req: Request, res: Response) {
   }
 }
 
-export async function getUser(req: Request<UserParams>, res: Response) {
+export async function getUser(req: Request, res: Response) {
   try {
-    const user = await userRepo.getUserById(req.params.id);
+    const user = await userRepo.getUserById(req.params.id as string);
     if (!user) {
       return res.status(404).json({ success: false, error: "User not found" });
     }
@@ -30,6 +31,11 @@ export async function getUser(req: Request<UserParams>, res: Response) {
 }
 
 export async function createUser(req: Request, res: Response) {
+  const actor = getAuthUser(req);
+  if (actor?.role !== UserRole.ADMIN) {
+    return res.status(403).json({ success: false, error: "Forbidden" });
+  }
+
   try {
     const body = req.body as CreateUserInput;
     const user = await userRepo.createUser(body);
@@ -40,10 +46,17 @@ export async function createUser(req: Request, res: Response) {
   }
 }
 
-export async function updateUser(req: Request<UserParams>, res: Response) {
+export async function updateUser(req: Request, res: Response) {
+  const actor = getAuthUser(req);
+  const targetId = req.params.id as string;
+
+  if (actor?.user_id !== targetId && actor?.role !== UserRole.ADMIN) {
+    return res.status(403).json({ success: false, error: "Forbidden" });
+  }
+
   try {
     const body = req.body as UpdateUserInput;
-    const user = await userRepo.updateUser(req.params.id, body);
+    const user = await userRepo.updateUser(targetId, body);
     res.json({ success: true, data: user });
   } catch (error) {
     console.error("Error in updateUser:", error);
@@ -54,9 +67,14 @@ export async function updateUser(req: Request<UserParams>, res: Response) {
   }
 }
 
-export async function deleteUser(req: Request<UserParams>, res: Response) {
+export async function deleteUser(req: Request, res: Response) {
+  const actor = getAuthUser(req);
+  if (actor?.role !== UserRole.ADMIN) {
+    return res.status(403).json({ success: false, error: "Forbidden" });
+  }
+
   try {
-    await userRepo.deleteUser(req.params.id);
+    await userRepo.deleteUser(req.params.id as string);
     res.status(204).send();
   } catch (error) {
     console.error("Error in deleteUser:", error);

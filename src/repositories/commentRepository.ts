@@ -1,5 +1,5 @@
 import { prisma } from "../db/prisma";
-import type { TaskComment, User } from "../generated/prisma/client";
+
 
 export async function getCommentsByTaskId(taskId: string) {
   return prisma.taskComment.findMany({
@@ -10,7 +10,6 @@ export async function getCommentsByTaskId(taskId: string) {
           user_id: true,
           name: true,
           email: true,
-          role: true,
         },
       },
     },
@@ -31,7 +30,6 @@ export async function createComment(data: {
           user_id: true,
           name: true,
           email: true,
-          role: true,
         },
       },
     },
@@ -47,7 +45,6 @@ export async function getCommentById(commentId: string) {
           user_id: true,
           name: true,
           email: true,
-          role: true,
         },
       },
     },
@@ -64,7 +61,6 @@ export async function updateComment(commentId: string, message: string) {
           user_id: true,
           name: true,
           email: true,
-          role: true,
         },
       },
     },
