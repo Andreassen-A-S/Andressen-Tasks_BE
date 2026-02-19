@@ -417,6 +417,41 @@ export async function getUserOverdueTasks(
 }
 
 /**
+ * Get user weekly task stats (current week, Monday start)
+ */
+export async function getUserWeeklyStats(
+  userId: string,
+  client: PrismaClient = prisma,
+) {
+  const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+
+  const [assignedTasks, completedTasks] = await Promise.all([
+    client.taskAssignment.count({
+      where: {
+        user_id: userId,
+        assigned_at: { gte: weekStart },
+      },
+    }),
+    client.task.count({
+      where: {
+        status: TaskStatus.DONE,
+        completed_by: userId,
+        completed_at: { gte: weekStart },
+      },
+    }),
+  ]);
+
+  const completionRate =
+    assignedTasks > 0 ? Math.round((completedTasks / assignedTasks) * 100) : 0;
+
+  return {
+    assigned_tasks: assignedTasks,
+    completed_tasks: completedTasks,
+    completion_rate: completionRate,
+  };
+}
+
+/**
  * Get all dashboard stats in a single call (optimized)
  */
 export async function getAllStats(client: PrismaClient = prisma) {
