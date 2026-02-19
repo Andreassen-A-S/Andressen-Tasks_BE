@@ -146,7 +146,6 @@ export async function updateTaskWithAssignments(
     });
     if (!existingTask) throw new TaskNotFoundError(id);
 
-    // Fix 1: Block DONE -> DONE explicitly.
     const isAlreadyDone = existingTask.status === TaskStatus.DONE;
     if (data.status === TaskStatus.DONE && isAlreadyDone) {
       throw new TaskAlreadyDoneError();
@@ -155,7 +154,6 @@ export async function updateTaskWithAssignments(
     const { assigned_users, ...taskUpdateData } = data;
     const finalStatus = data.status ?? existingTask.status;
 
-    // Fix 2: completionTimestamp is always "now" — never reuse historical timestamps.
     const completionTimestamp = new Date();
 
     const updateData: Record<string, unknown> = { ...taskUpdateData };
@@ -180,7 +178,6 @@ export async function updateTaskWithAssignments(
       data: updateData,
     });
 
-    // Fix 4: Assignment replacement rules are status-aware and preserve
     // existing per-assignment completed_at when the task is/was DONE.
     if (assigned_users !== undefined) {
       if (finalStatus === TaskStatus.DONE) {
@@ -278,13 +275,11 @@ export async function updateTask(
     });
     if (!existingTask) throw new TaskNotFoundError(id);
 
-    // Fix 1: Block DONE -> DONE explicitly.
     const isAlreadyDone = existingTask.status === TaskStatus.DONE;
     if (data.status === TaskStatus.DONE && isAlreadyDone) {
       throw new TaskAlreadyDoneError();
     }
 
-    // Fix 2: Always use a fresh timestamp — never reuse historical ones.
     const completionTimestamp = new Date();
 
     const task = await tx.task.update({
