@@ -8,6 +8,12 @@ import {
 import * as taskController from "../src/controllers/taskController";
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
 import * as taskRepo from "../src/repositories/taskRepository";
+import {
+  AssignmentNotFoundError,
+  TaskAlreadyDoneError,
+  TaskNotFoundError,
+  TaskNotProgressableError,
+} from "../src/repositories/taskRepository";
 
 type MockResponse = Response & {
   statusCode?: number;
@@ -207,6 +213,43 @@ describe("taskController.updateTask", () => {
     expect(res.body).toEqual({ success: true, data: updatedTask });
   });
 
+  test("returns 404 when updateTask throws TaskNotFoundError", async () => {
+    spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1" } as never);
+    spyOn(taskRepo, "updateTask").mockRejectedValue(new TaskNotFoundError("t1"));
+
+    const req = createRequest({
+      user: { user_id: "u1" },
+      params: { id: "t1" } as Request["params"],
+      body: { title: "new" },
+    });
+    const res = createMockResponse();
+
+    await taskController.updateTask(req, res);
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toEqual({ success: false, error: "Task not found: t1" });
+  });
+
+  test("returns 400 when updateTask throws TaskAlreadyDoneError", async () => {
+    spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1" } as never);
+    spyOn(taskRepo, "updateTask").mockRejectedValue(new TaskAlreadyDoneError());
+
+    const req = createRequest({
+      user: { user_id: "u1" },
+      params: { id: "t1" } as Request["params"],
+      body: { status: TaskStatus.DONE },
+    });
+    const res = createMockResponse();
+
+    await taskController.updateTask(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({
+      success: false,
+      error: "Task is already marked as done and cannot be set to done again.",
+    });
+  });
+
   test("updates task via heavy path and logs assignment diffs + TASK_UPDATED", async () => {
     const oldTask = {
       task_id: "t1",
@@ -252,6 +295,53 @@ describe("taskController.updateTask", () => {
     expect(eventSpy.mock.calls[2]?.[0]?.type).toBe(TaskEventType.TASK_UPDATED);
     expect(res.body).toEqual({ success: true, data: updatedTask });
   });
+
+  test("returns 404 when updateTaskWithAssignments throws TaskNotFoundError", async () => {
+    spyOn(taskRepo, "getTaskByIdWithAssignments").mockResolvedValue({
+      task_id: "t1",
+      assignments: [],
+    } as never);
+    spyOn(taskRepo, "updateTaskWithAssignments").mockRejectedValue(
+      new TaskNotFoundError("t1"),
+    );
+
+    const req = createRequest({
+      user: { user_id: "u1" },
+      params: { id: "t1" } as Request["params"],
+      body: { assigned_users: ["u1"] },
+    });
+    const res = createMockResponse();
+
+    await taskController.updateTask(req, res);
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toEqual({ success: false, error: "Task not found: t1" });
+  });
+
+  test("returns 400 when updateTaskWithAssignments throws TaskAlreadyDoneError", async () => {
+    spyOn(taskRepo, "getTaskByIdWithAssignments").mockResolvedValue({
+      task_id: "t1",
+      assignments: [],
+    } as never);
+    spyOn(taskRepo, "updateTaskWithAssignments").mockRejectedValue(
+      new TaskAlreadyDoneError(),
+    );
+
+    const req = createRequest({
+      user: { user_id: "u1" },
+      params: { id: "t1" } as Request["params"],
+      body: { assigned_users: ["u1"], status: TaskStatus.DONE },
+    });
+    const res = createMockResponse();
+
+    await taskController.updateTask(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({
+      success: false,
+      error: "Task is already marked as done and cannot be set to done again.",
+    });
+  });
 });
 
 describe("taskController.deleteTask", () => {
@@ -281,9 +371,48 @@ describe("taskController.deleteTask", () => {
 });
 
 describe("taskController.upsertProgressLog", () => {
+  test("returns 404 when task does not exist", async () => {
+    spyOn(taskRepo, "upsertProgressLog").mockRejectedValue(
+      new TaskNotFoundError("t1"),
+    );
+
+    const req = createRequest({
+      user: { user_id: "u1" },
+      params: { id: "t1" } as Request["params"],
+      body: { quantity_done: 1, unit: TaskUnit.METERS },
+    });
+    const res = createMockResponse();
+
+    await taskController.upsertProgressLog(req, res);
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toEqual({ success: false, error: "Task not found: t1" });
+  });
+
+  test("returns 400 when task is not progressable", async () => {
+    spyOn(taskRepo, "upsertProgressLog").mockRejectedValue(
+      new TaskNotProgressableError(TaskStatus.DONE),
+    );
+
+    const req = createRequest({
+      user: { user_id: "u1" },
+      params: { id: "t1" } as Request["params"],
+      body: { quantity_done: 1, unit: TaskUnit.METERS },
+    });
+    const res = createMockResponse();
+
+    await taskController.upsertProgressLog(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({
+      success: false,
+      error: "Cannot log progress on tasks with status: DONE",
+    });
+  });
+
   test("returns 404 when assignment does not exist", async () => {
     spyOn(taskRepo, "upsertProgressLog").mockRejectedValue(
-      new Error("Assignment not found"),
+      new AssignmentNotFoundError(),
     );
 
     const req = createRequest({
@@ -296,7 +425,10 @@ describe("taskController.upsertProgressLog", () => {
     await taskController.upsertProgressLog(req, res);
 
     expect(res.statusCode).toBe(404);
-    expect(res.body).toEqual({ success: false, error: "Assignment not found" });
+    expect(res.body).toEqual({
+      success: false,
+      error: "Assignment not found for this task and user.",
+    });
   });
 
   test("upserts progress and logs PROGRESS_LOGGED", async () => {

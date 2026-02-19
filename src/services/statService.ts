@@ -79,15 +79,22 @@ export class StatsService {
    */
   async getUserStats(userId: string) {
     // This could be extended with user-specific queries
-    const workload = await statsRepository.getWorkloadDistribution();
+    const [workload, overDueTasks, weeklyStats] = await Promise.all([
+      statsRepository.getWorkloadDistribution(),
+      statsRepository.getUserOverdueTasks(userId),
+      statsRepository.getUserWeeklyStats(userId),
+    ]);
+
     const userWorkload = workload.find((w) => w.user_id === userId);
 
     if (!userWorkload) {
       return {
-        userId,
+        user_id: userId,
         assigned_tasks: 0,
-        completedTasks: 0,
-        completionRate: 0,
+        completed_tasks: 0,
+        completion_rate: 0,
+        overdue_tasks: 0,
+        weekly_stats: weeklyStats,
       };
     }
 
@@ -99,12 +106,14 @@ export class StatsService {
         : 0;
 
     return {
-      userId: userWorkload.user_id,
+      user_id: userWorkload.user_id,
       name: userWorkload.name,
       email: userWorkload.email,
-      assignedTasks: userWorkload.assigned_tasks,
-      completedTasks: userWorkload.completed_tasks,
-      completionRate,
+      assigned_tasks: userWorkload.assigned_tasks,
+      completed_tasks: userWorkload.completed_tasks,
+      overdue_tasks: overDueTasks,
+      completion_rate: completionRate,
+      weekly_stats: weeklyStats,
     };
   }
 }

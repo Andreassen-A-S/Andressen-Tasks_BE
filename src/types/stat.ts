@@ -70,7 +70,13 @@ export interface UserStats {
   email?: string;
   assigned_tasks: number;
   completed_tasks: number;
+  overdue_tasks: number;
   completion_rate: number;
+  weekly_stats: {
+    assigned_tasks: number;
+    completed_tasks: number;
+    completion_rate: number;
+  };
 }
 
 export interface DashboardStats {

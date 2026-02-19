@@ -396,6 +396,75 @@ export async function getTaskTrends(
 }
 
 /**
+ * Get user overdue tasks count
+ */
+export async function getUserOverdueTasks(
+  userId: string,
+  client: PrismaClient = prisma,
+) {
+  const now = new Date();
+  return client.task.count({
+    where: {
+      deadline: { lt: now },
+      status: {
+        notIn: [TaskStatus.DONE, TaskStatus.ARCHIVED, TaskStatus.REJECTED],
+      },
+      assignments: {
+        some: { user_id: userId },
+      },
+    },
+  });
+}
+
+/**
+ * Get user weekly task stats (current week, Monday start)
+ */
+export async function getUserWeeklyStats(
+  userId: string,
+  client: PrismaClient = prisma,
+) {
+  const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+  const weekEnd = addDays(weekStart, 7);
+
+  // planned tasks = assignments where task is scheduled this week
+  const plannedWhere = {
+    user_id: userId,
+    task: {
+      scheduled_date: { gte: weekStart, lt: weekEnd },
+    },
+  } as const;
+
+  const [plannedTasksThisWeek, plannedTasksCompleted] = await Promise.all([
+    client.taskAssignment.count({
+      where: plannedWhere,
+    }),
+
+    // planned + completed (credit)
+    client.taskAssignment.count({
+      where: {
+        user_id: userId,
+        task: {
+          scheduled_date: { gte: weekStart, lt: weekEnd },
+          status: TaskStatus.DONE,
+          completed_by: userId,
+        },
+      },
+    }),
+  ]);
+
+  const completionRate =
+    plannedTasksThisWeek > 0
+      ? Math.round((plannedTasksCompleted / plannedTasksThisWeek) * 100)
+      : 0;
+
+  return {
+    assigned_tasks: plannedTasksThisWeek, // consider renaming to planned_tasks
+    completed_tasks: plannedTasksCompleted, // consider renaming to planned_completed_tasks
+    completion_rate: completionRate,
+  };
+}
+
+/**
  * Get all dashboard stats in a single call (optimized)
  */
 export async function getAllStats(client: PrismaClient = prisma) {
