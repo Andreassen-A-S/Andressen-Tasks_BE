@@ -118,18 +118,6 @@ export async function updateTaskWithAssignments(
       data: updateData,
     });
 
-    if (data.status === TaskStatus.DONE) {
-      await tx.taskAssignment.updateMany({
-        where: { task_id: id },
-        data: { completed_at: completionTimestamp },
-      });
-    } else if (data.status !== undefined) {
-      await tx.taskAssignment.updateMany({
-        where: { task_id: id },
-        data: { completed_at: null },
-      });
-    }
-
     if (assigned_users !== undefined) {
       await tx.taskAssignment.deleteMany({
         where: { task_id: id },
@@ -147,6 +135,16 @@ export async function updateTaskWithAssignments(
           })),
         });
       }
+    } else if (data.status === TaskStatus.DONE) {
+      await tx.taskAssignment.updateMany({
+        where: { task_id: id },
+        data: { completed_at: completionTimestamp },
+      });
+    } else if (data.status !== undefined) {
+      await tx.taskAssignment.updateMany({
+        where: { task_id: id },
+        data: { completed_at: null },
+      });
     }
 
     return tx.task.findUnique({

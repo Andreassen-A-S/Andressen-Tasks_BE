@@ -89,7 +89,7 @@ export class StatsService {
 
     if (!userWorkload) {
       return {
-        userId,
+        user_id: userId,
         assigned_tasks: 0,
         completed_tasks: 0,
         completion_rate: 0,

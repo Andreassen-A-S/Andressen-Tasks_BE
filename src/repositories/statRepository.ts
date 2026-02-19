@@ -424,29 +424,42 @@ export async function getUserWeeklyStats(
   client: PrismaClient = prisma,
 ) {
   const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+  const weekEnd = addDays(weekStart, 7);
 
-  const [assignedTasks, completedTasks] = await Promise.all([
+  // planned tasks = assignments where task is scheduled this week
+  const plannedWhere = {
+    user_id: userId,
+    task: {
+      scheduled_date: { gte: weekStart, lt: weekEnd },
+    },
+  } as const;
+
+  const [plannedTasksThisWeek, plannedTasksCompleted] = await Promise.all([
+    client.taskAssignment.count({
+      where: plannedWhere,
+    }),
+
+    // planned + completed (credit)
     client.taskAssignment.count({
       where: {
-        user_id: userId,
-        assigned_at: { gte: weekStart },
-      },
-    }),
-    client.task.count({
-      where: {
-        status: TaskStatus.DONE,
-        completed_by: userId,
-        completed_at: { gte: weekStart },
+        ...plannedWhere,
+        task: {
+          scheduled_date: { gte: weekStart, lt: weekEnd },
+          status: TaskStatus.DONE,
+          completed_by: userId,
+        },
       },
     }),
   ]);
 
   const completionRate =
-    assignedTasks > 0 ? Math.round((completedTasks / assignedTasks) * 100) : 0;
+    plannedTasksThisWeek > 0
+      ? Math.round((plannedTasksCompleted / plannedTasksThisWeek) * 100)
+      : 0;
 
   return {
-    assigned_tasks: assignedTasks,
-    completed_tasks: completedTasks,
+    assigned_tasks: plannedTasksThisWeek, // consider renaming to planned_tasks
+    completed_tasks: plannedTasksCompleted, // consider renaming to planned_completed_tasks
     completion_rate: completionRate,
   };
 }
