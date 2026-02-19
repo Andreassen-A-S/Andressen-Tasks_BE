@@ -19,6 +19,7 @@
     "start": "bun run src/server.ts",
     "dev": "bun --watch src/server.ts",
     "test": "bun test",
+    "typecheck": "tsc --noEmit",
     "seed": "bun run prisma/seed/populateDB.ts"
   },
   "devDependencies": {
