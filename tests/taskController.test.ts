@@ -8,6 +8,7 @@ import {
 import * as taskController from "../src/controllers/taskController";
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
 import * as taskRepo from "../src/repositories/taskRepository";
+import { AssignmentNotFoundError } from "../src/repositories/taskRepository";
 
 type MockResponse = Response & {
   statusCode?: number;
@@ -283,7 +284,7 @@ describe("taskController.deleteTask", () => {
 describe("taskController.upsertProgressLog", () => {
   test("returns 404 when assignment does not exist", async () => {
     spyOn(taskRepo, "upsertProgressLog").mockRejectedValue(
-      new Error("Assignment not found"),
+      new AssignmentNotFoundError(),
     );
 
     const req = createRequest({
@@ -296,7 +297,10 @@ describe("taskController.upsertProgressLog", () => {
     await taskController.upsertProgressLog(req, res);
 
     expect(res.statusCode).toBe(404);
-    expect(res.body).toEqual({ success: false, error: "Assignment not found" });
+    expect(res.body).toEqual({
+      success: false,
+      error: "Assignment not found for this task and user.",
+    });
   });
 
   test("upserts progress and logs PROGRESS_LOGGED", async () => {
