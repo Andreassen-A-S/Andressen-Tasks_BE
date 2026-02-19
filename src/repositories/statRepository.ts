@@ -442,7 +442,7 @@ export async function getUserWeeklyStats(
     // planned + completed (credit)
     client.taskAssignment.count({
       where: {
-        ...plannedWhere,
+        user_id: userId,
         task: {
           scheduled_date: { gte: weekStart, lt: weekEnd },
           status: TaskStatus.DONE,

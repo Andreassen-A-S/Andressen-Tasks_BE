@@ -137,7 +137,9 @@ export async function updateTaskWithAssignments(
       }
     } else if (data.status === TaskStatus.DONE) {
       await tx.taskAssignment.updateMany({
-        where: { task_id: id },
+        where: isAlreadyDone
+          ? { task_id: id, completed_at: null }
+          : { task_id: id },
         data: { completed_at: completionTimestamp },
       });
     } else if (data.status !== undefined) {
@@ -217,7 +219,9 @@ export async function updateTask(
 
     if (data.status === TaskStatus.DONE) {
       await tx.taskAssignment.updateMany({
-        where: { task_id: id },
+        where: isAlreadyDone
+          ? { task_id: id, completed_at: null }
+          : { task_id: id },
         data: { completed_at: completionTimestamp },
       });
     } else if (data.status !== undefined) {
