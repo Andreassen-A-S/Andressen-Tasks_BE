@@ -4,7 +4,7 @@ import type { CreateUserInput, UpdateUserInput } from "../types/user";
 import { UserRole } from "../generated/prisma/client";
 
 function getAuthUser(req: Request) {
-  return (req as any).user as { user_id: string; role: UserRole } | undefined;
+  return req.user as { user_id: string; role: UserRole } | undefined;
 }
 
 export async function listUsers(_req: Request, res: Response) {
