@@ -9,8 +9,25 @@ import {
   TaskEventType,
 } from "../../src/generated/prisma/client";
 import bcrypt from "bcrypt";
+import {
+  startOfWeek,
+  addDays,
+  setHours,
+  setMinutes,
+  setSeconds,
+  setMilliseconds,
+} from "date-fns";
 
 const prisma = new PrismaClient();
+
+function atTime(d: Date, h: number, m: number) {
+  let x = new Date(d);
+  x = setHours(x, h);
+  x = setMinutes(x, m);
+  x = setSeconds(x, 0);
+  x = setMilliseconds(x, 0);
+  return x;
+}
 
 async function main() {
   await prisma.$transaction(async (tx) => {
@@ -20,6 +37,8 @@ async function main() {
     await tx.taskComment.deleteMany();
     await tx.taskAssignment.deleteMany();
     await tx.task.deleteMany();
+    await tx.recurringTaskTemplateAssignee.deleteMany();
+    await tx.recurringTaskTemplate.deleteMany();
     await tx.user.deleteMany();
 
     // Passwords (credentials stay the same)
@@ -85,7 +104,7 @@ async function main() {
         }),
       ]);
 
-    // Helper: create task + TASK_CREATED event
+    // Helpers
     async function createTask(data: any, actorId: string) {
       const task = await tx.task.create({ data });
       await tx.taskEvent.create({
@@ -99,42 +118,18 @@ async function main() {
       return task;
     }
 
-    // Helper: create subtask + SUBTASK_ADDED event on parent
-    async function createSubtask(params: {
-      parentTaskId: string;
-      data: any;
-      actorId: string;
-    }) {
-      const { parentTaskId, data, actorId } = params;
-      const subtask = await createTask(
-        { ...data, parent_task_id: parentTaskId },
-        actorId,
-      );
-
-      await tx.taskEvent.create({
-        data: {
-          task_id: parentTaskId,
-          actor_id: actorId,
-          type: TaskEventType.SUBTASK_ADDED,
-          message: "Subtask added",
-          after_json: {
-            subtask_id: subtask.task_id,
-            title: subtask.title,
-          } as any,
-        },
-      });
-
-      return subtask;
-    }
-
-    // Helper: create assignment + ASSIGNMENT_CREATED event
     async function createAssignment(params: {
       taskId: string;
       userId: string;
       actorId: string;
+      assignedAt?: Date;
     }) {
       const a = await tx.taskAssignment.create({
-        data: { task_id: params.taskId, user_id: params.userId },
+        data: {
+          task_id: params.taskId,
+          user_id: params.userId,
+          assigned_at: params.assignedAt ?? new Date(),
+        },
       });
 
       await tx.taskEvent.create({
@@ -151,441 +146,45 @@ async function main() {
       return a;
     }
 
-    // Helper: create progress log + PROGRESS_LOGGED event (links progress_id + assignment_id)
-    async function createProgress(params: {
-      assignmentId: string;
-      actorId: string;
-      qty: number;
-      note?: string;
+    async function markDone(params: {
+      taskId: string;
+      completerId: string;
+      completedAt: Date;
+      actorId?: string;
     }) {
-      const p = await tx.taskProgressLog.create({
+      const updated = await tx.task.update({
+        where: { task_id: params.taskId },
         data: {
-          assignment_id: params.assignmentId,
-          quantity_done: params.qty,
-          note: params.note,
+          status: TaskStatus.DONE,
+          completed_by: params.completerId,
+          completed_at: params.completedAt,
         },
       });
 
-      const assignment = await tx.taskAssignment.findUnique({
-        where: { assignment_id: params.assignmentId },
-        select: { task_id: true, assignment_id: true },
+      // Keep your existing behavior: assignment.completed_at gets set for all assignees
+      await tx.taskAssignment.updateMany({
+        where: { task_id: params.taskId },
+        data: { completed_at: params.completedAt },
       });
-      if (!assignment)
-        throw new Error("Assignment not found for progress seed");
 
       await tx.taskEvent.create({
         data: {
-          task_id: assignment.task_id,
-          actor_id: params.actorId,
-          type: TaskEventType.PROGRESS_LOGGED,
-          message: "Progress logged",
-          assignment_id: assignment.assignment_id,
-          progress_id: p.progress_id,
-          after_json: { quantity_done: p.quantity_done, note: p.note } as any,
+          task_id: params.taskId,
+          actor_id: params.actorId ?? params.completerId,
+          type: TaskEventType.TASK_STATUS_CHANGED,
+          message: "Status changed to DONE",
+          before_json: { status: TaskStatus.PENDING } as any,
+          after_json: {
+            status: TaskStatus.DONE,
+            completed_by: params.completerId,
+          } as any,
         },
       });
 
-      return { progress: p, taskId: assignment.task_id };
+      return updated;
     }
 
-    // --------------------------
-    // Create tasks (more + varied)
-    // --------------------------
-
-    const pipeTask = await createTask(
-      {
-        created_by: henrik.user_id,
-        title: "Læg rør 100m (mål)",
-        description:
-          "Læg 100 meter rør. Medarbejdere registrerer løbende fremskridt i meter.",
-        priority: TaskPriority.HIGH,
-        status: TaskStatus.PENDING,
-        deadline: new Date("2026-02-20T23:59:59.000Z"),
-        scheduled_date: new Date("2026-02-10T08:00:00.000Z"),
-        goal_type: TaskGoalType.FIXED,
-        unit: TaskUnit.METERS,
-        target_quantity: 100,
-        current_quantity: 0,
-      },
-      henrik.user_id,
-    );
-
-    const reportTask = await createTask(
-      {
-        created_by: henrik.user_id,
-        title: "Forbered ugentlig rapport",
-        description:
-          "Indsaml data fra alle afdelinger og udarbejd den ugentlige rapport.",
-        priority: TaskPriority.HIGH,
-        status: TaskStatus.PENDING,
-        deadline: new Date("2026-02-14T23:59:59.000Z"),
-        scheduled_date: new Date("2026-02-11T08:00:00.000Z"),
-        goal_type: TaskGoalType.OPEN,
-        unit: TaskUnit.NONE,
-        target_quantity: null,
-        current_quantity: 0,
-      },
-      henrik.user_id,
-    );
-
-    const equipmentTask = await createTask(
-      {
-        created_by: henrik.user_id,
-        title: "Tjek materiel på pladsen",
-        description: "Gennemgå værktøj/materiel og meld mangler til lager.",
-        priority: TaskPriority.MEDIUM,
-        status: TaskStatus.PENDING,
-        deadline: new Date("2026-02-10T23:59:59.000Z"),
-        scheduled_date: new Date("2026-02-10T12:00:00.000Z"),
-        goal_type: TaskGoalType.OPEN,
-        unit: TaskUnit.NONE,
-        target_quantity: null,
-        current_quantity: 0,
-      },
-      henrik.user_id,
-    );
-
-    const containerTask = await createTask(
-      {
-        created_by: henrik.user_id,
-        title: "Ryd op i container",
-        description:
-          "Sorter materialer, smid affald ud og gør klar til næste levering.",
-        priority: TaskPriority.LOW,
-        status: TaskStatus.PENDING,
-        deadline: new Date("2026-02-12T23:59:59.000Z"),
-        scheduled_date: new Date("2026-02-11T12:00:00.000Z"),
-        goal_type: TaskGoalType.OPEN,
-        unit: TaskUnit.NONE,
-        target_quantity: null,
-        current_quantity: 0,
-      },
-      henrik.user_id,
-    );
-
-    // New tasks (more “living app”)
-    const gravelTask = await createTask(
-      {
-        created_by: henrik.user_id,
-        title: "Fordel stabilgrus 2.5 km (mål)",
-        description:
-          "Fordel stabilgrus på strækning. Registrer fremskridt i kilometer.",
-        priority: TaskPriority.MEDIUM,
-        status: TaskStatus.PENDING,
-        deadline: new Date("2026-02-18T23:59:59.000Z"),
-        scheduled_date: new Date("2026-02-12T08:00:00.000Z"),
-        goal_type: TaskGoalType.FIXED,
-        unit: TaskUnit.KILOMETERS,
-        target_quantity: 2.5,
-        current_quantity: 0,
-      },
-      henrik.user_id,
-    );
-
-    const pumpTask = await createTask(
-      {
-        created_by: henrik.user_id,
-        title: "Tøm pumpebrønd (mål: 1200L)",
-        description: "Tøm pumpebrønd og registrer liter løbende.",
-        priority: TaskPriority.HIGH,
-        status: TaskStatus.PENDING,
-        deadline: new Date("2026-02-16T23:59:59.000Z"),
-        scheduled_date: new Date("2026-02-12T10:00:00.000Z"),
-        goal_type: TaskGoalType.FIXED,
-        unit: TaskUnit.LITERS,
-        target_quantity: 1200,
-        current_quantity: 0,
-      },
-      henrik.user_id,
-    );
-
-    // Parent task with subtasks
-    const foundationParent = await createTask(
-      {
-        created_by: henrik.user_id,
-        title: "Støb fundament (pakke)",
-        description:
-          "Samlet opgave: forskalling, armering, støbning og oprydning.",
-        priority: TaskPriority.HIGH,
-        status: TaskStatus.PENDING,
-        deadline: new Date("2026-02-22T23:59:59.000Z"),
-        scheduled_date: new Date("2026-02-13T07:00:00.000Z"),
-        goal_type: TaskGoalType.OPEN,
-        unit: TaskUnit.NONE,
-        target_quantity: null,
-        current_quantity: 0,
-      },
-      henrik.user_id,
-    );
-
-    const subForskalling = await createSubtask({
-      parentTaskId: foundationParent.task_id,
-      actorId: henrik.user_id,
-      data: {
-        created_by: henrik.user_id,
-        title: "Forskalling",
-        description: "Opsæt forskalling til fundament.",
-        priority: TaskPriority.MEDIUM,
-        status: TaskStatus.PENDING,
-        deadline: new Date("2026-02-14T23:59:59.000Z"),
-        scheduled_date: new Date("2026-02-13T07:30:00.000Z"),
-        goal_type: TaskGoalType.OPEN,
-        unit: TaskUnit.NONE,
-        target_quantity: null,
-        current_quantity: 0,
-      },
-    });
-
-    const subArmering = await createSubtask({
-      parentTaskId: foundationParent.task_id,
-      actorId: henrik.user_id,
-      data: {
-        created_by: henrik.user_id,
-        title: "Armering",
-        description: "Læg armeringsjern og bind korrekt.",
-        priority: TaskPriority.MEDIUM,
-        status: TaskStatus.PENDING,
-        deadline: new Date("2026-02-15T23:59:59.000Z"),
-        scheduled_date: new Date("2026-02-13T11:00:00.000Z"),
-        goal_type: TaskGoalType.OPEN,
-        unit: TaskUnit.NONE,
-        target_quantity: null,
-        current_quantity: 0,
-      },
-    });
-
-    const subStobning = await createSubtask({
-      parentTaskId: foundationParent.task_id,
-      actorId: henrik.user_id,
-      data: {
-        created_by: henrik.user_id,
-        title: "Støbning (mål: 6 timer)",
-        description: "Støb fundament og registrer timer brugt.",
-        priority: TaskPriority.HIGH,
-        status: TaskStatus.PENDING,
-        deadline: new Date("2026-02-16T23:59:59.000Z"),
-        scheduled_date: new Date("2026-02-14T08:00:00.000Z"),
-        goal_type: TaskGoalType.FIXED,
-        unit: TaskUnit.HOURS,
-        target_quantity: 6,
-        current_quantity: 0,
-      },
-    });
-
-    // --------------------------
-    // Assignments (include Viktor)
-    // --------------------------
-
-    // Pipe task: tommy + christian + sebastian + viktor
-    const aPipeTommy = await createAssignment({
-      taskId: pipeTask.task_id,
-      userId: tommy.user_id,
-      actorId: henrik.user_id,
-    });
-    const aPipeChristian = await createAssignment({
-      taskId: pipeTask.task_id,
-      userId: christian.user_id,
-      actorId: henrik.user_id,
-    });
-    const aPipeSebastian = await createAssignment({
-      taskId: pipeTask.task_id,
-      userId: sebastian.user_id,
-      actorId: henrik.user_id,
-    });
-    const aPipeViktor = await createAssignment({
-      taskId: pipeTask.task_id,
-      userId: viktor.user_id,
-      actorId: henrik.user_id,
-    });
-
-    // Other tasks
-    await createAssignment({
-      taskId: reportTask.task_id,
-      userId: henrik.user_id,
-      actorId: henrik.user_id,
-    });
-
-    await createAssignment({
-      taskId: equipmentTask.task_id,
-      userId: tommy.user_id,
-      actorId: henrik.user_id,
-    });
-
-    await createAssignment({
-      taskId: containerTask.task_id,
-      userId: sebastian.user_id,
-      actorId: henrik.user_id,
-    });
-
-    // Viktor on multiple tasks
-    const aGravelViktor = await createAssignment({
-      taskId: gravelTask.task_id,
-      userId: viktor.user_id,
-      actorId: henrik.user_id,
-    });
-
-    const aPumpViktor = await createAssignment({
-      taskId: pumpTask.task_id,
-      userId: viktor.user_id,
-      actorId: henrik.user_id,
-    });
-
-    await createAssignment({
-      taskId: foundationParent.task_id,
-      userId: rasmus.user_id,
-      actorId: henrik.user_id,
-    });
-
-    await createAssignment({
-      taskId: subForskalling.task_id,
-      userId: viktor.user_id,
-      actorId: henrik.user_id,
-    });
-
-    await createAssignment({
-      taskId: subArmering.task_id,
-      userId: tommy.user_id,
-      actorId: henrik.user_id,
-    });
-
-    const aSubStobningViktor = await createAssignment({
-      taskId: subStobning.task_id,
-      userId: viktor.user_id,
-      actorId: henrik.user_id,
-    });
-
-    // --------------------------
-    // Progress logs (multiple tasks)
-    // --------------------------
-
-    // Pipe task progress (now also includes Viktor)
-    const pipeProgress = [
-      {
-        a: aPipeTommy,
-        actor: tommy.user_id,
-        qty: 15,
-        note: "Startede ved nordenden",
-      },
-      {
-        a: aPipeChristian,
-        actor: christian.user_id,
-        qty: 25,
-        note: "Lagde langs hegn",
-      },
-      {
-        a: aPipeSebastian,
-        actor: sebastian.user_id,
-        qty: 10,
-        note: "Afsluttede ved brønd",
-      },
-      {
-        a: aPipeTommy,
-        actor: tommy.user_id,
-        qty: 5,
-        note: "Kort stræk efter frokost",
-      },
-      {
-        a: aPipeViktor,
-        actor: viktor.user_id,
-        qty: 20,
-        note: "Hjælp ved samlinger",
-      },
-    ];
-
-    for (const e of pipeProgress) {
-      await createProgress({
-        assignmentId: e.a.assignment_id,
-        actorId: e.actor,
-        qty: e.qty,
-        note: e.note,
-      });
-    }
-
-    const pipeTotal = pipeProgress.reduce((s, e) => s + e.qty, 0);
-    await tx.task.update({
-      where: { task_id: pipeTask.task_id },
-      data: { current_quantity: pipeTotal },
-    });
-    await tx.taskEvent.create({
-      data: {
-        task_id: pipeTask.task_id,
-        actor_id: henrik.user_id,
-        type: TaskEventType.TASK_UPDATED,
-        message: "Updated current progress",
-        after_json: { current_quantity: pipeTotal } as any,
-      },
-    });
-
-    // Gravel task progress (km)
-    const gravelProgress = [
-      { qty: 0.6, note: "Første stræk kørt ud" },
-      { qty: 0.4, note: "Efterfyld ved svinget" },
-      { qty: 0.3, note: "Afretning med maskine" },
-    ];
-
-    for (const gp of gravelProgress) {
-      await createProgress({
-        assignmentId: aGravelViktor.assignment_id,
-        actorId: viktor.user_id,
-        qty: gp.qty,
-        note: gp.note,
-      });
-    }
-
-    const gravelTotal = gravelProgress.reduce((s, e) => s + e.qty, 0);
-    await tx.task.update({
-      where: { task_id: gravelTask.task_id },
-      data: { current_quantity: gravelTotal },
-    });
-
-    // Pump task progress (liters)
-    const pumpProgress = [
-      { qty: 300, note: "Startede tømning" },
-      { qty: 450, note: "Midtvejs - filter renset" },
-      { qty: 200, note: "Slam fjernet" },
-    ];
-
-    for (const pp of pumpProgress) {
-      await createProgress({
-        assignmentId: aPumpViktor.assignment_id,
-        actorId: viktor.user_id,
-        qty: pp.qty,
-        note: pp.note,
-      });
-    }
-
-    const pumpTotal = pumpProgress.reduce((s, e) => s + e.qty, 0);
-    await tx.task.update({
-      where: { task_id: pumpTask.task_id },
-      data: { current_quantity: pumpTotal },
-    });
-
-    // Subtask “Støbning” progress (hours)
-    const hoursProgress = [
-      { qty: 2, note: "Forberedelse + blanding" },
-      { qty: 1.5, note: "Støbning start" },
-      { qty: 1, note: "Vibrering + retning" },
-    ];
-
-    for (const hp of hoursProgress) {
-      await createProgress({
-        assignmentId: aSubStobningViktor.assignment_id,
-        actorId: viktor.user_id,
-        qty: hp.qty,
-        note: hp.note,
-      });
-    }
-
-    const hoursTotal = hoursProgress.reduce((s, e) => s + e.qty, 0);
-    await tx.task.update({
-      where: { task_id: subStobning.task_id },
-      data: { current_quantity: hoursTotal },
-    });
-
-    // --------------------------
-    // Comments + COMMENT_CREATED events
-    // --------------------------
-    async function createComment(params: {
+    async function addComment(params: {
       taskId: string;
       userId: string;
       message: string;
@@ -597,6 +196,7 @@ async function main() {
           message: params.message,
         },
       });
+
       await tx.taskEvent.create({
         data: {
           task_id: params.taskId,
@@ -606,40 +206,227 @@ async function main() {
           comment_id: c.comment_id,
         },
       });
+
       return c;
     }
 
-    await createComment({
-      taskId: pipeTask.task_id,
+    // Dates: make “planned this week” meaningful relative to current time
+    const now = new Date();
+    const weekStart = startOfWeek(now, { weekStartsOn: 1 });
+    const nextWeekStart = addDays(weekStart, 7);
+
+    // Create tasks (some planned this week, some next week, some overdue)
+    const t1 = await createTask(
+      {
+        created_by: henrik.user_id,
+        title: "Læg rør 100m (mål)",
+        description: "Læg 100 meter rør. Registrer fremskridt i meter.",
+        priority: TaskPriority.HIGH,
+        status: TaskStatus.PENDING,
+        deadline: addDays(now, 2),
+        scheduled_date: atTime(addDays(weekStart, 1), 8, 0), // Tue this week
+        goal_type: TaskGoalType.FIXED,
+        unit: TaskUnit.METERS,
+        target_quantity: 100,
+        current_quantity: 0,
+      },
+      henrik.user_id,
+    );
+
+    const t2 = await createTask(
+      {
+        created_by: henrik.user_id,
+        title: "Tjek materiel på pladsen",
+        description: "Gennemgå værktøj/materiel og meld mangler til lager.",
+        priority: TaskPriority.MEDIUM,
+        status: TaskStatus.PENDING,
+        deadline: addDays(now, 1),
+        scheduled_date: atTime(addDays(weekStart, 2), 12, 0), // Wed this week
+        goal_type: TaskGoalType.OPEN,
+        unit: TaskUnit.NONE,
+        target_quantity: null,
+        current_quantity: 0,
+      },
+      henrik.user_id,
+    );
+
+    const t3 = await createTask(
+      {
+        created_by: henrik.user_id,
+        title: "Ryd op i container",
+        description:
+          "Sorter materialer, smid affald ud og gør klar til næste levering.",
+        priority: TaskPriority.LOW,
+        status: TaskStatus.PENDING,
+        deadline: addDays(now, 4),
+        scheduled_date: atTime(addDays(weekStart, 4), 14, 0), // Fri this week
+        goal_type: TaskGoalType.OPEN,
+        unit: TaskUnit.NONE,
+        target_quantity: null,
+        current_quantity: 0,
+      },
+      henrik.user_id,
+    );
+
+    const t4 = await createTask(
+      {
+        created_by: henrik.user_id,
+        title: "Fordel stabilgrus 2.5 km (mål)",
+        description:
+          "Fordel stabilgrus på strækning. Registrer fremskridt i kilometer.",
+        priority: TaskPriority.MEDIUM,
+        status: TaskStatus.PENDING,
+        deadline: addDays(now, 10),
+        scheduled_date: atTime(addDays(nextWeekStart, 1), 8, 0), // Tue next week
+        goal_type: TaskGoalType.FIXED,
+        unit: TaskUnit.KILOMETERS,
+        target_quantity: 2.5,
+        current_quantity: 0,
+      },
+      henrik.user_id,
+    );
+
+    const t5_overdue = await createTask(
+      {
+        created_by: henrik.user_id,
+        title: "Forbered ugentlig rapport",
+        description: "Indsaml data og udarbejd ugentlig rapport.",
+        priority: TaskPriority.HIGH,
+        status: TaskStatus.PENDING,
+        deadline: addDays(now, -2), // overdue
+        scheduled_date: atTime(addDays(weekStart, 0), 9, 0), // Mon this week
+        goal_type: TaskGoalType.OPEN,
+        unit: TaskUnit.NONE,
+        target_quantity: null,
+        current_quantity: 0,
+      },
+      henrik.user_id,
+    );
+
+    // Assignments (group tasks)
+    // Pipe task (t1): tommy + christian + sebastian + viktor
+    await createAssignment({
+      taskId: t1.task_id,
+      userId: tommy.user_id,
+      actorId: henrik.user_id,
+      assignedAt: addDays(now, -14),
+    });
+    await createAssignment({
+      taskId: t1.task_id,
+      userId: christian.user_id,
+      actorId: henrik.user_id,
+      assignedAt: addDays(now, -14),
+    });
+    await createAssignment({
+      taskId: t1.task_id,
+      userId: sebastian.user_id,
+      actorId: henrik.user_id,
+      assignedAt: addDays(now, -14),
+    });
+    await createAssignment({
+      taskId: t1.task_id,
+      userId: viktor.user_id,
+      actorId: henrik.user_id,
+      assignedAt: addDays(now, -14),
+    });
+
+    // Equipment (t2): tommy + viktor
+    await createAssignment({
+      taskId: t2.task_id,
+      userId: tommy.user_id,
+      actorId: henrik.user_id,
+      assignedAt: addDays(now, -10),
+    });
+    await createAssignment({
+      taskId: t2.task_id,
+      userId: viktor.user_id,
+      actorId: henrik.user_id,
+      assignedAt: addDays(now, -10),
+    });
+
+    // Container (t3): sebastian
+    await createAssignment({
+      taskId: t3.task_id,
+      userId: sebastian.user_id,
+      actorId: henrik.user_id,
+      assignedAt: addDays(now, -5),
+    });
+
+    // Gravel (t4, next week): viktor + christian
+    await createAssignment({
+      taskId: t4.task_id,
+      userId: viktor.user_id,
+      actorId: henrik.user_id,
+      assignedAt: addDays(now, -20),
+    });
+    await createAssignment({
+      taskId: t4.task_id,
+      userId: christian.user_id,
+      actorId: henrik.user_id,
+      assignedAt: addDays(now, -20),
+    });
+
+    // Report (t5 overdue): henrik + rasmus
+    await createAssignment({
+      taskId: t5_overdue.task_id,
+      userId: henrik.user_id,
+      actorId: henrik.user_id,
+      assignedAt: addDays(now, -30),
+    });
+    await createAssignment({
+      taskId: t5_overdue.task_id,
+      userId: rasmus.user_id,
+      actorId: henrik.user_id,
+      assignedAt: addDays(now, -30),
+    });
+
+    // Mark some tasks done (credit ONLY to the completer)
+    // Viktor completes t2 this week
+    await markDone({
+      taskId: t2.task_id,
+      completerId: viktor.user_id,
+      completedAt: atTime(addDays(weekStart, 2), 16, 30),
+    });
+
+    // Tommy completes t1 this week
+    await markDone({
+      taskId: t1.task_id,
+      completerId: tommy.user_id,
+      completedAt: atTime(addDays(weekStart, 3), 15, 15),
+    });
+
+    // Henrik completes overdue report today (still overdue historically, but DONE now)
+    await markDone({
+      taskId: t5_overdue.task_id,
+      completerId: henrik.user_id,
+      completedAt: atTime(now, 10, 5),
+    });
+
+    // Comments
+    await addComment({
+      taskId: t1.task_id,
       userId: henrik.user_id,
       message: "Husk at tage billeder før/efter ved kritiske samlinger.",
     });
-
-    await createComment({
-      taskId: equipmentTask.task_id,
+    await addComment({
+      taskId: t2.task_id,
       userId: tommy.user_id,
       message: "Der mangler handsker i størrelse L.",
     });
-
-    await createComment({
-      taskId: gravelTask.task_id,
+    await addComment({
+      taskId: t4.task_id,
       userId: viktor.user_id,
-      message: "Skal vi bestille en ekstra levering stabilgrus i morgen?",
+      message: "Skal vi bestille ekstra stabilgrus til næste uge?",
     });
 
-    await createComment({
-      taskId: foundationParent.task_id,
-      userId: rasmus.user_id,
-      message: "Forskalling ser klar ud — mangler kun sidste afstivning.",
-    });
-
-    console.log("✅ Seed complete (expanded):");
-    console.log(`- Users: 6`);
-    console.log(`- Tasks: 4 original + extra + subtasks`);
-    console.log(`- Pipe task progress: ${pipeTotal}/100 m`);
-    console.log(`- Gravel task progress: ${gravelTotal}/2.5 km`);
-    console.log(`- Pump task progress: ${pumpTotal}/1200 L`);
-    console.log(`- Subtask (støbning) progress: ${hoursTotal}/6 hours`);
+    console.log("✅ Seed complete:");
+    console.log("Users:");
+    console.log("- henrik@andreassen.dk / Password123!");
+    console.log("- tommy@andreassen.dk / Password123!");
+    console.log("- christian@andreassen.dk / Password123!");
+    console.log("- sebastian@andreassen.dk / Password123!");
+    console.log("- rasmus@andreassen.dk / 123");
+    console.log("- viktor@andreassen.dk / 123");
   });
 }
 

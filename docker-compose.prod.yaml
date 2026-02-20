@@ -1,28 +1,28 @@
 services:
   backend:
-    build: .
-    command: bun run dev #Only for development
+    image: ghcr.io/andreassen-a-s/andressen-tasks_be:latest
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 9000
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      FRONTEND_URL: ${FRONTEND_URL}
     ports:
       - "9000:9000"
-    volumes:
-      - ./:/app
-      - /app/node_modules
     depends_on:
       db:
         condition: service_healthy
-    env_file:
-      - .env
 
   db:
-    image: mysql:latest
-    restart: always
+    image: mysql:8.0
+    restart: unless-stopped
     environment:
       MYSQL_DATABASE: ${DB_DATABASE}
       MYSQL_USER: ${DB_USER}
       MYSQL_PASSWORD: ${DB_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-    ports:
-      - "3306:3306"
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:

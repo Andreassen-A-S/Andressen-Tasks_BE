@@ -1,15 +1,8 @@
 import type { Request, Response } from "express";
 import * as taskEventRepo from "../repositories/taskEventRepository";
 
-interface TaskEventParams {
-  taskId: string;
-}
-
-export async function listTaskEvents(
-  req: Request<TaskEventParams>,
-  res: Response,
-) {
-  const { taskId } = req.params;
+export async function listTaskEvents(req: Request, res: Response) {
+  const taskId = req.params.taskId as string;
   try {
     const events = await taskEventRepo.getTaskEventsByTaskId(taskId);
     res.json({ success: true, data: events });
