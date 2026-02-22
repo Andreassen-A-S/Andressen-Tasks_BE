@@ -1,5 +1,7 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import os from "os";
 
 import taskRoutes from "./routes/task.routes";
@@ -19,12 +21,31 @@ if (!process.env.JWT_SECRET) {
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 
+// Trust one hop of proxy headers so req.ip reflects the real client IP
+// when deployed behind a reverse proxy / load balancer (e.g. nginx, AWS ALB).
+// Only enabled in production to avoid spoofing risks in local dev.
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 const allowedOrigins = (
   process.env.FRONTEND_URL ?? "http://localhost:9000,http://127.0.0.1:9000"
 )
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+
+app.use(helmet());
+
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 300, // 300 requests per IP per window across all endpoints
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, error: "Too many requests, please try again later." },
+  }),
+);
 
 app.use(
   cors({
