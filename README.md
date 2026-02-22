@@ -1,4 +1,4 @@
-# Andressen-Tasks_BE
+# Andreassen-Tasks_BE
 
 This is a backend service for managing tasks, built with the Bun runtime and Prisma ORM connected to a MySQL database.
 

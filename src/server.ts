@@ -1,5 +1,7 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import os from "os";
 
 import taskRoutes from "./routes/task.routes";
@@ -25,6 +27,18 @@ const allowedOrigins = (
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+
+app.use(helmet());
+
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 300, // 300 requests per IP per window across all endpoints
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, error: "Too many requests, please try again later." },
+  }),
+);
 
 app.use(
   cors({
