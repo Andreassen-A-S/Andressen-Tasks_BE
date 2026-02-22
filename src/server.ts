@@ -21,6 +21,13 @@ if (!process.env.JWT_SECRET) {
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 
+// Trust one hop of proxy headers so req.ip reflects the real client IP
+// when deployed behind a reverse proxy / load balancer (e.g. nginx, AWS ALB).
+// Only enabled in production to avoid spoofing risks in local dev.
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 const allowedOrigins = (
   process.env.FRONTEND_URL ?? "http://localhost:9000,http://127.0.0.1:9000"
 )
