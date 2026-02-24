@@ -43,7 +43,10 @@ app.use(
     max: 300, // 300 requests per IP per window across all endpoints
     standardHeaders: true,
     legacyHeaders: false,
-    message: { success: false, error: "Too many requests, please try again later." },
+    message: {
+      success: false,
+      error: "Too many requests, please try again later.",
+    },
   }),
 );
 
