@@ -13,8 +13,13 @@ datasource db {
 
 enum TaskUnit {
   NONE
-  HOURS
   METERS
+  M2
+  M3
+  LOADS
+  PLUGS
+  HOURS
+  TONS
   KILOMETERS
   LITERS
   KILOGRAMS

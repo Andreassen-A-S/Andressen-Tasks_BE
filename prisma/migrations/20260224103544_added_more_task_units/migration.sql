@@ -1,0 +1,8 @@
+-- AlterTable
+ALTER TABLE `recurring_task_templates` MODIFY `unit` ENUM('NONE', 'METERS', 'M2', 'M3', 'LOADS', 'PLUGS', 'HOURS', 'TONS', 'KILOMETERS', 'LITERS', 'KILOGRAMS') NOT NULL DEFAULT 'NONE';
+
+-- AlterTable
+ALTER TABLE `task_progress_logs` MODIFY `unit` ENUM('NONE', 'METERS', 'M2', 'M3', 'LOADS', 'PLUGS', 'HOURS', 'TONS', 'KILOMETERS', 'LITERS', 'KILOGRAMS') NULL;
+
+-- AlterTable
+ALTER TABLE `tasks` MODIFY `unit` ENUM('NONE', 'METERS', 'M2', 'M3', 'LOADS', 'PLUGS', 'HOURS', 'TONS', 'KILOMETERS', 'LITERS', 'KILOGRAMS') NOT NULL DEFAULT 'NONE';
