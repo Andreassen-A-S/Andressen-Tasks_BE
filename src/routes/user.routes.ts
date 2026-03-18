@@ -6,6 +6,7 @@ const router = Router();
 
 router.get("/", authenticateToken, userController.listUsers);
 router.post("/", authenticateToken, userController.createUser);
+router.post("/push-token", authenticateToken, userController.registerPushToken);
 router.get("/:id", authenticateToken, userController.getUser);
 router.patch("/:id", authenticateToken, userController.updateUser);
 router.delete("/:id", authenticateToken, userController.deleteUser);

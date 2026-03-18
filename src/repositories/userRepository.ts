@@ -53,3 +53,38 @@ export async function deleteUser(id: string): Promise<void> {
     where: { user_id: id },
   });
 }
+
+export async function updatePushToken(
+  userId: string,
+  pushToken: string | null,
+): Promise<void> {
+  if (pushToken) {
+    // Ensure this token is only associated with one user at a time
+    await prisma.user.updateMany({
+      where: { push_token: pushToken, user_id: { not: userId } },
+      data: { push_token: null },
+    });
+  }
+  await prisma.user.update({
+    where: { user_id: userId },
+    data: { push_token: pushToken },
+  });
+}
+
+export async function getPushToken(userId: string): Promise<string | null> {
+  const user = await prisma.user.findUnique({
+    where: { user_id: userId },
+    select: { push_token: true },
+  });
+  return user?.push_token ?? null;
+}
+
+export async function getAdminPushTokens(): Promise<
+  { user_id: string; push_token: string }[]
+> {
+  const admins = await prisma.user.findMany({
+    where: { role: "ADMIN", push_token: { not: null } },
+    select: { user_id: true, push_token: true },
+  });
+  return admins.map((a) => ({ user_id: a.user_id, push_token: a.push_token! }));
+}

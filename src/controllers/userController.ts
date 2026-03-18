@@ -67,6 +67,23 @@ export async function updateUser(req: Request, res: Response) {
   }
 }
 
+export async function registerPushToken(req: Request, res: Response) {
+  const actor = getAuthUser(req);
+  if (!actor) {
+    return res.status(401).json({ success: false, error: "Unauthorized" });
+  }
+
+  const { push_token } = req.body as { push_token: string | null };
+
+  try {
+    await userRepo.updatePushToken(actor.user_id, push_token ?? null);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error in registerPushToken:", error);
+    res.status(500).json({ success: false, error: "Failed to update push token" });
+  }
+}
+
 export async function deleteUser(req: Request, res: Response) {
   const actor = getAuthUser(req);
   if (actor?.role !== UserRole.ADMIN) {

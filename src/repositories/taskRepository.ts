@@ -324,6 +324,95 @@ export async function deleteTask(id: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Scheduler queries
+// ---------------------------------------------------------------------------
+
+export async function getTodayTasksPerUser(
+  date: Date,
+): Promise<{ user_id: string; push_token: string; tasks: Task[] }[]> {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(date);
+  end.setHours(23, 59, 59, 999);
+
+  const assignments = await prisma.taskAssignment.findMany({
+    where: {
+      task: {
+        scheduled_date: { gte: start, lte: end },
+        status: { notIn: [TaskStatus.DONE, TaskStatus.REJECTED, TaskStatus.ARCHIVED] },
+      },
+      user: { push_token: { not: null } },
+    },
+    include: {
+      task: true,
+      user: { select: { user_id: true, push_token: true } },
+    },
+  });
+
+  const byUser = new Map<string, { push_token: string; tasks: Task[] }>();
+  for (const a of assignments) {
+    const entry = byUser.get(a.user_id);
+    if (entry) {
+      entry.tasks.push(a.task);
+    } else {
+      byUser.set(a.user_id, { push_token: a.user.push_token!, tasks: [a.task] });
+    }
+  }
+
+  return Array.from(byUser.entries()).map(([user_id, { push_token, tasks }]) => ({
+    user_id,
+    push_token,
+    tasks,
+  }));
+}
+
+export async function getUsersWithNoActivityToday(
+  date: Date,
+): Promise<{ user_id: string; push_token: string }[]> {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(date);
+  end.setHours(23, 59, 59, 999);
+
+  const activeAssignments = await prisma.taskAssignment.findMany({
+    where: {
+      task: {
+        status: { in: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS] },
+        scheduled_date: { gte: start, lte: end },
+      },
+      user: { push_token: { not: null } },
+    },
+    select: {
+      user_id: true,
+      user: { select: { push_token: true } },
+      progressLogs: {
+        where: { created_at: { gte: start, lte: end } },
+        select: { progress_id: true },
+        take: 1,
+      },
+    },
+  });
+
+  // Per user: track whether they have ANY activity today across all assignments
+  const userMap = new Map<string, { push_token: string; hasActivity: boolean }>();
+  for (const a of activeAssignments) {
+    const hasActivity = a.progressLogs.length > 0;
+    const existing = userMap.get(a.user_id);
+    if (!existing) {
+      userMap.set(a.user_id, { push_token: a.user.push_token!, hasActivity });
+    } else if (hasActivity) {
+      existing.hasActivity = true;
+    }
+  }
+
+  const result: { user_id: string; push_token: string }[] = [];
+  for (const [user_id, { push_token, hasActivity }] of userMap.entries()) {
+    if (!hasActivity) result.push({ user_id, push_token });
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Progress logging
 // ---------------------------------------------------------------------------
 

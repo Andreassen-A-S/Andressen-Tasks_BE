@@ -12,6 +12,7 @@ import commentRoutes from "./routes/comment.routes";
 import taskEventRoutes from "./routes/taskEvent.routes";
 import templateRoutes from "./routes/template.routes";
 import statRoutes from "./routes/stat.routes";
+import { initScheduler } from "./services/schedulerService";
 
 if (!process.env.JWT_SECRET) {
   console.error("FATAL: JWT_SECRET environment variable is not set");
@@ -82,6 +83,8 @@ app.use((req, res, next) => {
 app.get("/api/status", (_req, res) => {
   res.status(200).send("OK");
 });
+
+initScheduler();
 
 // Routes
 app.use("/api/tasks", taskRoutes);
