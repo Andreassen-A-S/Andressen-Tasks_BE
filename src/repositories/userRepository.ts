@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma";
+import { Prisma } from "../generated/prisma/client";
 import type { User } from "../generated/prisma/client";
 import { hashPassword } from "../helper/helpers";
 import {
@@ -58,18 +59,39 @@ export async function updatePushToken(
   userId: string,
   pushToken: string | null,
 ): Promise<void> {
-  await prisma.$transaction(async (tx) => {
-    if (pushToken) {
-      await tx.user.updateMany({
-        where: { push_token: pushToken, user_id: { not: userId } },
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (pushToken) {
+        await tx.user.updateMany({
+          where: { push_token: pushToken, user_id: { not: userId } },
+          data: { push_token: null },
+        });
+      }
+      await tx.user.update({
+        where: { user_id: userId },
+        data: { push_token: pushToken },
+      });
+    });
+  } catch (err) {
+    // A concurrent registration claimed the same token between our updateMany
+    // and update. Clear the conflict and retry once — the unique constraint
+    // guarantees only one row can hold the token after this.
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2002"
+    ) {
+      await prisma.user.updateMany({
+        where: { push_token: pushToken },
         data: { push_token: null },
       });
+      await prisma.user.update({
+        where: { user_id: userId },
+        data: { push_token: pushToken },
+      });
+      return;
     }
-    await tx.user.update({
-      where: { user_id: userId },
-      data: { push_token: pushToken },
-    });
-  });
+    throw err;
+  }
 }
 
 export async function getPushToken(userId: string): Promise<string | null> {
