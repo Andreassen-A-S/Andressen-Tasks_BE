@@ -84,6 +84,7 @@ model User {
   password        String
   role            UserRole         @default(USER)
   position        String?
+  push_token      String?          @unique
   created_at      DateTime         @default(now())
   updated_at      DateTime         @updatedAt
 

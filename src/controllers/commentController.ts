@@ -3,6 +3,8 @@ import { TaskEventType, UserRole } from "../generated/prisma/client";
 import * as commentRepo from "../repositories/commentRepository";
 import { prisma } from "../db/prisma";
 import * as taskEventRepo from "../repositories/taskEventRepository";
+import * as userRepo from "../repositories/userRepository";
+import { sendPushNotification } from "../services/notificationService";
 
 export async function listTaskComments(req: Request, res: Response) {
   try {
@@ -66,12 +68,14 @@ export async function createComment(req: Request, res: Response) {
       });
     }
 
-    // Verify task exists and user has access
+    // Verify task exists and user has access (include all assignments for notification)
     const task = await prisma.task.findUnique({
       where: { task_id: taskId },
       include: {
         assignments: {
-          where: { user_id: userId },
+          include: {
+            user: { select: { user_id: true, role: true, push_token: true } },
+          },
         },
       },
     });
@@ -82,7 +86,7 @@ export async function createComment(req: Request, res: Response) {
 
     // Check if user is creator, assigned to task, or admin
     const isCreator = task.created_by === userId;
-    const isAssigned = task.assignments.length > 0;
+    const isAssigned = task.assignments.some((a) => a.user_id === userId);
     const isAdmin = req.user?.role === UserRole.ADMIN;
 
     if (!isCreator && !isAssigned && !isAdmin) {
@@ -105,6 +109,33 @@ export async function createComment(req: Request, res: Response) {
       before_json: {},
       after_json: comment,
     });
+
+    // Notify task assignees (skip the commenter and admins — admins get their own notification)
+    for (const assignment of task.assignments) {
+      if (assignment.user_id === userId) continue;
+      if (assignment.user.role === UserRole.ADMIN) continue;
+      if (!assignment.user.push_token) continue;
+      void sendPushNotification(
+        assignment.user.push_token,
+        "Ny kommentar på din opgave",
+        task.title,
+        { taskId: task.task_id },
+        assignment.user_id,
+      );
+    }
+
+    // Notify admins (skip if the commenter is the admin)
+    const admins = await userRepo.getAdminPushTokens();
+    for (const { user_id: adminId, push_token } of admins) {
+      if (adminId === userId) continue;
+      void sendPushNotification(
+        push_token,
+        "Ny kommentar",
+        task.title,
+        { taskId: task.task_id },
+        adminId,
+      );
+    }
 
     res.status(201).json({ success: true, data: comment });
   } catch (error) {

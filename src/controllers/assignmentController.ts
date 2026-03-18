@@ -4,6 +4,8 @@ import type { CreateTaskAssignmentInput } from "../types/assignment";
 import type { TaskAssignment } from "../generated/prisma/client";
 import * as taskEventRepo from "../repositories/taskEventRepository";
 import { TaskEventType } from "../generated/prisma/client";
+import * as userRepo from "../repositories/userRepository";
+import { sendPushNotification } from "../services/notificationService";
 
 // interface AssignmentParams {
 //   id: string;
@@ -49,6 +51,19 @@ export async function assignTask(req: Request, res: Response) {
       before_json: {},
       after_json: assignment,
     });
+
+    // Send push notification to assigned user
+    const pushToken = await userRepo.getPushToken(body.user_id);
+    if (pushToken) {
+      const taskTitle = (assignment as { task?: { title: string } }).task?.title ?? "En opgave";
+      void sendPushNotification(
+        pushToken,
+        "Ny opgave tildelt",
+        `Du er blevet tildelt: ${taskTitle}`,
+        { taskId: assignment.task_id },
+        body.user_id,
+      );
+    }
 
     res.status(201).json({ success: true, data: assignment });
   } catch (error) {

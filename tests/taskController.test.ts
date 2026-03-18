@@ -8,12 +8,19 @@ import {
 import * as taskController from "../src/controllers/taskController";
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
 import * as taskRepo from "../src/repositories/taskRepository";
+import * as userRepo from "../src/repositories/userRepository";
 import {
   AssignmentNotFoundError,
   TaskAlreadyDoneError,
   TaskNotFoundError,
   TaskNotProgressableError,
 } from "../src/repositories/taskRepository";
+
+const sendPushNotificationMock = mock<(...args: any[]) => Promise<void>>();
+
+mock.module("../src/services/notificationService", () => ({
+  sendPushNotification: sendPushNotificationMock,
+}));
 
 type MockResponse = Response & {
   statusCode?: number;
@@ -48,6 +55,7 @@ function createRequest(overrides: Record<string, any> = {}): Request {
 
 afterEach(() => {
   mock.restore();
+  sendPushNotificationMock.mockReset();
 });
 
 describe("taskController.listTasks", () => {
@@ -164,6 +172,7 @@ describe("taskController.createTask", () => {
     spyOn(taskRepo, "createTaskWithAssignments").mockResolvedValue(
       task as never,
     );
+    spyOn(userRepo, "getPushTokensForUsers").mockResolvedValue(new Map());
     const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue(
       {} as never,
     );
@@ -272,6 +281,7 @@ describe("taskController.updateTask", () => {
     spyOn(taskRepo, "updateTaskWithAssignments").mockResolvedValue(
       updatedTask as never,
     );
+    spyOn(userRepo, "getPushTokensForUsers").mockResolvedValue(new Map());
     const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue(
       {} as never,
     );
@@ -341,6 +351,98 @@ describe("taskController.updateTask", () => {
       success: false,
       error: "Task is already marked as done and cannot be set to done again.",
     });
+  });
+
+  test("notifies admins when status transitions to DONE (light path)", async () => {
+    const oldTask = { task_id: "t1", title: "My Task", status: TaskStatus.IN_PROGRESS };
+    const updatedTask = { task_id: "t1", title: "My Task", status: TaskStatus.DONE };
+    spyOn(taskRepo, "getTaskById").mockResolvedValue(oldTask as never);
+    spyOn(taskRepo, "updateTask").mockResolvedValue(updatedTask as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
+      { user_id: "a1", push_token: "token-a1" },
+    ]);
+    sendPushNotificationMock.mockResolvedValue(undefined);
+
+    await taskController.updateTask(
+      createRequest({
+        user: { user_id: "u1" },
+        params: { id: "t1" } as Request["params"],
+        body: { status: TaskStatus.DONE },
+      }),
+      createMockResponse(),
+    );
+
+    expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
+    expect(sendPushNotificationMock).toHaveBeenCalledWith(
+      "token-a1",
+      "Opgave afsluttet",
+      "My Task",
+      { taskId: "t1" },
+      "a1",
+    );
+  });
+
+  test("does not notify admins when status does not change to DONE (light path)", async () => {
+    const oldTask = { task_id: "t1", title: "My Task", status: TaskStatus.PENDING };
+    const updatedTask = { task_id: "t1", title: "My Task", status: TaskStatus.IN_PROGRESS };
+    spyOn(taskRepo, "getTaskById").mockResolvedValue(oldTask as never);
+    spyOn(taskRepo, "updateTask").mockResolvedValue(updatedTask as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    const adminSpy = spyOn(userRepo, "getAdminPushTokens");
+
+    await taskController.updateTask(
+      createRequest({
+        user: { user_id: "u1" },
+        params: { id: "t1" } as Request["params"],
+        body: { status: TaskStatus.IN_PROGRESS },
+      }),
+      createMockResponse(),
+    );
+
+    expect(adminSpy).not.toHaveBeenCalled();
+    expect(sendPushNotificationMock).not.toHaveBeenCalled();
+  });
+
+  test("notifies admins when status transitions to DONE (heavy path)", async () => {
+    const oldTask = {
+      task_id: "t1",
+      title: "My Task",
+      status: TaskStatus.IN_PROGRESS,
+      assignments: [{ assignment_id: "a1", user_id: "u1" }],
+    };
+    const updatedTask = {
+      task_id: "t1",
+      title: "My Task",
+      status: TaskStatus.DONE,
+      assignments: [{ assignment_id: "a1", user_id: "u1" }],
+    };
+    spyOn(taskRepo, "getTaskByIdWithAssignments").mockResolvedValue(oldTask as never);
+    spyOn(taskRepo, "updateTaskWithAssignments").mockResolvedValue(updatedTask as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    spyOn(userRepo, "getPushTokensForUsers").mockResolvedValue(new Map());
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
+      { user_id: "a1", push_token: "token-a1" },
+    ]);
+    sendPushNotificationMock.mockResolvedValue(undefined);
+
+    await taskController.updateTask(
+      createRequest({
+        user: { user_id: "u1" },
+        params: { id: "t1" } as Request["params"],
+        body: { assigned_users: ["u1"], status: TaskStatus.DONE },
+      }),
+      createMockResponse(),
+    );
+
+    expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
+    expect(sendPushNotificationMock).toHaveBeenCalledWith(
+      "token-a1",
+      "Opgave afsluttet",
+      "My Task",
+      { taskId: "t1" },
+      "a1",
+    );
   });
 });
 

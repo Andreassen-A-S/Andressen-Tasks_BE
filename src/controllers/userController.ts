@@ -2,6 +2,7 @@ import * as userRepo from "../repositories/userRepository";
 import type { Request, Response } from "express";
 import type { CreateUserInput, UpdateUserInput } from "../types/user";
 import { UserRole } from "../generated/prisma/client";
+import Expo from "expo-server-sdk";
 
 function getAuthUser(req: Request) {
   return req.user as { user_id: string; role: UserRole } | undefined;
@@ -64,6 +65,29 @@ export async function updateUser(req: Request, res: Response) {
       success: false,
       error: "User not found or update failed",
     });
+  }
+}
+
+export async function registerPushToken(req: Request, res: Response) {
+  const actor = getAuthUser(req);
+  if (!actor) {
+    return res.status(401).json({ success: false, error: "Unauthorized" });
+  }
+
+  const { push_token } = req.body;
+
+  if (push_token !== null && push_token !== undefined) {
+    if (typeof push_token !== "string" || !Expo.isExpoPushToken(push_token)) {
+      return res.status(400).json({ success: false, error: "Invalid push token" });
+    }
+  }
+
+  try {
+    await userRepo.updatePushToken(actor.user_id, push_token ?? null);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error in registerPushToken:", error);
+    res.status(500).json({ success: false, error: "Failed to update push token" });
   }
 }
 

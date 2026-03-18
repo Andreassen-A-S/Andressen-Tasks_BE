@@ -49,6 +49,9 @@ export async function assignTaskToUser(
 
   return prisma.taskAssignment.create({
     data,
+    include: {
+      task: { select: { task_id: true, title: true } },
+    },
   });
 }
 

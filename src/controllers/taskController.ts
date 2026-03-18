@@ -2,6 +2,8 @@ import type { Request, Response } from "express";
 import { TaskEventType } from "../generated/prisma/client";
 import * as taskEventRepo from "../repositories/taskEventRepository";
 import * as taskRepo from "../repositories/taskRepository";
+import * as userRepo from "../repositories/userRepository";
+import { sendPushNotification } from "../services/notificationService";
 import {
   AssignmentNotFoundError,
   TaskAlreadyDoneError,
@@ -140,6 +142,20 @@ export async function createTask(req: Request, res: Response) {
           }),
         ),
       );
+
+      // Notify assigned users
+      const tokenMap = await userRepo.getPushTokensForUsers(
+        task.assignments.map((a) => a.user_id),
+      );
+      for (const [userId, pushToken] of tokenMap) {
+        void sendPushNotification(
+          pushToken,
+          "Ny opgave tildelt",
+          `Du er blevet tildelt: ${task.title}`,
+          { taskId: task.task_id },
+          userId,
+        );
+      }
     }
 
     return res.status(201).json({ success: true, data: task });
@@ -195,6 +211,15 @@ export async function updateTask(req: Request, res: Response) {
           before_json: { status: oldTask.status },
           after_json: { status: updatedTask.status },
         });
+
+        if (updatedTask.status === "DONE") {
+          const admins = await userRepo.getAdminPushTokens();
+          for (const { user_id, push_token } of admins) {
+            void sendPushNotification(push_token, "Opgave afsluttet", updatedTask.title, {
+              taskId: updatedTask.task_id,
+            }, user_id);
+          }
+        }
       }
 
       return res.json({ success: true, data: updatedTask });
@@ -275,6 +300,29 @@ export async function updateTask(req: Request, res: Response) {
         before_json: { status: oldTask.status },
         after_json: { status: updatedTask.status },
       });
+
+      if (updatedTask.status === "DONE") {
+        const admins = await userRepo.getAdminPushTokens();
+        for (const { user_id, push_token } of admins) {
+          void sendPushNotification(push_token, "Opgave afsluttet", updatedTask.title, {
+            taskId: updatedTask.task_id,
+          }, user_id);
+        }
+      }
+    }
+
+    // Notify newly added assignees
+    const tokenMap = await userRepo.getPushTokensForUsers(
+      added.map((a) => a.user_id),
+    );
+    for (const [userId, pushToken] of tokenMap) {
+      void sendPushNotification(
+        pushToken,
+        "Ny opgave tildelt",
+        `Du er blevet tildelt: ${updatedTask.title}`,
+        { taskId: updatedTask.task_id },
+        userId,
+      );
     }
 
     return res.json({ success: true, data: updatedTask });
