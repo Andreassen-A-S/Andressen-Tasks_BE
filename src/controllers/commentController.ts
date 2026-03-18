@@ -115,29 +115,25 @@ export async function createComment(req: Request, res: Response) {
       if (assignment.user_id === userId) continue;
       if (assignment.user.role === UserRole.ADMIN) continue;
       if (!assignment.user.push_token) continue;
-      sendPushNotification(
+      void sendPushNotification(
         assignment.user.push_token,
         "Ny kommentar på din opgave",
         task.title,
         { taskId: task.task_id },
         assignment.user_id,
-      ).catch((err) => console.error("Comment notification failed:", err));
+      );
     }
 
     // Notify admins (skip if the commenter is the admin)
     const admins = await userRepo.getAdminPushTokens();
     for (const { user_id: adminId, push_token } of admins) {
       if (adminId === userId) continue;
-      sendPushNotification(
+      void sendPushNotification(
         push_token,
         "Ny kommentar",
         task.title,
-        {
-          taskId: task.task_id,
-        },
+        { taskId: task.task_id },
         adminId,
-      ).catch((err) =>
-        console.error("Comment admin notification failed:", err),
       );
     }
 

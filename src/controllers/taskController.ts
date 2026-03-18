@@ -144,17 +144,17 @@ export async function createTask(req: Request, res: Response) {
       );
 
       // Notify assigned users
-      for (const assignment of task.assignments) {
-        const pushToken = await userRepo.getPushToken(assignment.user_id);
-        if (pushToken) {
-          sendPushNotification(
-            pushToken,
-            "Ny opgave tildelt",
-            `Du er blevet tildelt: ${task.title}`,
-            { taskId: task.task_id },
-            assignment.user_id,
-          ).catch((err) => console.error("Assignment notification failed:", err));
-        }
+      const tokenMap = await userRepo.getPushTokensForUsers(
+        task.assignments.map((a) => a.user_id),
+      );
+      for (const [userId, pushToken] of tokenMap) {
+        void sendPushNotification(
+          pushToken,
+          "Ny opgave tildelt",
+          `Du er blevet tildelt: ${task.title}`,
+          { taskId: task.task_id },
+          userId,
+        );
       }
     }
 
@@ -215,9 +215,9 @@ export async function updateTask(req: Request, res: Response) {
         if (updatedTask.status === "DONE") {
           const admins = await userRepo.getAdminPushTokens();
           for (const { user_id, push_token } of admins) {
-            sendPushNotification(push_token, "Opgave afsluttet", updatedTask.title, {
+            void sendPushNotification(push_token, "Opgave afsluttet", updatedTask.title, {
               taskId: updatedTask.task_id,
-            }, user_id).catch((err) => console.error("DONE notification failed:", err));
+            }, user_id);
           }
         }
       }
@@ -304,25 +304,25 @@ export async function updateTask(req: Request, res: Response) {
       if (updatedTask.status === "DONE") {
         const admins = await userRepo.getAdminPushTokens();
         for (const { user_id, push_token } of admins) {
-          sendPushNotification(push_token, "Opgave afsluttet", updatedTask.title, {
+          void sendPushNotification(push_token, "Opgave afsluttet", updatedTask.title, {
             taskId: updatedTask.task_id,
-          }, user_id).catch((err) => console.error("DONE notification failed:", err));
+          }, user_id);
         }
       }
     }
 
     // Notify newly added assignees
-    for (const assignment of added) {
-      const pushToken = await userRepo.getPushToken(assignment.user_id);
-      if (pushToken) {
-        sendPushNotification(
-          pushToken,
-          "Ny opgave tildelt",
-          `Du er blevet tildelt: ${updatedTask.title}`,
-          { taskId: updatedTask.task_id },
-          assignment.user_id,
-        ).catch((err) => console.error("Assignment notification failed:", err));
-      }
+    const tokenMap = await userRepo.getPushTokensForUsers(
+      added.map((a) => a.user_id),
+    );
+    for (const [userId, pushToken] of tokenMap) {
+      void sendPushNotification(
+        pushToken,
+        "Ny opgave tildelt",
+        `Du er blevet tildelt: ${updatedTask.title}`,
+        { taskId: updatedTask.task_id },
+        userId,
+      );
     }
 
     return res.json({ success: true, data: updatedTask });

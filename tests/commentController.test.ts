@@ -6,6 +6,7 @@ import * as taskEventRepo from "../src/repositories/taskEventRepository";
 import * as userRepo from "../src/repositories/userRepository";
 
 const findUniqueMock = mock<(...args: any[]) => Promise<Task | null>>();
+const sendPushNotificationMock = mock<(...args: any[]) => Promise<void>>();
 
 mock.module("../src/db/prisma", () => ({
   prisma: {
@@ -13,6 +14,10 @@ mock.module("../src/db/prisma", () => ({
       findUnique: findUniqueMock,
     },
   },
+}));
+
+mock.module("../src/services/notificationService", () => ({
+  sendPushNotification: sendPushNotificationMock,
 }));
 
 const commentController = await import("../src/controllers/commentController");
@@ -48,6 +53,7 @@ function createRequest(overrides: Record<string, any> = {}): Request {
 
 afterEach(() => {
   mock.restore();
+  sendPushNotificationMock.mockReset();
 });
 
 describe("commentController.listTaskComments", () => {
@@ -101,11 +107,14 @@ describe("commentController.createComment", () => {
 
   test("creates comment and logs event", async () => {
     findUniqueMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
       created_by: "u1",
       assignments: [],
     } as any);
 
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
+    sendPushNotificationMock.mockResolvedValue(undefined);
 
     const createSpy = spyOn(commentRepo, "createComment").mockResolvedValue({
       comment_id: "c1",
@@ -133,6 +142,152 @@ describe("commentController.createComment", () => {
     });
     expect(eventSpy).toHaveBeenCalledTimes(1);
     expect(res.statusCode).toBe(201);
+  });
+});
+
+describe("commentController.createComment — notification routing", () => {
+  /** Stubs required for every createComment call to reach the notification logic. */
+  function stubCommentInfra() {
+    spyOn(commentRepo, "createComment").mockResolvedValue({
+      comment_id: "c1",
+      task_id: "t1",
+      user_id: "u1",
+      message: "hello",
+    } as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    sendPushNotificationMock.mockResolvedValue(undefined);
+  }
+
+  test("notifies non-commenter, non-admin assignee", async () => {
+    stubCommentInfra();
+    findUniqueMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
+      created_by: "u1",
+      assignments: [
+        { user_id: "u1", user: { user_id: "u1", role: UserRole.USER, push_token: "token-u1" } },
+        { user_id: "u2", user: { user_id: "u2", role: UserRole.USER, push_token: "token-u2" } },
+      ],
+    } as any);
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
+
+    await commentController.createComment(
+      createRequest({ params: { taskId: "t1" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
+      createMockResponse(),
+    );
+
+    expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
+    expect(sendPushNotificationMock).toHaveBeenCalledWith(
+      "token-u2",
+      "Ny kommentar på din opgave",
+      "Test Task",
+      { taskId: "t1" },
+      "u2",
+    );
+  });
+
+  test("skips commenter from assignee notifications", async () => {
+    stubCommentInfra();
+    findUniqueMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
+      created_by: "u1",
+      assignments: [
+        { user_id: "u1", user: { user_id: "u1", role: UserRole.USER, push_token: "token-u1" } },
+      ],
+    } as any);
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
+
+    await commentController.createComment(
+      createRequest({ params: { taskId: "t1" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
+      createMockResponse(),
+    );
+
+    expect(sendPushNotificationMock).not.toHaveBeenCalled();
+  });
+
+  test("skips admin-role assignees from the assignee loop (they get a separate admin notification instead)", async () => {
+    stubCommentInfra();
+    findUniqueMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
+      created_by: "u1",
+      assignments: [
+        { user_id: "a1", user: { user_id: "a1", role: UserRole.ADMIN, push_token: "token-a1" } },
+      ],
+    } as any);
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
+      { user_id: "a1", push_token: "token-a1" },
+    ]);
+
+    await commentController.createComment(
+      createRequest({ params: { taskId: "t1" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
+      createMockResponse(),
+    );
+
+    expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
+    expect(sendPushNotificationMock).toHaveBeenCalledWith(
+      "token-a1",
+      "Ny kommentar",       // admin title, not "Ny kommentar på din opgave"
+      "Test Task",
+      { taskId: "t1" },
+      "a1",
+    );
+  });
+
+  test("notifies admins separately from assignees", async () => {
+    stubCommentInfra();
+    findUniqueMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
+      created_by: "u1",
+      assignments: [],
+    } as any);
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
+      { user_id: "a1", push_token: "token-a1" },
+    ]);
+
+    await commentController.createComment(
+      createRequest({ params: { taskId: "t1" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
+      createMockResponse(),
+    );
+
+    expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
+    expect(sendPushNotificationMock).toHaveBeenCalledWith(
+      "token-a1",
+      "Ny kommentar",
+      "Test Task",
+      { taskId: "t1" },
+      "a1",
+    );
+  });
+
+  test("skips commenter from admin notifications when commenter is an admin", async () => {
+    stubCommentInfra();
+    findUniqueMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
+      created_by: "a1",
+      assignments: [],
+    } as any);
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
+      { user_id: "a1", push_token: "token-a1" }, // commenter — must be skipped
+      { user_id: "a2", push_token: "token-a2" },
+    ]);
+
+    await commentController.createComment(
+      createRequest({ params: { taskId: "t1" }, user: { user_id: "a1", role: UserRole.ADMIN }, body: { message: "hello" } }),
+      createMockResponse(),
+    );
+
+    expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
+    expect(sendPushNotificationMock).toHaveBeenCalledWith(
+      "token-a2",
+      "Ny kommentar",
+      "Test Task",
+      { taskId: "t1" },
+      "a2",
+    );
   });
 });
 

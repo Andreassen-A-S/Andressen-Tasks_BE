@@ -2,6 +2,7 @@ import * as userRepo from "../repositories/userRepository";
 import type { Request, Response } from "express";
 import type { CreateUserInput, UpdateUserInput } from "../types/user";
 import { UserRole } from "../generated/prisma/client";
+import Expo from "expo-server-sdk";
 
 function getAuthUser(req: Request) {
   return req.user as { user_id: string; role: UserRole } | undefined;
@@ -73,7 +74,13 @@ export async function registerPushToken(req: Request, res: Response) {
     return res.status(401).json({ success: false, error: "Unauthorized" });
   }
 
-  const { push_token } = req.body as { push_token: string | null };
+  const { push_token } = req.body;
+
+  if (push_token !== null && push_token !== undefined) {
+    if (typeof push_token !== "string" || !Expo.isExpoPushToken(push_token)) {
+      return res.status(400).json({ success: false, error: "Invalid push token" });
+    }
+  }
 
   try {
     await userRepo.updatePushToken(actor.user_id, push_token ?? null);

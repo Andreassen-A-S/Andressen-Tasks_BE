@@ -6,6 +6,12 @@ import { updatePushToken } from "../repositories/userRepository";
 
 const expo = new Expo();
 
+function redactToken(token: string): string {
+  return token.length > 8
+    ? `${token.slice(0, 4)}...${token.slice(-4)}`
+    : "***";
+}
+
 export async function sendPushNotification(
   pushToken: string,
   title: string,
@@ -14,7 +20,9 @@ export async function sendPushNotification(
   userId?: string,
 ): Promise<void> {
   if (!Expo.isExpoPushToken(pushToken)) {
-    console.error(`Invalid Expo push token: ${pushToken}`);
+    console.error(
+      `Invalid Expo push token: ${redactToken(pushToken)}${userId ? ` (userId: ${userId})` : ""}`,
+    );
     return;
   }
 

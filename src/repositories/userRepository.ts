@@ -58,16 +58,17 @@ export async function updatePushToken(
   userId: string,
   pushToken: string | null,
 ): Promise<void> {
-  if (pushToken) {
-    // Ensure this token is only associated with one user at a time
-    await prisma.user.updateMany({
-      where: { push_token: pushToken, user_id: { not: userId } },
-      data: { push_token: null },
+  await prisma.$transaction(async (tx) => {
+    if (pushToken) {
+      await tx.user.updateMany({
+        where: { push_token: pushToken, user_id: { not: userId } },
+        data: { push_token: null },
+      });
+    }
+    await tx.user.update({
+      where: { user_id: userId },
+      data: { push_token: pushToken },
     });
-  }
-  await prisma.user.update({
-    where: { user_id: userId },
-    data: { push_token: pushToken },
   });
 }
 
@@ -77,6 +78,17 @@ export async function getPushToken(userId: string): Promise<string | null> {
     select: { push_token: true },
   });
   return user?.push_token ?? null;
+}
+
+export async function getPushTokensForUsers(
+  userIds: string[],
+): Promise<Map<string, string>> {
+  if (userIds.length === 0) return new Map();
+  const users = await prisma.user.findMany({
+    where: { user_id: { in: userIds }, push_token: { not: null } },
+    select: { user_id: true, push_token: true },
+  });
+  return new Map(users.map((u) => [u.user_id, u.push_token!]));
 }
 
 export async function getAdminPushTokens(): Promise<

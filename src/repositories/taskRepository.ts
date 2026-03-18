@@ -327,18 +327,71 @@ export async function deleteTask(id: string): Promise<void> {
 // Scheduler queries
 // ---------------------------------------------------------------------------
 
+const CPH_TZ = "Europe/Copenhagen";
+
+/**
+ * Returns the UTC offset (in ms) for a given timezone at a specific UTC instant.
+ * Positive for UTC+ zones (e.g. CET = +3_600_000).
+ */
+function getUTCOffsetMs(utcDate: Date, tz: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(utcDate);
+  const get = (type: string) =>
+    Number(parts.find((p) => p.type === type)!.value);
+  let ms =
+    ((get("hour") % 24 - utcDate.getUTCHours()) * 60 +
+      (get("minute") - utcDate.getUTCMinutes())) *
+      60_000 +
+    (get("second") - utcDate.getUTCSeconds()) * 1_000;
+  if (ms > 12 * 3_600_000) ms -= 24 * 3_600_000;
+  if (ms < -12 * 3_600_000) ms += 24 * 3_600_000;
+  return ms;
+}
+
+/**
+ * Returns half-open [start, end) UTC bounds for the calendar day that `date`
+ * falls on in Europe/Copenhagen, correctly handling CET/CEST transitions.
+ *
+ * Exported for unit testing.
+ */
+export function copenhagenDayBounds(date: Date): { start: Date; end: Date } {
+  // Read the calendar date (YYYY-MM-DD) as seen in Copenhagen.
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: CPH_TZ })
+    .format(date)
+    .split("-")
+    .map(Number) as [number, number, number];
+
+  const [year, month, day] = parts;
+
+  // Probe midnight UTC for this date and the next to get the correct offset
+  // at each boundary — necessary for DST transition days where the offset
+  // changes between midnight and the next midnight.
+  const midnightUTC = new Date(Date.UTC(year, month - 1, day));
+  const nextMidnightUTC = new Date(Date.UTC(year, month - 1, day + 1));
+
+  const start = new Date(
+    midnightUTC.getTime() - getUTCOffsetMs(midnightUTC, CPH_TZ),
+  );
+  const end = new Date(
+    nextMidnightUTC.getTime() - getUTCOffsetMs(nextMidnightUTC, CPH_TZ),
+  );
+  return { start, end };
+}
+
 export async function getTodayTasksPerUser(
   date: Date,
 ): Promise<{ user_id: string; push_token: string; tasks: Task[] }[]> {
-  const start = new Date(date);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(date);
-  end.setHours(23, 59, 59, 999);
+  const { start, end } = copenhagenDayBounds(date);
 
   const assignments = await prisma.taskAssignment.findMany({
     where: {
       task: {
-        scheduled_date: { gte: start, lte: end },
+        scheduled_date: { gte: start, lt: end },
         status: { notIn: [TaskStatus.DONE, TaskStatus.REJECTED, TaskStatus.ARCHIVED] },
       },
       user: { push_token: { not: null } },
@@ -369,16 +422,13 @@ export async function getTodayTasksPerUser(
 export async function getUsersWithNoActivityToday(
   date: Date,
 ): Promise<{ user_id: string; push_token: string }[]> {
-  const start = new Date(date);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(date);
-  end.setHours(23, 59, 59, 999);
+  const { start, end } = copenhagenDayBounds(date);
 
   const activeAssignments = await prisma.taskAssignment.findMany({
     where: {
       task: {
         status: { in: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS] },
-        scheduled_date: { gte: start, lte: end },
+        scheduled_date: { gte: start, lt: end },
       },
       user: { push_token: { not: null } },
     },
@@ -386,7 +436,7 @@ export async function getUsersWithNoActivityToday(
       user_id: true,
       user: { select: { push_token: true } },
       progressLogs: {
-        where: { created_at: { gte: start, lte: end } },
+        where: { created_at: { gte: start, lt: end } },
         select: { progress_id: true },
         take: 1,
       },

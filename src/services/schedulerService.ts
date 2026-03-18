@@ -18,13 +18,13 @@ export function initScheduler(): void {
         const groups = await taskRepo.getTodayTasksPerUser(new Date());
         for (const { user_id, push_token, tasks } of groups) {
           const count = tasks.length;
-          sendPushNotification(
+          void sendPushNotification(
             push_token,
             `${count} opgave${count > 1 ? "r" : ""} i dag`,
             "Tryk for at se dagens program",
             { screen: "tasks" },
             user_id,
-          ).catch((err) => console.error("Morning notification failed:", err));
+          );
         }
       } catch (err) {
         console.error("Morning task notification error:", err);
@@ -40,13 +40,13 @@ export function initScheduler(): void {
       try {
         const users = await taskRepo.getUsersWithNoActivityToday(new Date());
         for (const { user_id, push_token } of users) {
-          sendPushNotification(
+          void sendPushNotification(
             push_token,
             "Ingen aktivitet i dag",
             "Husk at logge din fremgang",
             { screen: "tasks" },
             user_id,
-          ).catch((err) => console.error("No-activity notification failed:", err));
+          );
         }
       } catch (err) {
         console.error("No activity notification error:", err);

@@ -56,12 +56,13 @@ export async function assignTask(req: Request, res: Response) {
     const pushToken = await userRepo.getPushToken(body.user_id);
     if (pushToken) {
       const taskTitle = (assignment as { task?: { title: string } }).task?.title ?? "En opgave";
-      sendPushNotification(
+      void sendPushNotification(
         pushToken,
         "Ny opgave tildelt",
         `Du er blevet tildelt: ${taskTitle}`,
         { taskId: assignment.task_id },
-      ).catch(() => {}); // fire and forget
+        body.user_id,
+      );
     }
 
     res.status(201).json({ success: true, data: assignment });
