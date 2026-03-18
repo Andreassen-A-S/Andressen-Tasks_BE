@@ -8,6 +8,7 @@ import {
 import * as taskController from "../src/controllers/taskController";
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
 import * as taskRepo from "../src/repositories/taskRepository";
+import * as userRepo from "../src/repositories/userRepository";
 import {
   AssignmentNotFoundError,
   TaskAlreadyDoneError,
@@ -164,6 +165,7 @@ describe("taskController.createTask", () => {
     spyOn(taskRepo, "createTaskWithAssignments").mockResolvedValue(
       task as never,
     );
+    spyOn(userRepo, "getPushToken").mockResolvedValue(null);
     const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue(
       {} as never,
     );
@@ -272,6 +274,7 @@ describe("taskController.updateTask", () => {
     spyOn(taskRepo, "updateTaskWithAssignments").mockResolvedValue(
       updatedTask as never,
     );
+    spyOn(userRepo, "getPushToken").mockResolvedValue(null);
     const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue(
       {} as never,
     );

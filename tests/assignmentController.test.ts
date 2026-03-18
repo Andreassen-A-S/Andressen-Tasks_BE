@@ -4,6 +4,7 @@ import { TaskEventType } from "../src/generated/prisma/client";
 import * as assignmentController from "../src/controllers/assignmentController";
 import * as assignmentRepo from "../src/repositories/assignmentRepository";
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
+import * as userRepo from "../src/repositories/userRepository";
 
 type MockResponse = Response & {
   statusCode?: number;
@@ -64,6 +65,7 @@ describe("assignmentController.assignTask", () => {
     spyOn(assignmentRepo, "assignTaskToUser").mockResolvedValue(
       assignment as never,
     );
+    spyOn(userRepo, "getPushToken").mockResolvedValue(null);
     const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue(
       {} as never,
     );

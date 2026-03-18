@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { Task, UserRole } from "../src/generated/prisma/client";
 import * as commentRepo from "../src/repositories/commentRepository";
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
+import * as userRepo from "../src/repositories/userRepository";
 
 const findUniqueMock = mock<(...args: any[]) => Promise<Task | null>>();
 
@@ -103,6 +104,8 @@ describe("commentController.createComment", () => {
       created_by: "u1",
       assignments: [],
     } as any);
+
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
 
     const createSpy = spyOn(commentRepo, "createComment").mockResolvedValue({
       comment_id: "c1",
