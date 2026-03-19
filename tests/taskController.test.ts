@@ -542,6 +542,7 @@ describe("taskController.upsertProgressLog", () => {
 
     const updatedTask = {
       task_id: "t1",
+      title: "My Task",
       current_quantity: 5,
       status: TaskStatus.IN_PROGRESS,
     };
@@ -550,10 +551,8 @@ describe("taskController.upsertProgressLog", () => {
       progressLog,
       updatedTask,
     } as never);
-
-    const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue(
-      {} as never,
-    );
+    const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
 
     const req = createRequest({
       user: { user_id: "u1" },
@@ -566,9 +565,7 @@ describe("taskController.upsertProgressLog", () => {
     await taskController.upsertProgressLog(req, res);
 
     expect(eventSpy).toHaveBeenCalledTimes(1);
-    expect(eventSpy.mock.calls[0]?.[0]?.type).toBe(
-      TaskEventType.PROGRESS_LOGGED,
-    );
+    expect(eventSpy.mock.calls[0]?.[0]?.type).toBe(TaskEventType.PROGRESS_LOGGED);
     expect(res.body).toEqual({
       success: true,
       data: {
@@ -579,5 +576,57 @@ describe("taskController.upsertProgressLog", () => {
         },
       },
     });
+  });
+
+  test("notifies admins when progress is logged", async () => {
+    spyOn(taskRepo, "upsertProgressLog").mockResolvedValue({
+      progressLog: { progress_id: "p1", quantity_done: 5 },
+      updatedTask: { task_id: "t1", title: "My Task", current_quantity: 5, status: TaskStatus.IN_PROGRESS },
+    } as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
+      { user_id: "a1", push_token: "token-a1" },
+    ]);
+    sendPushNotificationMock.mockResolvedValue(undefined);
+
+    await taskController.upsertProgressLog(
+      createRequest({
+        user: { user_id: "u1" },
+        params: { id: "t1" } as Request["params"],
+        body: { quantity_done: 5, unit: TaskUnit.METERS },
+      }),
+      createMockResponse(),
+    );
+
+    expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
+    expect(sendPushNotificationMock).toHaveBeenCalledWith(
+      "token-a1",
+      "Fremgang logget",
+      "My Task",
+      { taskId: "t1" },
+      "a1",
+    );
+  });
+
+  test("skips admin notification when the logger is the admin", async () => {
+    spyOn(taskRepo, "upsertProgressLog").mockResolvedValue({
+      progressLog: { progress_id: "p1", quantity_done: 5 },
+      updatedTask: { task_id: "t1", title: "My Task", current_quantity: 5, status: TaskStatus.IN_PROGRESS },
+    } as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
+      { user_id: "a1", push_token: "token-a1" },
+    ]);
+
+    await taskController.upsertProgressLog(
+      createRequest({
+        user: { user_id: "a1" }, // same as admin
+        params: { id: "t1" } as Request["params"],
+        body: { quantity_done: 5, unit: TaskUnit.METERS },
+      }),
+      createMockResponse(),
+    );
+
+    expect(sendPushNotificationMock).not.toHaveBeenCalled();
   });
 });

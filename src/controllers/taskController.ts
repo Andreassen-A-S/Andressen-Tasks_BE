@@ -404,6 +404,24 @@ export async function upsertProgressLog(req: Request, res: Response) {
       after_json: progressLog,
     });
 
+    void (async () => {
+      try {
+        const admins = await userRepo.getAdminPushTokens();
+        for (const { user_id: adminId, push_token } of admins) {
+          if (adminId === userId) continue;
+          void sendPushNotification(
+            push_token,
+            "Fremgang logget",
+            updatedTask.title,
+            { taskId: updatedTask.task_id },
+            adminId,
+          );
+        }
+      } catch (err) {
+        console.error("Failed to notify admins of progress log:", err);
+      }
+    })();
+
     return res.json({
       success: true,
       data: {
