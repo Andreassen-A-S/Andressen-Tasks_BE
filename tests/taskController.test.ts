@@ -551,7 +551,7 @@ describe("taskController.upsertProgressLog", () => {
       progressLog,
       updatedTask,
     } as never);
-    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
 
     const req = createRequest({
@@ -564,6 +564,8 @@ describe("taskController.upsertProgressLog", () => {
 
     await taskController.upsertProgressLog(req, res);
 
+    expect(eventSpy).toHaveBeenCalledTimes(1);
+    expect(eventSpy.mock.calls[0]?.[0]?.type).toBe(TaskEventType.PROGRESS_LOGGED);
     expect(res.body).toEqual({
       success: true,
       data: {
