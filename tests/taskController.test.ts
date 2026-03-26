@@ -131,7 +131,7 @@ describe("taskController.createTask", () => {
 
     const req = createRequest({
       user: { user_id: "u1" },
-      body: { title: "Task" },
+      body: { title: "Task", project_id: "p1" },
     });
     const res = createMockResponse();
 
@@ -142,6 +142,38 @@ describe("taskController.createTask", () => {
     );
     expect(res.statusCode).toBe(201);
   });
+  test("returns 400 when project_id is missing", async () => {
+    const repoSpy = spyOn(taskRepo, "createTaskWithAssignments");
+
+    const req = createRequest({
+      user: { user_id: "u1" },
+      body: { title: "Task", created_by: "u1" },
+    });
+    const res = createMockResponse();
+
+    await taskController.createTask(req, res);
+
+    expect(repoSpy).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "project_id is required" });
+  });
+
+  test("returns 400 when project_id is blank", async () => {
+    const repoSpy = spyOn(taskRepo, "createTaskWithAssignments");
+
+    const req = createRequest({
+      user: { user_id: "u1" },
+      body: { title: "Task", created_by: "u1", project_id: "   " },
+    });
+    const res = createMockResponse();
+
+    await taskController.createTask(req, res);
+
+    expect(repoSpy).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "project_id is required" });
+  });
+
   test("returns 400 when created_by does not match authenticated user", async () => {
     const repoSpy = spyOn(taskRepo, "createTaskWithAssignments");
 
@@ -179,7 +211,7 @@ describe("taskController.createTask", () => {
 
     const req = createRequest({
       user: { user_id: "u1" },
-      body: { created_by: "u1", title: "Task" },
+      body: { created_by: "u1", title: "Task", project_id: "p1" },
     });
     const res = createMockResponse();
 

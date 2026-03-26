@@ -113,6 +113,11 @@ export async function createTemplate(req: Request, res: Response) {
       });
     }
 
+    if (!body.project_id || typeof body.project_id !== "string" || body.project_id.trim() === "") {
+      return res.status(400).json({ success: false, error: "project_id is required" });
+    }
+    const projectId = body.project_id.trim();
+
     // Build the Prisma input
     const templateData: Prisma.RecurringTaskTemplateCreateInput = {
       title: body.title,
@@ -129,6 +134,7 @@ export async function createTemplate(req: Request, res: Response) {
       end_date: body.end_date ? new Date(body.end_date) : undefined,
       is_active: true,
       creator: { connect: { user_id: userId } },
+      project: { connect: { project_id: projectId } },
     };
 
     // Extract assignees from body (if provided)
@@ -256,6 +262,12 @@ export async function updateTemplate(req: Request, res: Response) {
     const updateData: Prisma.RecurringTaskTemplateUpdateInput = {};
 
     if (body.title !== undefined) updateData.title = body.title;
+    if (body.project_id !== undefined) {
+      if (typeof body.project_id !== "string" || body.project_id.trim() === "") {
+        return res.status(400).json({ success: false, error: "project_id must be a non-empty string" });
+      }
+      updateData.project = { connect: { project_id: body.project_id.trim() } };
+    }
     if (body.description !== undefined)
       updateData.description = body.description;
     if (body.priority !== undefined) updateData.priority = body.priority;

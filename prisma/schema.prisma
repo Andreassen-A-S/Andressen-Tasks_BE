@@ -90,6 +90,7 @@ model User {
 
   // Relations
   taskComments    TaskComment[]
+  createdProjects Project[]        @relation("ProjectCreator")
   createdTasks    Task[]           @relation("TaskCreator")
   completedTasks  Task[]           @relation("TaskCompleter")
   taskEvents      TaskEvent[]      @relation("TaskEventActor")
@@ -130,7 +131,8 @@ model RecurringTaskTemplate {
   target_quantity   Float?
   goal_type         TaskGoalType        @default(OPEN)
   created_by        String
-  
+  project_id        String
+
   // Recurrence settings
   frequency         RecurrenceFrequency // DAILY, WEEKLY, MONTHLY, YEARLY
   interval          Int                 @default(1)
@@ -146,10 +148,12 @@ model RecurringTaskTemplate {
 
   // Relations
   creator           User                @relation("RecurringTaskCreator", fields: [created_by], references: [user_id])
+  project           Project             @relation(fields: [project_id], references: [project_id])
   default_assignees RecurringTaskTemplateAssignee[]
   tasks             Task[]              @relation("RecurringTemplateTasks")
 
   @@index([created_by])
+  @@index([project_id])
   @@index([is_active])
   @@index([start_date])
   @@map("recurring_task_templates")
@@ -168,8 +172,26 @@ model RecurringTaskTemplateAssignee {
   @@map("recurring_task_template_assignees")
 }
 
+model Project {
+  project_id  String   @id @default(uuid())
+  name        String
+  description String?  @db.Text
+  color       String?
+  created_by  String
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  creator            User                    @relation("ProjectCreator", fields: [created_by], references: [user_id])
+  tasks              Task[]
+  recurringTemplates RecurringTaskTemplate[]
+
+  @@index([created_by])
+  @@map("projects")
+}
+
 model Task {
   task_id              String       @id @default(uuid())
+  project_id           String
   created_by           String
   title                String
   description          String       @db.Text
@@ -196,6 +218,7 @@ model Task {
   occurrence_date       DateTime?
 
   comments             TaskComment[]
+  project              Project      @relation(fields: [project_id], references: [project_id])
   creator              User         @relation("TaskCreator", fields: [created_by], references: [user_id])
   completer            User?        @relation("TaskCompleter", fields: [completed_by], references: [user_id])
   assignments          TaskAssignment[]
@@ -203,6 +226,7 @@ model Task {
   recurring_template   RecurringTaskTemplate? @relation("RecurringTemplateTasks", fields: [recurring_template_id], references: [id], onDelete: Cascade)  // Add onDelete
 
   @@unique([recurring_template_id, occurrence_date])
+  @@index([project_id])
   @@index([created_by])
   @@index([completed_by])
   @@index([status])

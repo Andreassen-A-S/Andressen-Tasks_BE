@@ -23,6 +23,7 @@ export interface UpdateTaskInput {
   priority?: TaskPriority;
   status?: TaskStatus;
   deadline?: Date;
+  project_id?: string;
   assigned_users?: string[];
   unit?: TaskUnit;
   target_quantity?: number;
@@ -38,6 +39,7 @@ export interface CreateTaskInput {
   parent_task_id?: string;
   scheduled_date: Date;
   created_by: string;
+  project_id: string;
   assigned_users?: string[];
   unit?: TaskUnit;
   target_quantity?: number;

@@ -24,6 +24,7 @@ export async function createSubtask(req: Request, res: Response) {
     const subtask = await taskRepo.createTaskWithAssignments({
       ...subtaskData,
       parent_task_id,
+      project_id: parentTask.project_id,
     });
 
     // SUBTASK_ADDED event on parent
