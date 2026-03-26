@@ -2,7 +2,6 @@ import type { Request, Response } from "express";
 import * as projectRepo from "../repositories/projectRepository";
 import { ProjectNotFoundError } from "../repositories/projectRepository";
 import { getParamId, requireUserId } from "../helper/helpers";
-
 function handleDomainError(error: unknown, res: Response, fallbackMessage: string): Response {
   if (error instanceof ProjectNotFoundError) {
     return res.status(404).json({ success: false, error: error.message });
@@ -58,8 +57,12 @@ export async function updateProject(req: Request, res: Response) {
 
   const { name, description, color } = req.body;
 
+  if (name !== undefined && (typeof name !== "string" || name.trim() === "")) {
+    return res.status(400).json({ success: false, error: "name must be a non-empty string" });
+  }
+
   try {
-    const project = await projectRepo.updateProject(id, { name, description, color });
+    const project = await projectRepo.updateProject(id, { name: name?.trim(), description, color });
     return res.json({ success: true, data: project });
   } catch (error) {
     return handleDomainError(error, res, "Failed to update project");

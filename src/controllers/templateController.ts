@@ -113,7 +113,7 @@ export async function createTemplate(req: Request, res: Response) {
       });
     }
 
-    if (!body.project_id || typeof body.project_id !== "string") {
+    if (!body.project_id || typeof body.project_id !== "string" || body.project_id.trim() === "") {
       return res.status(400).json({ success: false, error: "project_id is required" });
     }
 
@@ -261,8 +261,12 @@ export async function updateTemplate(req: Request, res: Response) {
     const updateData: Prisma.RecurringTaskTemplateUpdateInput = {};
 
     if (body.title !== undefined) updateData.title = body.title;
-    if (body.project_id !== undefined)
+    if (body.project_id !== undefined) {
+      if (typeof body.project_id !== "string" || body.project_id.trim() === "") {
+        return res.status(400).json({ success: false, error: "project_id must be a non-empty string" });
+      }
       updateData.project = { connect: { project_id: body.project_id } };
+    }
     if (body.description !== undefined)
       updateData.description = body.description;
     if (body.priority !== undefined) updateData.priority = body.priority;

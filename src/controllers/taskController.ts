@@ -108,7 +108,7 @@ export async function createTask(req: Request, res: Response) {
       });
     }
 
-    if (!body.project_id || typeof body.project_id !== "string") {
+    if (!body.project_id || typeof body.project_id !== "string" || body.project_id.trim() === "") {
       return res.status(400).json({ success: false, error: "project_id is required" });
     }
 
