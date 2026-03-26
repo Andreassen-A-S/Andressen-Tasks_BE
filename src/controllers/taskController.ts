@@ -112,7 +112,7 @@ export async function createTask(req: Request, res: Response) {
       return res.status(400).json({ success: false, error: "project_id is required" });
     }
 
-    const input: CreateTaskInput = { ...body, created_by: userId };
+    const input: CreateTaskInput = { ...body, created_by: userId, project_id: body.project_id.trim() };
     const task = await taskRepo.createTaskWithAssignments(input);
 
     if (!task) {

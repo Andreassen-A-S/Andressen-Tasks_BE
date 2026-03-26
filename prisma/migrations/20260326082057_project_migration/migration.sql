@@ -15,16 +15,17 @@ CREATE TABLE `projects` (
 -- AddForeignKey
 ALTER TABLE `projects` ADD CONSTRAINT `projects_created_by_fkey` FOREIGN KEY (`created_by`) REFERENCES `users`(`user_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
--- Seed default project
+-- Seed default project (created_by derived from first existing user to satisfy FK in any environment)
 INSERT INTO `projects` (`project_id`, `name`, `color`, `created_by`, `created_at`, `updated_at`)
-VALUES (
+SELECT
     'a0000000-0000-0000-0000-000000000001',
     'Andreassen-A-S',
     '#1B1D22',
-    '8d3c113e-9e71-4cf9-b30e-e99885eecad3',
+    user_id,
     NOW(3),
     NOW(3)
-);
+FROM `users`
+LIMIT 1;
 
 -- AlterTable: add project_id with a temporary default so existing rows are populated
 ALTER TABLE `tasks` ADD COLUMN `project_id` VARCHAR(191) NOT NULL DEFAULT 'a0000000-0000-0000-0000-000000000001';
