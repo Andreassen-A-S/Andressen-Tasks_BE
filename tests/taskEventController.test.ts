@@ -424,6 +424,7 @@ describe("templateController.createTemplate - Validation Tests", () => {
         frequency: RecurrenceFrequency.WEEKLY,
         start_date: "2026-02-01",
         days_of_week: [1, 3, 5],
+        project_id: "p1",
       },
     });
     const res = createMockResponse();
@@ -458,6 +459,7 @@ describe("templateController.createTemplate - Validation Tests", () => {
         frequency: RecurrenceFrequency.MONTHLY,
         start_date: "2026-02-01",
         day_of_month: 15,
+        project_id: "p1",
       },
     });
     const res = createMockResponse();

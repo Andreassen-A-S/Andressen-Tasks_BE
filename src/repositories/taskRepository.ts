@@ -88,6 +88,7 @@ export async function createTaskWithAssignments(data: CreateTaskInput) {
         status: data.status,
         deadline: data.deadline,
         created_by: data.created_by,
+        project_id: data.project_id,
         parent_task_id: data.parent_task_id ?? null,
         scheduled_date: data.scheduled_date,
         unit: data.unit ?? TaskUnit.NONE,

@@ -108,6 +108,10 @@ export async function createTask(req: Request, res: Response) {
       });
     }
 
+    if (!body.project_id || typeof body.project_id !== "string") {
+      return res.status(400).json({ success: false, error: "project_id is required" });
+    }
+
     const input: CreateTaskInput = { ...body, created_by: userId };
     const task = await taskRepo.createTaskWithAssignments(input);
 

@@ -131,7 +131,7 @@ describe("taskController.createTask", () => {
 
     const req = createRequest({
       user: { user_id: "u1" },
-      body: { title: "Task" },
+      body: { title: "Task", project_id: "p1" },
     });
     const res = createMockResponse();
 
@@ -179,7 +179,7 @@ describe("taskController.createTask", () => {
 
     const req = createRequest({
       user: { user_id: "u1" },
-      body: { created_by: "u1", title: "Task" },
+      body: { created_by: "u1", title: "Task", project_id: "p1" },
     });
     const res = createMockResponse();
 

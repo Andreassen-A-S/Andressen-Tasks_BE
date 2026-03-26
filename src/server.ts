@@ -12,6 +12,7 @@ import commentRoutes from "./routes/comment.routes";
 import taskEventRoutes from "./routes/taskEvent.routes";
 import templateRoutes from "./routes/template.routes";
 import statRoutes from "./routes/stat.routes";
+import projectRoutes from "./routes/project.routes";
 import { initScheduler } from "./services/schedulerService";
 
 if (!process.env.JWT_SECRET) {
@@ -95,6 +96,7 @@ app.use("/api/comments", commentRoutes);
 app.use("/api/task-events", taskEventRoutes);
 app.use("/api/recurring-templates", templateRoutes);
 app.use("/api/stats", statRoutes);
+app.use("/api/projects", projectRoutes);
 
 // 404
 app.use((_req, res) => {

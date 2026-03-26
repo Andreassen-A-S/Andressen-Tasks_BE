@@ -263,6 +263,7 @@ export class RecurringTaskService {
         target_quantity: template.target_quantity,
         current_quantity: 0,
         created_by: template.created_by,
+        project_id: template.project_id,
         recurring_template_id: template.id,
       };
     });

@@ -301,6 +301,7 @@ describe("recurringTemplateController.createTemplate", () => {
         interval: 1,
         start_date: new Date("2026-02-01"),
         assigned_users: ["u1", "u2"],
+        project_id: "p1",
       },
     });
     const res = createMockResponse();
