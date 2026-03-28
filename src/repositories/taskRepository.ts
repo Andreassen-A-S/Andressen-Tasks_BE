@@ -89,7 +89,9 @@ export async function createTaskWithAssignments(data: CreateTaskInput) {
         deadline: data.deadline,
         creator: { connect: { user_id: data.created_by } },
         project: { connect: { project_id: data.project_id } },
-        parent_task_id: data.parent_task_id,
+        ...(data.parent_task_id
+          ? { parent: { connect: { task_id: data.parent_task_id } } }
+          : {}),
         scheduled_date: data.scheduled_date,
         unit: data.unit ?? TaskUnit.NONE,
         goal_type: data.goal_type ?? TaskGoalType.OPEN,
