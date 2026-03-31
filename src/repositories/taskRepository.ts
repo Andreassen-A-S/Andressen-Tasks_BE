@@ -43,15 +43,21 @@ export class TaskNotProgressableError extends Error {
 // Reads
 // ---------------------------------------------------------------------------
 
-export async function getAllTasks(): Promise<Task[]> {
-  return prisma.task.findMany({
+export async function getAllTasks() {
+  const tasks = await prisma.task.findMany({
     orderBy: { created_at: "desc" },
+    include: { assignments: { select: { user_id: true } } },
   });
+  return tasks.map(({ assignments, ...task }) => ({
+    ...task,
+    assigned_users: assignments.map((a) => a.user_id),
+  }));
 }
 
-export async function getTaskById(id: string): Promise<Task | null> {
+export async function getTaskById(id: string) {
   return prisma.task.findUnique({
     where: { task_id: id },
+    include: { project: true },
   });
 }
 
@@ -489,14 +495,23 @@ export async function upsertProgressLog(
       throw new TaskNotProgressableError(task.status);
     }
 
-    const assignment = await tx.taskAssignment.findUnique({
-      where: { task_id_user_id: { task_id: taskId, user_id: userId } },
+    const [assignment, user] = await Promise.all([
+      tx.taskAssignment.findUnique({
+        where: { task_id_user_id: { task_id: taskId, user_id: userId } },
+      }),
+      tx.user.findUnique({ where: { user_id: userId }, select: { role: true } }),
+    ]);
+
+    const isAdmin = user?.role === "ADMIN";
+    if (!assignment && !isAdmin) throw new AssignmentNotFoundError();
+
+    const resolvedAssignment = assignment ?? await tx.taskAssignment.create({
+      data: { task_id: taskId, user_id: userId },
     });
-    if (!assignment) throw new AssignmentNotFoundError();
 
     const progressLog = await tx.taskProgressLog.create({
       data: {
-        assignment_id: assignment.assignment_id,
+        assignment_id: resolvedAssignment.assignment_id,
         quantity_done,
         unit,
         note,
