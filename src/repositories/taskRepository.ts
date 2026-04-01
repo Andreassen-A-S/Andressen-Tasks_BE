@@ -4,6 +4,7 @@ import {
   TaskGoalType,
   TaskStatus,
   TaskUnit,
+  UserRole,
 } from "../generated/prisma/client";
 import type { CreateTaskInput, UpdateTaskInput } from "../types/task";
 
@@ -57,7 +58,7 @@ export async function getAllTasks() {
 export async function getTaskById(id: string) {
   return prisma.task.findUnique({
     where: { task_id: id },
-    include: { project: true },
+    include: { project: { select: { name: true, color: true } } },
   });
 }
 
@@ -500,7 +501,7 @@ export async function upsertProgressLog(
     });
     const user = await tx.user.findUnique({ where: { user_id: userId }, select: { role: true } });
 
-    const isAdmin = user?.role === "ADMIN";
+    const isAdmin = user?.role === UserRole.ADMIN;
     if (!assignment && !isAdmin) throw new AssignmentNotFoundError();
 
     const resolvedAssignment = assignment ?? await tx.taskAssignment.upsert({
