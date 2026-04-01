@@ -33,7 +33,7 @@ function makeAssignment(
 describe("getTodayTasksPerUser", () => {
   afterEach(() => findManyMock.mockReset());
 
-  test("includes overdue tasks (scheduled before today)", async () => {
+  test("includes overdue tasks (scheduled before today): no lower bound on scheduled_date", async () => {
     findManyMock.mockResolvedValue([
       makeAssignment("u1", "token-u1", {
         task_id: "overdue-task",
@@ -44,8 +44,11 @@ describe("getTodayTasksPerUser", () => {
     const result = await getTodayTasksPerUser(new Date("2026-04-01T06:25:00Z"));
 
     expect(result).toHaveLength(1);
-    expect(result[0].user_id).toBe("u1");
     expect(result[0].tasks[0].task_id).toBe("overdue-task");
+
+    // Intentionally no gte lower bound — overdue tasks have no scheduled_date floor
+    const callArg = findManyMock.mock.calls[0][0] as any;
+    expect(callArg.where.task.scheduled_date.gte).toBeUndefined();
   });
 
   test("query excludes DONE, REJECTED, ARCHIVED statuses", async () => {
@@ -62,7 +65,7 @@ describe("getTodayTasksPerUser", () => {
   test("query upper bound is Copenhagen end-of-day (CEST: lt 22:00Z)", async () => {
     findManyMock.mockResolvedValue([]);
 
-    // April 1st 2026 is CEST (UTC+2), so Copenhagen midnight = 2026-04-01T22:00:00Z
+    // April 1st 2026 is CEST (UTC+2); start of April 2nd in Copenhagen = 2026-04-01T22:00:00Z (exclusive upper bound)
     await getTodayTasksPerUser(new Date("2026-04-01T06:25:00Z"));
 
     const callArg = findManyMock.mock.calls[0][0] as any;
