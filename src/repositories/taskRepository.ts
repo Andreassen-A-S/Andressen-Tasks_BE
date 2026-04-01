@@ -401,7 +401,7 @@ export async function getTodayTasksPerUser(
   const assignments = await prisma.taskAssignment.findMany({
     where: {
       task: {
-        scheduled_date: { gte: start, lt: end },
+        scheduled_date: { lt: end },
         status: { notIn: [TaskStatus.DONE, TaskStatus.REJECTED, TaskStatus.ARCHIVED] },
       },
       user: { push_token: { not: null } },
