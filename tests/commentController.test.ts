@@ -172,7 +172,7 @@ describe("commentController.createComment — notification routing", () => {
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
 
     await commentController.createComment(
-      createRequest({ params: { taskId: "t1" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
+      createRequest({ params: { taskId: "t1", screen: "comments" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
       createMockResponse(),
     );
 
@@ -181,7 +181,7 @@ describe("commentController.createComment — notification routing", () => {
       "token-u2",
       "Ny kommentar på din opgave",
       "Test Task",
-      { taskId: "t1" },
+      { taskId: "t1", screen: "comments" },
       "u2",
     );
   });
@@ -199,7 +199,7 @@ describe("commentController.createComment — notification routing", () => {
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
 
     await commentController.createComment(
-      createRequest({ params: { taskId: "t1" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
+      createRequest({ params: { taskId: "t1", screen: "comments" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
       createMockResponse(),
     );
 
@@ -221,7 +221,7 @@ describe("commentController.createComment — notification routing", () => {
     ]);
 
     await commentController.createComment(
-      createRequest({ params: { taskId: "t1" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
+      createRequest({ params: { taskId: "t1", screen: "comments" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
       createMockResponse(),
     );
 
@@ -230,7 +230,7 @@ describe("commentController.createComment — notification routing", () => {
       "token-a1",
       "Ny kommentar",       // admin title, not "Ny kommentar på din opgave"
       "Test Task",
-      { taskId: "t1" },
+      { taskId: "t1", screen: "comments" },
       "a1",
     );
   });
@@ -248,7 +248,7 @@ describe("commentController.createComment — notification routing", () => {
     ]);
 
     await commentController.createComment(
-      createRequest({ params: { taskId: "t1" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
+      createRequest({ params: { taskId: "t1", screen: "comments" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
       createMockResponse(),
     );
 
@@ -257,7 +257,7 @@ describe("commentController.createComment — notification routing", () => {
       "token-a1",
       "Ny kommentar",
       "Test Task",
-      { taskId: "t1" },
+      { taskId: "t1", screen: "comments" },
       "a1",
     );
   });
@@ -276,7 +276,7 @@ describe("commentController.createComment — notification routing", () => {
     ]);
 
     await commentController.createComment(
-      createRequest({ params: { taskId: "t1" }, user: { user_id: "a1", role: UserRole.ADMIN }, body: { message: "hello" } }),
+      createRequest({ params: { taskId: "t1", screen: "comments" }, user: { user_id: "a1", role: UserRole.ADMIN }, body: { message: "hello" } }),
       createMockResponse(),
     );
 
@@ -285,7 +285,7 @@ describe("commentController.createComment — notification routing", () => {
       "token-a2",
       "Ny kommentar",
       "Test Task",
-      { taskId: "t1" },
+      { taskId: "t1", screen: "comments" },
       "a2",
     );
   });
