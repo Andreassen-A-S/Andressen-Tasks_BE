@@ -119,7 +119,7 @@ export async function createComment(req: Request, res: Response) {
         assignment.user.push_token,
         "Ny kommentar på din opgave",
         task.title,
-        { taskId: task.task_id },
+        { taskId: task.task_id, screen: "comments" },
         assignment.user_id,
       );
     }
@@ -132,7 +132,7 @@ export async function createComment(req: Request, res: Response) {
         push_token,
         "Ny kommentar",
         task.title,
-        { taskId: task.task_id },
+        { taskId: task.task_id, screen: "comments" },
         adminId,
       );
     }
