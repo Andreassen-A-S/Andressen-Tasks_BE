@@ -495,18 +495,18 @@ export async function upsertProgressLog(
       throw new TaskNotProgressableError(task.status);
     }
 
-    const [assignment, user] = await Promise.all([
-      tx.taskAssignment.findUnique({
-        where: { task_id_user_id: { task_id: taskId, user_id: userId } },
-      }),
-      tx.user.findUnique({ where: { user_id: userId }, select: { role: true } }),
-    ]);
+    const assignment = await tx.taskAssignment.findUnique({
+      where: { task_id_user_id: { task_id: taskId, user_id: userId } },
+    });
+    const user = await tx.user.findUnique({ where: { user_id: userId }, select: { role: true } });
 
     const isAdmin = user?.role === "ADMIN";
     if (!assignment && !isAdmin) throw new AssignmentNotFoundError();
 
-    const resolvedAssignment = assignment ?? await tx.taskAssignment.create({
-      data: { task_id: taskId, user_id: userId },
+    const resolvedAssignment = assignment ?? await tx.taskAssignment.upsert({
+      where: { task_id_user_id: { task_id: taskId, user_id: userId } },
+      create: { task_id: taskId, user_id: userId },
+      update: {},
     });
 
     const progressLog = await tx.taskProgressLog.create({
