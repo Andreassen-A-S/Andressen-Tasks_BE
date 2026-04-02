@@ -396,12 +396,12 @@ export function copenhagenDayBounds(date: Date): { start: Date; end: Date } {
 export async function getTodayTasksPerUser(
   date: Date,
 ): Promise<{ user_id: string; push_token: string; tasks: Task[] }[]> {
-  const { start, end } = copenhagenDayBounds(date);
+  const { end } = copenhagenDayBounds(date);
 
   const assignments = await prisma.taskAssignment.findMany({
     where: {
       task: {
-        scheduled_date: { gte: start, lt: end },
+        scheduled_date: { lt: end },
         status: { notIn: [TaskStatus.DONE, TaskStatus.REJECTED, TaskStatus.ARCHIVED] },
       },
       user: { push_token: { not: null } },
