@@ -30,9 +30,12 @@ function makeAssignment(
   };
 }
 
-describe("getTodayTasksPerUser", () => {
-  afterEach(() => findManyMock.mockReset());
+afterEach(() => {
+  mock.restore();
+  findManyMock.mockReset();
+});
 
+describe("getTodayTasksPerUser", () => {
   test("includes overdue tasks (scheduled before today): no lower bound on scheduled_date", async () => {
     findManyMock.mockResolvedValue([
       makeAssignment("u1", "token-u1", {
