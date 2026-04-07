@@ -155,8 +155,8 @@ export async function updateTask(
 
     const updateData: Prisma.TaskUpdateInput = {
       ...taskUpdateData,
-      ...(data.status === TaskStatus.DONE && userId
-        ? { completed_by: userId, completed_at: completionTimestamp }
+      ...(data.status === TaskStatus.DONE
+        ? userId ? { completed_by: userId, completed_at: completionTimestamp } : {}
         : data.status !== undefined
           ? { completed_by: null, completed_at: null }
           : {}),
