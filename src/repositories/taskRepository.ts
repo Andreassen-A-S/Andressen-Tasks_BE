@@ -1,6 +1,7 @@
 import { prisma } from "../db/prisma";
 import {
   type Task,
+  type Prisma,
   TaskGoalType,
   TaskStatus,
   TaskUnit,
@@ -56,26 +57,18 @@ export async function getAllTasks() {
 }
 
 export async function getTaskById(id: string) {
-  return prisma.task.findUnique({
-    where: { task_id: id },
-    include: { project: { select: { name: true, color: true } } },
-  });
-}
-
-export async function getTaskByIdWithAssignments(id: string) {
-  return prisma.task.findUnique({
+  const task = await prisma.task.findUnique({
     where: { task_id: id },
     include: {
-      assignments: {
-        include: {
-          user: {
-            select: { user_id: true, name: true, email: true, position: true },
-          },
-        },
-      },
+      project: { select: { name: true, color: true } },
+      assignments: { select: { user_id: true } },
     },
   });
+  if (!task) return null;
+  const { assignments, ...rest } = task;
+  return { ...rest, assigned_users: assignments.map((a) => a.user_id) };
 }
+
 
 // ---------------------------------------------------------------------------
 // Creates
@@ -140,7 +133,7 @@ export async function createTaskWithAssignments(data: CreateTaskInput) {
 // Updates
 // ---------------------------------------------------------------------------
 
-export async function updateTaskWithAssignments(
+export async function updateTask(
   id: string,
   data: UpdateTaskInput,
   userId?: string,
@@ -148,76 +141,49 @@ export async function updateTaskWithAssignments(
   return prisma.$transaction(async (tx) => {
     const existingTask = await tx.task.findUnique({
       where: { task_id: id },
-      select: {
-        status: true,
-        completed_by: true,
-        completed_at: true,
-      },
+      select: { status: true },
     });
     if (!existingTask) throw new TaskNotFoundError(id);
 
-    const isAlreadyDone = existingTask.status === TaskStatus.DONE;
-    if (data.status === TaskStatus.DONE && isAlreadyDone) {
+    if (data.status === TaskStatus.DONE && existingTask.status === TaskStatus.DONE) {
       throw new TaskAlreadyDoneError();
     }
 
     const { assigned_users, ...taskUpdateData } = data;
     const finalStatus = data.status ?? existingTask.status;
-
     const completionTimestamp = new Date();
 
-    const updateData: Record<string, unknown> = { ...taskUpdateData };
+    const updateData: Prisma.TaskUpdateInput = {
+      ...taskUpdateData,
+      ...(data.status === TaskStatus.DONE
+        ? userId ? { completed_by: userId, completed_at: completionTimestamp } : {}
+        : data.status !== undefined
+          ? { completed_by: null, completed_at: null }
+          : {}),
+    };
 
-    if (data.status === undefined) {
-      // No status change — leave completion fields untouched.
-    } else if (data.status === TaskStatus.DONE) {
-      // isAlreadyDone branch is already thrown above, so this is always a
-      // fresh transition to DONE.
-      if (userId) {
-        updateData.completed_by = userId;
-        updateData.completed_at = completionTimestamp;
-      }
-    } else {
-      // Transitioning away from DONE or to any other status.
-      updateData.completed_by = null;
-      updateData.completed_at = null;
-    }
+    await tx.task.update({ where: { task_id: id }, data: updateData });
 
-    await tx.task.update({
-      where: { task_id: id },
-      data: updateData,
-    });
-
-    // existing per-assignment completed_at when the task is/was DONE.
     if (assigned_users !== undefined) {
       if (finalStatus === TaskStatus.DONE) {
-        // Preserve existing completion timestamps for assignments that already
-        // have one; stamp new ones with the current completionTimestamp.
+        // Preserve existing completion timestamps; stamp new assignees now.
         const existingAssignments = await tx.taskAssignment.findMany({
           where: { task_id: id },
           select: { user_id: true, completed_at: true },
         });
-        const existingMap = new Map(
-          existingAssignments.map((a) => [a.user_id, a.completed_at]),
-        );
-
+        const existingMap = new Map(existingAssignments.map((a) => [a.user_id, a.completed_at]));
         await tx.taskAssignment.deleteMany({ where: { task_id: id } });
-
         if (assigned_users.length > 0) {
           await tx.taskAssignment.createMany({
             data: assigned_users.map((assigneeId) => ({
               task_id: id,
               user_id: assigneeId,
-              // Preserve historical timestamp if this assignee already had one;
-              // otherwise stamp now (they're being added to a done task).
               completed_at: existingMap.get(assigneeId) ?? completionTimestamp,
             })),
           });
         }
       } else {
-        // Task is not done — recreate assignments with no completion timestamps.
         await tx.taskAssignment.deleteMany({ where: { task_id: id } });
-
         if (assigned_users.length > 0) {
           await tx.taskAssignment.createMany({
             data: assigned_users.map((assigneeId) => ({
@@ -229,13 +195,11 @@ export async function updateTaskWithAssignments(
         }
       }
     } else if (data.status === TaskStatus.DONE) {
-      // No assignment replacement — stamp all existing assignments now.
       await tx.taskAssignment.updateMany({
         where: { task_id: id },
         data: { completed_at: completionTimestamp },
       });
     } else if (data.status !== undefined) {
-      // Status changed to something other than DONE — clear all timestamps.
       await tx.taskAssignment.updateMany({
         where: { task_id: id },
         data: { completed_at: null },
@@ -245,81 +209,10 @@ export async function updateTaskWithAssignments(
     return tx.task.findUnique({
       where: { task_id: id },
       include: {
-        assignments: {
-          include: {
-            user: {
-              select: {
-                user_id: true,
-                name: true,
-                email: true,
-                position: true,
-              },
-            },
-          },
-        },
-        creator: {
-          select: {
-            user_id: true,
-            name: true,
-            email: true,
-          },
-        },
+        assignments: { select: { assignment_id: true, user_id: true } },
+        project: { select: { name: true, color: true } },
       },
     });
-  });
-}
-
-export async function updateTask(
-  id: string,
-  data: UpdateTaskInput,
-  userId?: string,
-): Promise<Task> {
-  return prisma.$transaction(async (tx) => {
-    const existingTask = await tx.task.findUnique({
-      where: { task_id: id },
-      select: {
-        status: true,
-        completed_by: true,
-        completed_at: true,
-      },
-    });
-    if (!existingTask) throw new TaskNotFoundError(id);
-
-    const isAlreadyDone = existingTask.status === TaskStatus.DONE;
-    if (data.status === TaskStatus.DONE && isAlreadyDone) {
-      throw new TaskAlreadyDoneError();
-    }
-
-    const completionTimestamp = new Date();
-
-    const task = await tx.task.update({
-      where: { task_id: id },
-      data: {
-        ...data,
-        ...(data.status === undefined
-          ? {}
-          : data.status === TaskStatus.DONE
-            ? userId
-              ? { completed_by: userId, completed_at: completionTimestamp }
-              : {}
-            : { completed_by: null, completed_at: null }),
-      },
-    });
-
-    if (data.status === TaskStatus.DONE) {
-      // Fresh transition to DONE — stamp all assignments now.
-      await tx.taskAssignment.updateMany({
-        where: { task_id: id },
-        data: { completed_at: completionTimestamp },
-      });
-    } else if (data.status !== undefined) {
-      await tx.taskAssignment.updateMany({
-        where: { task_id: id },
-        data: { completed_at: null },
-      });
-    }
-
-    return task;
   });
 }
 

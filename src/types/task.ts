@@ -5,18 +5,6 @@ import type {
   TaskUnit,
 } from "../generated/prisma/client";
 
-export interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  priority: TaskPriority;
-  status: TaskStatus;
-  deadline: Date;
-  unit?: TaskUnit;
-  target_quantity?: number;
-  scheduled_date: Date;
-}
-
 export interface UpdateTaskInput {
   title?: string;
   description?: string;

@@ -177,114 +177,66 @@ export async function updateTask(req: Request, res: Response) {
 
   const id = getParamId(req);
   if (!id) {
-    return res
-      .status(400)
-      .json({ success: false, error: "Missing or invalid id" });
+    return res.status(400).json({ success: false, error: "Missing or invalid id" });
   }
 
   try {
     const updateData = req.body as UpdateTaskInput;
     const actor = actorConnect(userId);
 
-    // No assignment changes requested — use the lighter updateTask path.
-    if (updateData.assigned_users === undefined) {
-      const oldTask = await taskRepo.getTaskById(id);
-      if (!oldTask) {
-        return res
-          .status(404)
-          .json({ success: false, error: "Task not found" });
-      }
-
-      const updatedTask = await taskRepo.updateTask(id, updateData, userId);
-
-      await taskEventRepo.createTaskEvent({
-        task: taskConnect(updatedTask.task_id),
-        actor,
-        type: TaskEventType.TASK_UPDATED,
-        message: "Task updated",
-        before_json: oldTask,
-        after_json: updatedTask,
-      });
-
-      if (updateData.status && oldTask.status !== updatedTask.status) {
-        await taskEventRepo.createTaskEvent({
-          task: taskConnect(updatedTask.task_id),
-          actor,
-          type: TaskEventType.TASK_STATUS_CHANGED,
-          message: `Status changed from ${oldTask.status} to ${updatedTask.status}`,
-          before_json: { status: oldTask.status },
-          after_json: { status: updatedTask.status },
-        });
-
-        if (updatedTask.status === "DONE") {
-          const admins = await userRepo.getAdminPushTokens();
-          for (const { user_id, push_token } of admins) {
-            void sendPushNotification(push_token, "Opgave afsluttet", updatedTask.title, {
-              taskId: updatedTask.task_id,
-            }, user_id);
-          }
-        }
-      }
-
-      return res.json({ success: true, data: updatedTask });
-    }
-
-    // Assignment changes requested — use the full updateTaskWithAssignments path.
-    const oldTask = await taskRepo.getTaskByIdWithAssignments(id);
+    const oldTask = await taskRepo.getTaskById(id);
     if (!oldTask) {
       return res.status(404).json({ success: false, error: "Task not found" });
     }
 
-    const updatedTask = await taskRepo.updateTaskWithAssignments(
-      id,
-      updateData,
-      userId,
-    );
-
+    const updatedTask = await taskRepo.updateTask(id, updateData, userId);
     if (!updatedTask) {
-      return res
-        .status(404)
-        .json({ success: false, error: "Task not found or update failed" });
+      return res.status(404).json({ success: false, error: "Task not found or update failed" });
     }
 
-    // Diff assignments and emit events.
-    const oldByUser = new Map(oldTask.assignments.map((a) => [a.user_id, a]));
-    const newByUser = new Map(
-      updatedTask.assignments.map((a) => [a.user_id, a]),
-    );
+    // Diff and emit assignment events if assignments were part of the update.
+    if (updateData.assigned_users !== undefined) {
+      const oldUserIds = new Set(oldTask.assigned_users ?? []);
+      const added = updatedTask.assignments.filter((a) => !oldUserIds.has(a.user_id));
+      const removedUserIds = (oldTask.assigned_users ?? []).filter(
+        (uid) => !updatedTask.assignments.some((a) => a.user_id === uid),
+      );
 
-    const added = updatedTask.assignments.filter(
-      (a) => !oldByUser.has(a.user_id),
-    );
-    const removed = oldTask.assignments.filter(
-      (a) => !newByUser.has(a.user_id),
-    );
+      await Promise.all([
+        ...added.map((assignment) =>
+          taskEventRepo.createTaskEvent({
+            task: taskConnect(updatedTask.task_id),
+            actor,
+            type: TaskEventType.ASSIGNMENT_CREATED,
+            message: "Created assignment",
+            assignment: { connect: { assignment_id: assignment.assignment_id } },
+            before_json: undefined,
+            after_json: assignment,
+          }),
+        ),
+        ...removedUserIds.map((uid) =>
+          taskEventRepo.createTaskEvent({
+            task: taskConnect(updatedTask.task_id),
+            actor,
+            type: TaskEventType.ASSIGNMENT_DELETED,
+            message: "Deleted assignment",
+            before_json: { user_id: uid },
+            after_json: emptyObj(),
+          }),
+        ),
+      ]);
 
-    await Promise.all([
-      ...added.map((assignment) =>
-        taskEventRepo.createTaskEvent({
-          task: taskConnect(updatedTask.task_id),
-          actor,
-          type: TaskEventType.ASSIGNMENT_CREATED,
-          message: "Created assignment",
-          assignment: {
-            connect: { assignment_id: assignment.assignment_id },
-          },
-          before_json: undefined,
-          after_json: assignment,
-        }),
-      ),
-      ...removed.map((assignment) =>
-        taskEventRepo.createTaskEvent({
-          task: taskConnect(updatedTask.task_id),
-          actor,
-          type: TaskEventType.ASSIGNMENT_DELETED,
-          message: "Deleted assignment",
-          before_json: assignment,
-          after_json: emptyObj(),
-        }),
-      ),
-    ]);
+      const tokenMap = await userRepo.getPushTokensForUsers(added.map((a) => a.user_id));
+      for (const [uid, pushToken] of tokenMap) {
+        void sendPushNotification(
+          pushToken,
+          "Ny opgave tildelt",
+          `Du er blevet tildelt: ${updatedTask.title}`,
+          { taskId: updatedTask.task_id },
+          uid,
+        );
+      }
+    }
 
     await taskEventRepo.createTaskEvent({
       task: taskConnect(updatedTask.task_id),
@@ -315,21 +267,8 @@ export async function updateTask(req: Request, res: Response) {
       }
     }
 
-    // Notify newly added assignees
-    const tokenMap = await userRepo.getPushTokensForUsers(
-      added.map((a) => a.user_id),
-    );
-    for (const [userId, pushToken] of tokenMap) {
-      void sendPushNotification(
-        pushToken,
-        "Ny opgave tildelt",
-        `Du er blevet tildelt: ${updatedTask.title}`,
-        { taskId: updatedTask.task_id },
-        userId,
-      );
-    }
-
-    return res.json({ success: true, data: updatedTask });
+    const { assignments, ...taskData } = updatedTask;
+    return res.json({ success: true, data: { ...taskData, assigned_users: assignments.map((a) => a.user_id) } });
   } catch (error) {
     return handleDomainError(error, res, "Failed to update task");
   }
