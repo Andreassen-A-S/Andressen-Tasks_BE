@@ -232,8 +232,8 @@ describe("taskController.createTask", () => {
 
 describe("taskController.updateTask", () => {
   test("updates task via light path and logs TASK_UPDATED", async () => {
-    const oldTask = { task_id: "t1", title: "old" };
-    const updatedTask = { task_id: "t1", title: "new" };
+    const oldTask = { task_id: "t1", title: "old", assigned_users: ["u1"], project: { name: "P1", color: null } };
+    const updatedTask = { task_id: "t1", title: "new", project: { name: "P1", color: null } };
     spyOn(taskRepo, "getTaskById").mockResolvedValue(oldTask as never);
     spyOn(taskRepo, "updateTask").mockResolvedValue(updatedTask as never);
     const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue(
@@ -251,7 +251,7 @@ describe("taskController.updateTask", () => {
 
     expect(eventSpy).toHaveBeenCalledTimes(1);
     expect(eventSpy.mock.calls[0]?.[0]?.type).toBe(TaskEventType.TASK_UPDATED);
-    expect(res.body).toEqual({ success: true, data: updatedTask });
+    expect(res.body).toEqual({ success: true, data: { ...updatedTask, assigned_users: oldTask.assigned_users } });
   });
 
   test("returns 404 when updateTask throws TaskNotFoundError", async () => {
@@ -301,6 +301,7 @@ describe("taskController.updateTask", () => {
     };
     const updatedTask = {
       task_id: "t1",
+      project: { name: "P1", color: null },
       assignments: [
         { assignment_id: "a1", user_id: "u1" },
         { assignment_id: "a3", user_id: "u3" },
@@ -335,7 +336,10 @@ describe("taskController.updateTask", () => {
       TaskEventType.ASSIGNMENT_DELETED,
     );
     expect(eventSpy.mock.calls[2]?.[0]?.type).toBe(TaskEventType.TASK_UPDATED);
-    expect(res.body).toEqual({ success: true, data: updatedTask });
+    expect(res.body).toEqual({
+      success: true,
+      data: { task_id: "t1", project: { name: "P1", color: null }, assigned_users: ["u1", "u3"] },
+    });
   });
 
   test("returns 404 when updateTaskWithAssignments throws TaskNotFoundError", async () => {
