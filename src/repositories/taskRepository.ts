@@ -56,10 +56,16 @@ export async function getAllTasks() {
 }
 
 export async function getTaskById(id: string) {
-  return prisma.task.findUnique({
+  const task = await prisma.task.findUnique({
     where: { task_id: id },
-    include: { project: { select: { name: true, color: true } } },
+    include: {
+      project: { select: { name: true, color: true } },
+      assignments: { select: { user_id: true } },
+    },
   });
+  if (!task) return null;
+  const { assignments, ...rest } = task;
+  return { ...rest, assigned_users: assignments.map((a) => a.user_id) };
 }
 
 export async function getTaskByIdWithAssignments(id: string) {
@@ -264,6 +270,12 @@ export async function updateTaskWithAssignments(
             email: true,
           },
         },
+        project: {
+          select: {
+            name: true,
+            color: true,
+          },
+        },
       },
     });
   });
@@ -273,7 +285,7 @@ export async function updateTask(
   id: string,
   data: UpdateTaskInput,
   userId?: string,
-): Promise<Task> {
+) {
   return prisma.$transaction(async (tx) => {
     const existingTask = await tx.task.findUnique({
       where: { task_id: id },
@@ -303,6 +315,9 @@ export async function updateTask(
               ? { completed_by: userId, completed_at: completionTimestamp }
               : {}
             : { completed_by: null, completed_at: null }),
+      },
+      include: {
+        project: { select: { name: true, color: true } },
       },
     });
 

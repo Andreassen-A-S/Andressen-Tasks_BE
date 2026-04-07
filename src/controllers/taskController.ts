@@ -226,7 +226,7 @@ export async function updateTask(req: Request, res: Response) {
         }
       }
 
-      return res.json({ success: true, data: updatedTask });
+      return res.json({ success: true, data: { ...updatedTask, assigned_users: oldTask.assigned_users } });
     }
 
     // Assignment changes requested — use the full updateTaskWithAssignments path.
@@ -329,7 +329,8 @@ export async function updateTask(req: Request, res: Response) {
       );
     }
 
-    return res.json({ success: true, data: updatedTask });
+    const { assignments, ...taskData } = updatedTask;
+    return res.json({ success: true, data: { ...taskData, assigned_users: assignments.map((a) => a.user_id) } });
   } catch (error) {
     return handleDomainError(error, res, "Failed to update task");
   }
