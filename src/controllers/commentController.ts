@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { TaskEventType, UserRole } from "../generated/prisma/client";
 import * as commentRepo from "../repositories/commentRepository";
+import * as attachmentRepo from "../repositories/attachmentRepository";
+import * as storageService from "../services/storageService";
 import { prisma } from "../db/prisma";
 import * as taskEventRepo from "../repositories/taskEventRepository";
 import * as userRepo from "../repositories/userRepository";
@@ -35,7 +37,19 @@ export async function listTaskComments(req: Request, res: Response) {
 
     const comments = await commentRepo.getCommentsByTaskId(taskId);
 
-    res.json({ success: true, data: comments });
+    const commentsWithSignedUrls = await Promise.all(
+      comments.map(async (comment) => ({
+        ...comment,
+        attachments: await Promise.all(
+          comment.attachments.map(async (att) => ({
+            ...att,
+            public_url: await storageService.generateSignedReadUrl(att.gcs_path),
+          })),
+        ),
+      })),
+    );
+
+    res.json({ success: true, data: commentsWithSignedUrls });
   } catch (error) {
     console.error("Error fetching comments:", error);
     res.status(500).json({ success: false, error: "Failed to fetch comments" });
@@ -45,7 +59,10 @@ export async function listTaskComments(req: Request, res: Response) {
 export async function createComment(req: Request, res: Response) {
   try {
     const taskId = req.params.taskId as string;
-    const { message } = req.body;
+    const { message, attachments } = req.body as {
+      message?: string;
+      attachments?: commentRepo.AttachmentInput[];
+    };
     const userId = req.user?.user_id;
 
     if (!userId) {
@@ -55,13 +72,15 @@ export async function createComment(req: Request, res: Response) {
       });
     }
 
-    if (!message?.trim()) {
+    const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
+
+    if (!message?.trim() && !hasAttachments) {
       return res
         .status(400)
-        .json({ success: false, error: "Message is required" });
+        .json({ success: false, error: "Message or attachment is required" });
     }
 
-    if (message.trim().length > 2000) {
+    if (message && message.trim().length > 2000) {
       return res.status(400).json({
         success: false,
         error: "Message too long (max 2000 characters)",
@@ -96,7 +115,8 @@ export async function createComment(req: Request, res: Response) {
     const comment = await commentRepo.createComment({
       task_id: taskId,
       user_id: userId,
-      message: message.trim(),
+      message: message?.trim() ?? "",
+      attachments: hasAttachments ? attachments : undefined,
     });
 
     // TaskEvent logic
@@ -137,7 +157,17 @@ export async function createComment(req: Request, res: Response) {
       );
     }
 
-    res.status(201).json({ success: true, data: comment });
+    const commentWithSignedUrls = {
+      ...comment,
+      attachments: await Promise.all(
+        comment.attachments.map(async (att) => ({
+          ...att,
+          public_url: await storageService.generateSignedReadUrl(att.gcs_path),
+        })),
+      ),
+    };
+
+    res.status(201).json({ success: true, data: commentWithSignedUrls });
   } catch (error) {
     console.error("Error creating comment:", error);
     res.status(500).json({ success: false, error: "Failed to create comment" });
@@ -166,9 +196,7 @@ export async function deleteComment(req: Request, res: Response) {
       });
     }
 
-    await commentRepo.deleteComment(commentId);
-
-    // TaskEvent logic
+    // TaskEvent logic before delete — comment FK must still exist
     await taskEventRepo.createTaskEvent({
       task: { connect: { task_id: comment.task_id } },
       actor: { connect: { user_id: req.user?.user_id } },
@@ -179,7 +207,15 @@ export async function deleteComment(req: Request, res: Response) {
       after_json: {},
     });
 
-    res.status(204).json({ success: true });
+    // Delete GCS files and DB record
+    const attachmentsToDelete = await attachmentRepo.getAttachmentsByCommentId(commentId);
+    for (const attachment of attachmentsToDelete) {
+      void storageService.deleteFile(attachment.gcs_path);
+    }
+
+    await commentRepo.deleteComment(commentId);
+
+    res.status(204).send();
   } catch (error) {
     console.error("Error deleting comment:", error);
     res.status(500).json({ success: false, error: "Failed to delete comment" });

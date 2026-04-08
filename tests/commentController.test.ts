@@ -102,7 +102,7 @@ describe("commentController.createComment", () => {
     await commentController.createComment(req, res);
 
     expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Message is required" });
+    expect(res.body).toEqual({ success: false, error: "Message or attachment is required" });
   });
 
   test("creates comment and logs event", async () => {
@@ -121,6 +121,7 @@ describe("commentController.createComment", () => {
       task_id: "t1",
       user_id: "u1",
       message: "hello",
+      attachments: [],
     } as never);
     const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue(
       {} as never,
@@ -153,6 +154,7 @@ describe("commentController.createComment — notification routing", () => {
       task_id: "t1",
       user_id: "u1",
       message: "hello",
+      attachments: [],
     } as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
     sendPushNotificationMock.mockResolvedValue(undefined);

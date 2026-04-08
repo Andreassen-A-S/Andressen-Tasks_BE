@@ -7,6 +7,7 @@ import {
   TaskUnit,
   TaskGoalType,
   TaskEventType,
+  AttachmentType,
 } from "../../src/generated/prisma/client";
 import bcrypt from "bcrypt";
 import {
@@ -34,11 +35,13 @@ async function main() {
     // Clean existing data (order matters due to FK constraints)
     await tx.taskEvent.deleteMany();
     await tx.taskProgressLog.deleteMany();
+    await tx.taskAttachment.deleteMany();
     await tx.taskComment.deleteMany();
     await tx.taskAssignment.deleteMany();
     await tx.task.deleteMany();
     await tx.recurringTaskTemplateAssignee.deleteMany();
     await tx.recurringTaskTemplate.deleteMany();
+    await tx.project.deleteMany();
     await tx.user.deleteMany();
 
     // Passwords (credentials stay the same)
@@ -103,6 +106,16 @@ async function main() {
           },
         }),
       ]);
+
+    // Project
+    const project = await tx.project.create({
+      data: {
+        name: "Andreassen Entreprise",
+        description: "Primært projekt for alle opgaver",
+        color: "#0f6e56",
+        created_by: henrik.user_id,
+      },
+    });
 
     // Helpers
     async function createTask(data: any, actorId: string) {
@@ -210,6 +223,46 @@ async function main() {
       return c;
     }
 
+    async function addCommentWithPhotos(params: {
+      taskId: string;
+      userId: string;
+      message: string;
+      photos: { url: string; fileName: string }[];
+    }) {
+      const c = await tx.taskComment.create({
+        data: {
+          task_id: params.taskId,
+          user_id: params.userId,
+          message: params.message,
+        },
+      });
+
+      await tx.taskAttachment.createMany({
+        data: params.photos.map((p) => ({
+          comment_id: c.comment_id,
+          task_id: params.taskId,
+          uploaded_by: params.userId,
+          type: AttachmentType.IMAGE,
+          gcs_path: `tasks/${params.taskId}/seed-${p.fileName}`,
+          public_url: p.url,
+          file_name: p.fileName,
+          mime_type: "image/jpeg",
+        })),
+      });
+
+      await tx.taskEvent.create({
+        data: {
+          task_id: params.taskId,
+          actor_id: params.userId,
+          type: TaskEventType.COMMENT_CREATED,
+          message: "Comment created",
+          comment_id: c.comment_id,
+        },
+      });
+
+      return c;
+    }
+
     // Dates: make “planned this week” meaningful relative to current time
     const now = new Date();
     const weekStart = startOfWeek(now, { weekStartsOn: 1 });
@@ -218,6 +271,7 @@ async function main() {
     // Create tasks (some planned this week, some next week, some overdue)
     const t1 = await createTask(
       {
+        project_id: project.project_id,
         created_by: henrik.user_id,
         title: "Læg rør 100m (mål)",
         description: "Læg 100 meter rør. Registrer fremskridt i meter.",
@@ -235,6 +289,7 @@ async function main() {
 
     const t2 = await createTask(
       {
+        project_id: project.project_id,
         created_by: henrik.user_id,
         title: "Tjek materiel på pladsen",
         description: "Gennemgå værktøj/materiel og meld mangler til lager.",
@@ -252,6 +307,7 @@ async function main() {
 
     const t3 = await createTask(
       {
+        project_id: project.project_id,
         created_by: henrik.user_id,
         title: "Ryd op i container",
         description:
@@ -270,6 +326,7 @@ async function main() {
 
     const t4 = await createTask(
       {
+        project_id: project.project_id,
         created_by: henrik.user_id,
         title: "Fordel stabilgrus 2.5 km (mål)",
         description:
@@ -288,6 +345,7 @@ async function main() {
 
     const t5_overdue = await createTask(
       {
+        project_id: project.project_id,
         created_by: henrik.user_id,
         title: "Forbered ugentlig rapport",
         description: "Indsaml data og udarbejd ugentlig rapport.",
