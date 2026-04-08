@@ -3,6 +3,7 @@ import { UserRole } from "../generated/prisma/client";
 import { prisma } from "../db/prisma";
 import * as attachmentRepo from "../repositories/attachmentRepository";
 import * as storageService from "../services/storageService";
+import { getParamId, requireUserId } from "../helper/helpers";
 
 export async function getUploadUrl(req: Request, res: Response) {
   try {
@@ -39,8 +40,12 @@ export async function getUploadUrl(req: Request, res: Response) {
 
 export async function getTaskImages(req: Request, res: Response) {
   try {
-    const taskId = req.params.taskId;
-    const userId = req.user?.user_id;
+    const taskId = getParamId(req, "taskId");
+    if (!taskId) return res.status(400).json({ success: false, error: "Missing taskId" });
+
+    const userId = requireUserId(req, res);
+    if (!userId) return;
+
     const isAdmin = req.user?.role === UserRole.ADMIN;
 
     const task = await prisma.task.findUnique({
@@ -75,8 +80,12 @@ export async function getTaskImages(req: Request, res: Response) {
 
 export async function deleteAttachment(req: Request, res: Response) {
   try {
-    const attachmentId = req.params.attachmentId;
-    const userId = req.user?.user_id;
+    const attachmentId = getParamId(req, "attachmentId");
+    if (!attachmentId) return res.status(400).json({ success: false, error: "Missing attachmentId" });
+
+    const userId = requireUserId(req, res);
+    if (!userId) return;
+
     const isAdmin = req.user?.role === UserRole.ADMIN;
 
     const attachment = await attachmentRepo.getAttachmentById(attachmentId);
