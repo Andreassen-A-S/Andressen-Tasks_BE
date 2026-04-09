@@ -11,6 +11,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum AttachmentType {
+  IMAGE
+  FILE
+}
+
 enum TaskUnit {
   NONE
   METERS
@@ -75,6 +80,8 @@ enum TaskEventType {
   RECURRING_TEMPLATE_UPDATED
   RECURRING_TEMPLATE_DEACTIVATED
   RECURRING_INSTANCE_GENERATED
+  PHOTO_UPLOADED
+  PHOTO_DELETED
 }
 
 model User {
@@ -97,6 +104,7 @@ model User {
   taskAssignments TaskAssignment[]
   createdRecurringTemplates RecurringTaskTemplate[] @relation("RecurringTaskCreator")
   recurringTemplateAssignees RecurringTaskTemplateAssignee[]
+  uploadedAttachments TaskAttachment[]
 
   @@map("users")
 }
@@ -113,7 +121,8 @@ model TaskComment {
   task       Task     @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
   author     User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
 
-  events     TaskEvent[]
+  events      TaskEvent[]
+  attachments TaskAttachment[]
 
   @@index([task_id])
   @@index([user_id])
@@ -218,6 +227,7 @@ model Task {
   occurrence_date       DateTime?
 
   comments             TaskComment[]
+  attachments          TaskAttachment[]
   project              Project      @relation(fields: [project_id], references: [project_id])
   creator              User         @relation("TaskCreator", fields: [created_by], references: [user_id])
   completer            User?        @relation("TaskCompleter", fields: [completed_by], references: [user_id])
@@ -304,4 +314,26 @@ model TaskEvent {
   @@index([progress_id])
   @@index([assignment_id])
   @@map("task_events")
+}
+
+model TaskAttachment {
+  attachment_id String         @id @default(uuid())
+  comment_id    String
+  task_id       String
+  uploaded_by   String
+  type          AttachmentType @default(IMAGE)
+  gcs_path      String
+  public_url    String         @db.Text
+  file_name     String?
+  mime_type     String?
+  created_at    DateTime       @default(now())
+
+  comment       TaskComment    @relation(fields: [comment_id], references: [comment_id], onDelete: Cascade)
+  task          Task           @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
+  uploader      User           @relation(fields: [uploaded_by], references: [user_id])
+
+  @@index([task_id])
+  @@index([comment_id])
+  @@index([uploaded_by])
+  @@map("task_attachments")
 }

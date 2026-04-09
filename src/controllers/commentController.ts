@@ -1,21 +1,29 @@
 import { Request, Response } from "express";
 import { TaskEventType, UserRole } from "../generated/prisma/client";
 import * as commentRepo from "../repositories/commentRepository";
+import * as attachmentRepo from "../repositories/attachmentRepository";
+import * as storageService from "../services/storageService";
 import { prisma } from "../db/prisma";
 import * as taskEventRepo from "../repositories/taskEventRepository";
 import * as userRepo from "../repositories/userRepository";
 import { sendPushNotification } from "../services/notificationService";
+import { getParamId, requireUserId } from "../helper/helpers";
+import { CreateCommentRequest } from "../types/comment";
 
 export async function listTaskComments(req: Request, res: Response) {
   try {
-    const taskId = req.params.taskId as string;
+    const taskId = getParamId(req, "taskId");
+    if (!taskId) return res.status(400).json({ success: false, error: "Missing taskId" });
+
+    const userId = requireUserId(req, res);
+    if (!userId) return;
 
     // Verify task exists and user has access
     const task = await prisma.task.findUnique({
       where: { task_id: taskId },
       include: {
         assignments: {
-          where: { user_id: req.user?.user_id },
+          where: { user_id: userId },
         },
       },
     });
@@ -25,7 +33,7 @@ export async function listTaskComments(req: Request, res: Response) {
     }
 
     // Check if user is creator, assigned to task, or admin
-    const isCreator = task.created_by === req.user?.user_id;
+    const isCreator = task.created_by === userId;
     const isAssigned = task.assignments.length > 0;
     const isAdmin = req.user?.role === UserRole.ADMIN;
 
@@ -35,7 +43,19 @@ export async function listTaskComments(req: Request, res: Response) {
 
     const comments = await commentRepo.getCommentsByTaskId(taskId);
 
-    res.json({ success: true, data: comments });
+    const commentsWithSignedUrls = await Promise.all(
+      comments.map(async (comment) => ({
+        ...comment,
+        attachments: await Promise.all(
+          comment.attachments.map(async (att) => ({
+            ...att,
+            public_url: await storageService.generateSignedReadUrl(att.gcs_path),
+          })),
+        ),
+      })),
+    );
+
+    res.json({ success: true, data: commentsWithSignedUrls });
   } catch (error) {
     console.error("Error fetching comments:", error);
     res.status(500).json({ success: false, error: "Failed to fetch comments" });
@@ -44,24 +64,23 @@ export async function listTaskComments(req: Request, res: Response) {
 
 export async function createComment(req: Request, res: Response) {
   try {
-    const taskId = req.params.taskId as string;
-    const { message } = req.body;
-    const userId = req.user?.user_id;
+    const taskId = getParamId(req, "taskId");
+    if (!taskId) return res.status(400).json({ success: false, error: "Missing taskId" });
 
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: "Unauthorized: user not found in token",
-      });
-    }
+    const { message, attachments } = req.body as CreateCommentRequest;
 
-    if (!message?.trim()) {
+    const userId = requireUserId(req, res);
+    if (!userId) return;
+
+    const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
+
+    if (!message?.trim() && !hasAttachments) {
       return res
         .status(400)
-        .json({ success: false, error: "Message is required" });
+        .json({ success: false, error: "Message or attachment is required" });
     }
 
-    if (message.trim().length > 2000) {
+    if (message && message.trim().length > 2000) {
       return res.status(400).json({
         success: false,
         error: "Message too long (max 2000 characters)",
@@ -93,10 +112,40 @@ export async function createComment(req: Request, res: Response) {
       return res.status(403).json({ success: false, error: "Access denied" });
     }
 
+    if (hasAttachments) {
+      for (const a of attachments!) {
+        if (!a || typeof a !== "object") {
+          return res.status(400).json({ success: false, error: "Invalid attachment" });
+        }
+        if (!a.gcs_path || typeof a.gcs_path !== "string") {
+          return res.status(400).json({ success: false, error: "Invalid attachment: gcs_path is required" });
+        }
+        if (!a.gcs_path.startsWith(`tasks/${taskId}/`)) {
+          return res.status(400).json({ success: false, error: "Invalid attachment path" });
+        }
+        if (a.file_name !== undefined && a.file_name !== null && typeof a.file_name !== "string") {
+          return res.status(400).json({ success: false, error: "Invalid attachment: file_name must be a string" });
+        }
+        if (a.mime_type !== undefined && a.mime_type !== null && typeof a.mime_type !== "string") {
+          return res.status(400).json({ success: false, error: "Invalid attachment: mime_type must be a string" });
+        }
+      }
+    }
+
+    const validatedAttachments = hasAttachments
+      ? attachments!.filter((a) => a && typeof a === "object").map((a) => ({
+          gcs_path: a.gcs_path,
+          file_name: typeof a.file_name === "string" ? a.file_name : null,
+          mime_type: typeof a.mime_type === "string" ? a.mime_type : null,
+          public_url: storageService.getPublicUrl(a.gcs_path),
+        }))
+      : undefined;
+
     const comment = await commentRepo.createComment({
       task_id: taskId,
       user_id: userId,
-      message: message.trim(),
+      message: message?.trim() ?? "",
+      attachments: validatedAttachments,
     });
 
     // TaskEvent logic
@@ -137,7 +186,17 @@ export async function createComment(req: Request, res: Response) {
       );
     }
 
-    res.status(201).json({ success: true, data: comment });
+    const commentWithSignedUrls = {
+      ...comment,
+      attachments: await Promise.all(
+        comment.attachments.map(async (att) => ({
+          ...att,
+          public_url: await storageService.generateSignedReadUrl(att.gcs_path).catch(() => att.public_url),
+        })),
+      ),
+    };
+
+    res.status(201).json({ success: true, data: commentWithSignedUrls });
   } catch (error) {
     console.error("Error creating comment:", error);
     res.status(500).json({ success: false, error: "Failed to create comment" });
@@ -146,8 +205,12 @@ export async function createComment(req: Request, res: Response) {
 
 export async function deleteComment(req: Request, res: Response) {
   try {
-    const commentId = req.params.commentId as string;
-    const userId = req.user?.user_id;
+    const commentId = getParamId(req, "commentId");
+    if (!commentId) return res.status(400).json({ success: false, error: "Missing commentId" });
+
+    const userId = requireUserId(req, res);
+    if (!userId) return;
+
     const userRole = req.user?.role;
 
     const comment = await commentRepo.getCommentById(commentId);
@@ -166,9 +229,17 @@ export async function deleteComment(req: Request, res: Response) {
       });
     }
 
-    await commentRepo.deleteComment(commentId);
+    // Delete GCS files best-effort — don't block comment deletion on storage failures
+    const attachmentsToDelete = await attachmentRepo.getAttachmentsByCommentId(commentId);
+    await Promise.all(
+      attachmentsToDelete.map((a) =>
+        storageService.deleteFile(a.gcs_path).catch((err) =>
+          console.error("GCS delete failed for path:", a.gcs_path, err),
+        ),
+      ),
+    );
 
-    // TaskEvent logic
+    // Record event and delete comment — comment FK must still exist for the event
     await taskEventRepo.createTaskEvent({
       task: { connect: { task_id: comment.task_id } },
       actor: { connect: { user_id: req.user?.user_id } },
@@ -179,7 +250,9 @@ export async function deleteComment(req: Request, res: Response) {
       after_json: {},
     });
 
-    res.status(204).json({ success: true });
+    await commentRepo.deleteComment(commentId);
+
+    res.status(204).send();
   } catch (error) {
     console.error("Error deleting comment:", error);
     res.status(500).json({ success: false, error: "Failed to delete comment" });
@@ -188,14 +261,18 @@ export async function deleteComment(req: Request, res: Response) {
 
 export async function updateComment(req: Request, res: Response) {
   try {
-    const commentId = req.params.commentId as string;
+    const commentId = getParamId(req, "commentId");
+    if (!commentId) return res.status(400).json({ success: false, error: "Missing commentId" });
+
     if (!req.body) {
       return res
         .status(400)
         .json({ success: false, error: "Missing request body" });
     }
     const { message } = req.body;
-    const userId = req.user?.user_id;
+    const userId = requireUserId(req, res);
+    if (!userId) return;
+
     const userRole = req.user?.role;
 
     if (!message?.trim()) {
