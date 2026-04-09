@@ -244,7 +244,7 @@ async function main() {
           uploaded_by: params.userId,
           type: AttachmentType.IMAGE,
           gcs_path: `tasks/${params.taskId}/seed-${p.fileName}`,
-          public_url: p.url,
+          url: p.url,
           file_name: p.fileName,
           mime_type: "image/jpeg",
         })),

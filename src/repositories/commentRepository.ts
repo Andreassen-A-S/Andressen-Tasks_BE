@@ -1,9 +1,11 @@
 import { prisma } from "../db/prisma";
-import { AttachmentType } from "../generated/prisma/client";
+import { AttachmentStatus } from "../generated/prisma/client";
+import { confirmAttachments } from "./attachmentRepository";
 
 const COMMENT_INCLUDE = {
   author: { select: { user_id: true, name: true, email: true } },
   attachments: {
+    where: { status: AttachmentStatus.CONFIRMED },
     orderBy: { created_at: "asc" as const },
   },
 } as const;
@@ -16,38 +18,19 @@ export async function getCommentsByTaskId(taskId: string) {
   });
 }
 
-export type AttachmentInput = {
-  gcs_path: string;
-  public_url: string;
-  file_name?: string | null;
-  mime_type?: string | null;
-  type?: AttachmentType;
-};
-
 export async function createComment(data: {
   task_id: string;
   user_id: string;
   message: string;
-  attachments?: AttachmentInput[];
+  uploadTokens?: string[];
 }) {
-  const { attachments, ...commentData } = data;
+  const { uploadTokens, ...commentData } = data;
 
   return prisma.$transaction(async (tx) => {
     const comment = await tx.taskComment.create({ data: commentData });
 
-    if (attachments && attachments.length > 0) {
-      await tx.taskAttachment.createMany({
-        data: attachments.map((a) => ({
-          comment_id: comment.comment_id,
-          task_id: comment.task_id,
-          uploaded_by: comment.user_id,
-          type: a.type ?? AttachmentType.IMAGE,
-          gcs_path: a.gcs_path,
-          public_url: a.public_url,
-          file_name: a.file_name ?? null,
-          mime_type: a.mime_type ?? null,
-        })),
-      });
+    if (uploadTokens && uploadTokens.length > 0) {
+      await confirmAttachments(tx, uploadTokens, comment.comment_id, data.user_id, data.task_id);
     }
 
     return tx.taskComment.findUniqueOrThrow({

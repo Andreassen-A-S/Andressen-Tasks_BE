@@ -4,7 +4,6 @@ import { Task, UserRole } from "../src/generated/prisma/client";
 import * as commentRepo from "../src/repositories/commentRepository";
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
 import * as userRepo from "../src/repositories/userRepository";
-import * as storageService from "../src/services/storageService";
 
 const findUniqueMock = mock<(...args: any[]) => Promise<Task | null>>();
 const sendPushNotificationMock = mock<(...args: any[]) => Promise<void>>();
@@ -92,7 +91,7 @@ describe("commentController.listTaskComments", () => {
 });
 
 describe("commentController.createComment", () => {
-  test("returns 400 when message is missing", async () => {
+  test("returns 400 when body is empty", async () => {
     const req = createRequest({
       params: { taskId: "t1" } as Request["params"],
       user: { user_id: "u1", role: UserRole.USER },
@@ -104,6 +103,20 @@ describe("commentController.createComment", () => {
 
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({ success: false, error: "Message or attachment is required" });
+  });
+
+  test("returns 400 when uploadTokens contains non-string", async () => {
+    const req = createRequest({
+      params: { taskId: "t1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { uploadTokens: [123] },
+    });
+    const res = createMockResponse();
+
+    await commentController.createComment(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "Invalid upload tokens" });
   });
 
   test("creates comment and logs event", async () => {
@@ -124,9 +137,7 @@ describe("commentController.createComment", () => {
       message: "hello",
       attachments: [],
     } as never);
-    const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue(
-      {} as never,
-    );
+    const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
 
     const req = createRequest({
       params: { taskId: "t1" } as Request["params"],
@@ -141,13 +152,13 @@ describe("commentController.createComment", () => {
       task_id: "t1",
       user_id: "u1",
       message: "hello",
-      attachments: undefined,
+      uploadTokens: undefined,
     });
     expect(eventSpy).toHaveBeenCalledTimes(1);
     expect(res.statusCode).toBe(201);
   });
 
-  test("replaces attachment public_url with signed read URL in response", async () => {
+  test("creates comment with upload tokens", async () => {
     findUniqueMock.mockResolvedValueOnce({
       task_id: "t1",
       title: "Test Task",
@@ -157,116 +168,37 @@ describe("commentController.createComment", () => {
 
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
     sendPushNotificationMock.mockResolvedValue(undefined);
-    spyOn(storageService, "getPublicUrl").mockReturnValue("https://storage.googleapis.com/bucket/tasks/t1/uuid.jpg");
-    spyOn(commentRepo, "createComment").mockResolvedValue({
-      comment_id: "c1",
-      task_id: "t1",
-      user_id: "u1",
-      message: "hello",
-      attachments: [{ attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg", public_url: "https://storage.googleapis.com/bucket/tasks/t1/uuid.jpg" }],
-    } as never);
-    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
-    const signSpy = spyOn(storageService, "generateSignedReadUrl").mockResolvedValue("https://signed-url");
-
-    const req = createRequest({
-      params: { taskId: "t1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { message: "hello" },
-    });
-    const res = createMockResponse();
-
-    await commentController.createComment(req, res);
-
-    expect(signSpy).toHaveBeenCalledWith("tasks/t1/uuid.jpg");
-    expect(res.body).toMatchObject({
-      success: true,
-      data: expect.objectContaining({
-        attachments: [expect.objectContaining({ public_url: "https://signed-url" })],
-      }),
-    });
-  });
-
-  test("creates comment with attachments only (no message)", async () => {
-    findUniqueMock.mockResolvedValueOnce({
-      task_id: "t1",
-      title: "Test Task",
-      created_by: "u1",
-      assignments: [],
-    } as any);
-
-    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
-    sendPushNotificationMock.mockResolvedValue(undefined);
-    spyOn(storageService, "getPublicUrl").mockReturnValue("https://storage.googleapis.com/bucket/tasks/t1/uuid.jpg");
 
     const createSpy = spyOn(commentRepo, "createComment").mockResolvedValue({
       comment_id: "c1",
       task_id: "t1",
       user_id: "u1",
       message: "",
-      attachments: [],
+      attachments: [{ attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg", url: "https://storage.googleapis.com/bucket/tasks/t1/uuid.jpg" }],
     } as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
 
     const req = createRequest({
       params: { taskId: "t1" } as Request["params"],
       user: { user_id: "u1", role: UserRole.USER },
-      body: { attachments: [{ gcs_path: "tasks/t1/uuid.jpg", mime_type: "image/jpeg" }] },
+      body: { uploadTokens: ["tok1"] },
     });
     const res = createMockResponse();
 
     await commentController.createComment(req, res);
 
-    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({
-      attachments: [expect.objectContaining({ gcs_path: "tasks/t1/uuid.jpg" })],
-    }));
+    expect(createSpy).toHaveBeenCalledWith({
+      task_id: "t1",
+      user_id: "u1",
+      message: "",
+      uploadTokens: ["tok1"],
+    });
     expect(res.statusCode).toBe(201);
-  });
-
-  test("returns 400 for attachment with invalid gcs_path", async () => {
-    findUniqueMock.mockResolvedValueOnce({
-      task_id: "t1",
-      title: "Test Task",
-      created_by: "u1",
-      assignments: [],
-    } as any);
-
-    const req = createRequest({
-      params: { taskId: "t1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { attachments: [{ gcs_path: "tasks/other-task/uuid.jpg" }] },
-    });
-    const res = createMockResponse();
-
-    await commentController.createComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toMatchObject({ success: false, error: "Invalid attachment path" });
-  });
-
-  test("returns 400 for attachment with missing gcs_path", async () => {
-    findUniqueMock.mockResolvedValueOnce({
-      task_id: "t1",
-      title: "Test Task",
-      created_by: "u1",
-      assignments: [],
-    } as any);
-
-    const req = createRequest({
-      params: { taskId: "t1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { attachments: [{ mime_type: "image/jpeg" }] },
-    });
-    const res = createMockResponse();
-
-    await commentController.createComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toMatchObject({ success: false, error: "Invalid attachment: gcs_path is required" });
+    expect(res.body).toMatchObject({ success: true, data: { attachments: [{ attachment_id: "a1" }] } });
   });
 });
 
 describe("commentController.createComment — notification routing", () => {
-  /** Stubs required for every createComment call to reach the notification logic. */
   function stubCommentInfra() {
     spyOn(commentRepo, "createComment").mockResolvedValue({
       comment_id: "c1",
@@ -276,7 +208,6 @@ describe("commentController.createComment — notification routing", () => {
       attachments: [],
     } as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
-    spyOn(storageService, "getPublicUrl").mockReturnValue("https://storage.googleapis.com/bucket/tasks/t1/uuid.jpg");
     sendPushNotificationMock.mockResolvedValue(undefined);
   }
 
@@ -297,7 +228,6 @@ describe("commentController.createComment — notification routing", () => {
       createRequest({ params: { taskId: "t1", screen: "comments" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
       createMockResponse(),
     );
-
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
     expect(sendPushNotificationMock).toHaveBeenCalledWith(
       "token-u2",
@@ -324,7 +254,6 @@ describe("commentController.createComment — notification routing", () => {
       createRequest({ params: { taskId: "t1", screen: "comments" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
       createMockResponse(),
     );
-
     expect(sendPushNotificationMock).not.toHaveBeenCalled();
   });
 
@@ -346,11 +275,10 @@ describe("commentController.createComment — notification routing", () => {
       createRequest({ params: { taskId: "t1", screen: "comments" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
       createMockResponse(),
     );
-
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
     expect(sendPushNotificationMock).toHaveBeenCalledWith(
       "token-a1",
-      "Ny kommentar",       // admin title, not "Ny kommentar på din opgave"
+      "Ny kommentar",
       "Test Task",
       { taskId: "t1", screen: "comments" },
       "a1",
@@ -373,7 +301,6 @@ describe("commentController.createComment — notification routing", () => {
       createRequest({ params: { taskId: "t1", screen: "comments" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
       createMockResponse(),
     );
-
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
     expect(sendPushNotificationMock).toHaveBeenCalledWith(
       "token-a1",
@@ -393,7 +320,7 @@ describe("commentController.createComment — notification routing", () => {
       assignments: [],
     } as any);
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
-      { user_id: "a1", push_token: "token-a1" }, // commenter — must be skipped
+      { user_id: "a1", push_token: "token-a1" },
       { user_id: "a2", push_token: "token-a2" },
     ]);
 
@@ -401,7 +328,6 @@ describe("commentController.createComment — notification routing", () => {
       createRequest({ params: { taskId: "t1", screen: "comments" }, user: { user_id: "a1", role: UserRole.ADMIN }, body: { message: "hello" } }),
       createMockResponse(),
     );
-
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
     expect(sendPushNotificationMock).toHaveBeenCalledWith(
       "token-a2",
@@ -451,9 +377,7 @@ describe("commentController.updateComment", () => {
       task_id: "t1",
       message: "new",
     } as never);
-    const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue(
-      {} as never,
-    );
+    const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
 
     const req = createRequest({
       params: { commentId: "c1" } as Request["params"],

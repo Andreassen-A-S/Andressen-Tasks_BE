@@ -1,6 +1,8 @@
 import * as cron from "node-cron";
 import * as taskRepo from "../repositories/taskRepository";
+import * as attachmentRepo from "../repositories/attachmentRepository";
 import { sendPushNotification } from "./notificationService";
+import { deleteFile } from "./storageService";
 
 let initialized = false;
 
@@ -32,6 +34,27 @@ export function initScheduler(): void {
     },
     { timezone: "Europe/Copenhagen" },
   );
+
+  // Pending attachment cleanup — every 30 minutes
+  cron.schedule("*/30 * * * *", async () => {
+    try {
+      const cutoff = new Date(Date.now() - 30 * 60 * 1000);
+      const stale = await attachmentRepo.getPendingOlderThan(cutoff);
+      await Promise.allSettled(
+        stale.map(async (a) => {
+          await deleteFile(a.gcs_path).catch((err) =>
+            console.error("GCS cleanup failed for path:", a.gcs_path, err),
+          );
+          await attachmentRepo.deleteAttachment(a.attachment_id);
+        }),
+      );
+      if (stale.length > 0) {
+        console.log(`Cleaned up ${stale.length} pending attachment(s)`);
+      }
+    } catch (err) {
+      console.error("Pending attachment cleanup error:", err);
+    }
+  });
 
   // No activity reminder — 20:00 Europe/Copenhagen local time (CET in winter, CEST in summer), Mon–Fri
   cron.schedule(

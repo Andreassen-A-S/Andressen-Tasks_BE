@@ -3,6 +3,7 @@ import { TaskEventType, UserRole } from "../generated/prisma/client";
 import * as commentRepo from "../repositories/commentRepository";
 import * as attachmentRepo from "../repositories/attachmentRepository";
 import * as storageService from "../services/storageService";
+
 import { prisma } from "../db/prisma";
 import * as taskEventRepo from "../repositories/taskEventRepository";
 import * as userRepo from "../repositories/userRepository";
@@ -49,7 +50,7 @@ export async function listTaskComments(req: Request, res: Response) {
         attachments: await Promise.all(
           comment.attachments.map(async (att) => ({
             ...att,
-            public_url: await storageService.generateSignedReadUrl(att.gcs_path),
+            url: await storageService.generateSignedReadUrl(att.gcs_path),
           })),
         ),
       })),
@@ -67,14 +68,14 @@ export async function createComment(req: Request, res: Response) {
     const taskId = getParamId(req, "taskId");
     if (!taskId) return res.status(400).json({ success: false, error: "Missing taskId" });
 
-    const { message, attachments } = req.body as CreateCommentRequest;
+    const { message, uploadTokens } = req.body as CreateCommentRequest;
 
     const userId = requireUserId(req, res);
     if (!userId) return;
 
-    const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
+    const hasTokens = Array.isArray(uploadTokens) && uploadTokens.length > 0;
 
-    if (!message?.trim() && !hasAttachments) {
+    if (!message?.trim() && !hasTokens) {
       return res
         .status(400)
         .json({ success: false, error: "Message or attachment is required" });
@@ -85,6 +86,10 @@ export async function createComment(req: Request, res: Response) {
         success: false,
         error: "Message too long (max 2000 characters)",
       });
+    }
+
+    if (hasTokens && uploadTokens!.some((t) => typeof t !== "string")) {
+      return res.status(400).json({ success: false, error: "Invalid upload tokens" });
     }
 
     // Verify task exists and user has access (include all assignments for notification)
@@ -112,40 +117,11 @@ export async function createComment(req: Request, res: Response) {
       return res.status(403).json({ success: false, error: "Access denied" });
     }
 
-    if (hasAttachments) {
-      for (const a of attachments!) {
-        if (!a || typeof a !== "object") {
-          return res.status(400).json({ success: false, error: "Invalid attachment" });
-        }
-        if (!a.gcs_path || typeof a.gcs_path !== "string") {
-          return res.status(400).json({ success: false, error: "Invalid attachment: gcs_path is required" });
-        }
-        if (!a.gcs_path.startsWith(`tasks/${taskId}/`)) {
-          return res.status(400).json({ success: false, error: "Invalid attachment path" });
-        }
-        if (a.file_name !== undefined && a.file_name !== null && typeof a.file_name !== "string") {
-          return res.status(400).json({ success: false, error: "Invalid attachment: file_name must be a string" });
-        }
-        if (a.mime_type !== undefined && a.mime_type !== null && typeof a.mime_type !== "string") {
-          return res.status(400).json({ success: false, error: "Invalid attachment: mime_type must be a string" });
-        }
-      }
-    }
-
-    const validatedAttachments = hasAttachments
-      ? attachments!.filter((a) => a && typeof a === "object").map((a) => ({
-          gcs_path: a.gcs_path,
-          file_name: typeof a.file_name === "string" ? a.file_name : null,
-          mime_type: typeof a.mime_type === "string" ? a.mime_type : null,
-          public_url: storageService.getPublicUrl(a.gcs_path),
-        }))
-      : undefined;
-
     const comment = await commentRepo.createComment({
       task_id: taskId,
       user_id: userId,
       message: message?.trim() ?? "",
-      attachments: validatedAttachments,
+      uploadTokens: hasTokens ? uploadTokens : undefined,
     });
 
     // TaskEvent logic
@@ -191,7 +167,7 @@ export async function createComment(req: Request, res: Response) {
       attachments: await Promise.all(
         comment.attachments.map(async (att) => ({
           ...att,
-          public_url: await storageService.generateSignedReadUrl(att.gcs_path).catch(() => att.public_url),
+          url: await storageService.generateSignedReadUrl(att.gcs_path).catch(() => att.url),
         })),
       ),
     };

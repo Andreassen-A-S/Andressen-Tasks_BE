@@ -34,22 +34,24 @@ export function getPublicUrl(gcsPath: string): string {
   return `https://storage.googleapis.com/${getBucketName()}/${encodedPath}`;
 }
 
-export const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic"]);
-const MIME_TO_EXT: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "image/heic": "heic",
+export const ALLOWED_MIME_TYPES: Record<string, { ext: string; maxBytes: number }> = {
+  "image/jpeg": { ext: "jpg", maxBytes: 10 * 1024 * 1024 },
+  "image/png":  { ext: "png", maxBytes: 10 * 1024 * 1024 },
+  "image/webp": { ext: "webp", maxBytes: 10 * 1024 * 1024 },
+  "image/heic": { ext: "heic", maxBytes: 10 * 1024 * 1024 },
+  // "application/pdf": { ext: "pdf", maxBytes: 50 * 1024 * 1024 },
+  // "video/mp4":       { ext: "mp4", maxBytes: 200 * 1024 * 1024 },
 };
 
 export async function generateSignedUploadUrl(
   taskId: string,
   mimeType: string,
 ): Promise<{ uploadUrl: string; gcsPath: string; publicUrl: string }> {
-  if (!ALLOWED_MIME_TYPES.has(mimeType)) {
+  const config = ALLOWED_MIME_TYPES[mimeType];
+  if (!config) {
     throw new Error(`Unsupported mime type: ${mimeType}`);
   }
-  const ext = MIME_TO_EXT[mimeType];
+  const ext = config.ext;
   const gcsPath = `tasks/${taskId}/${randomUUID()}.${ext}`;
   const file = getStorage().bucket(getBucketName()).file(gcsPath);
 
