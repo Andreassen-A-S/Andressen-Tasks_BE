@@ -59,7 +59,7 @@ describe("attachmentController.getUploadUrl", () => {
     await attachmentController.getUploadUrl(req, res);
 
     expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "task_id, file_name, and mime_type are required" });
+    expect(res.body).toEqual({ success: false, error: "task_id and mime_type are required" });
   });
 
   test("returns 400 for unsupported mime type", async () => {

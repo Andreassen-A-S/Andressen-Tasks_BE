@@ -7,17 +7,16 @@ import { getParamId, requireUserId } from "../helper/helpers";
 
 export async function getUploadUrl(req: Request, res: Response) {
   try {
-    const { task_id, file_name, mime_type, file_size } = req.body as {
+    const { task_id, mime_type, file_size } = req.body as {
       task_id?: string;
-      file_name?: string;
       mime_type?: string;
       file_size?: number;
     };
 
-    if (!task_id || !file_name || !mime_type) {
+    if (!task_id || !mime_type) {
       return res
         .status(400)
-        .json({ success: false, error: "task_id, file_name, and mime_type are required" });
+        .json({ success: false, error: "task_id and mime_type are required" });
     }
 
     if (!storageService.ALLOWED_MIME_TYPES.has(mime_type)) {
