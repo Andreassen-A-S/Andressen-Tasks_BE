@@ -123,14 +123,20 @@ export async function createComment(req: Request, res: Response) {
         if (!a.gcs_path.startsWith(`tasks/${taskId}/`)) {
           return res.status(400).json({ success: false, error: "Invalid attachment path" });
         }
+        if (a.file_name !== undefined && a.file_name !== null && typeof a.file_name !== "string") {
+          return res.status(400).json({ success: false, error: "Invalid attachment: file_name must be a string" });
+        }
+        if (a.mime_type !== undefined && a.mime_type !== null && typeof a.mime_type !== "string") {
+          return res.status(400).json({ success: false, error: "Invalid attachment: mime_type must be a string" });
+        }
       }
     }
 
     const validatedAttachments = hasAttachments
       ? attachments!.filter((a) => a && typeof a === "object").map((a) => ({
           gcs_path: a.gcs_path,
-          file_name: a.file_name,
-          mime_type: a.mime_type,
+          file_name: typeof a.file_name === "string" ? a.file_name : null,
+          mime_type: typeof a.mime_type === "string" ? a.mime_type : null,
           public_url: storageService.getPublicUrl(a.gcs_path),
         }))
       : undefined;
@@ -185,7 +191,7 @@ export async function createComment(req: Request, res: Response) {
       attachments: await Promise.all(
         comment.attachments.map(async (att) => ({
           ...att,
-          public_url: await storageService.generateSignedReadUrl(att.gcs_path),
+          public_url: await storageService.generateSignedReadUrl(att.gcs_path).catch(() => att.public_url),
         })),
       ),
     };

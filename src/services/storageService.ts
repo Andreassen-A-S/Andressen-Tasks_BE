@@ -12,10 +12,14 @@ let _bucketName: string | null = null;
 
 function getStorage(): Storage {
   if (!_storage) {
-    _storage = new Storage({
-      projectId: requireEnv("GCS_PROJECT_ID"),
-      credentials: JSON.parse(requireEnv("GCS_CREDENTIALS")),
-    });
+    const raw = requireEnv("GCS_CREDENTIALS");
+    let credentials: object;
+    try {
+      credentials = JSON.parse(raw);
+    } catch {
+      throw new Error("GCS_CREDENTIALS must be valid JSON — check for unescaped newlines or missing quotes");
+    }
+    _storage = new Storage({ projectId: requireEnv("GCS_PROJECT_ID"), credentials });
   }
   return _storage;
 }
