@@ -16,6 +16,11 @@ enum AttachmentType {
   FILE
 }
 
+enum AttachmentStatus {
+  PENDING
+  CONFIRMED
+}
+
 enum TaskUnit {
   NONE
   METERS
@@ -317,23 +322,27 @@ model TaskEvent {
 }
 
 model TaskAttachment {
-  attachment_id String         @id @default(uuid())
-  comment_id    String
+  attachment_id String           @id @default(uuid())
+  upload_token  String           @unique @default(uuid())
+  status        AttachmentStatus @default(PENDING)
+  comment_id    String?
   task_id       String
   uploaded_by   String
-  type          AttachmentType @default(IMAGE)
+  type          AttachmentType   @default(IMAGE)
   gcs_path      String
-  public_url    String         @db.Text
+  url           String           @db.Text
   file_name     String?
   mime_type     String?
-  created_at    DateTime       @default(now())
+  file_size     Int?
+  created_at    DateTime         @default(now())
 
-  comment       TaskComment    @relation(fields: [comment_id], references: [comment_id], onDelete: Cascade)
-  task          Task           @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
-  uploader      User           @relation(fields: [uploaded_by], references: [user_id])
+  comment   TaskComment? @relation(fields: [comment_id], references: [comment_id], onDelete: Cascade)
+  task      Task         @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
+  uploader  User         @relation(fields: [uploaded_by], references: [user_id])
 
   @@index([task_id])
   @@index([comment_id])
   @@index([uploaded_by])
+  @@index([status, created_at])
   @@map("task_attachments")
 }

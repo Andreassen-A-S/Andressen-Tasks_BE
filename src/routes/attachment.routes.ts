@@ -4,8 +4,8 @@ import { authenticateToken } from "../middleware/auth";
 
 const router = Router();
 
-// POST /api/attachments/upload-url — get a signed GCS upload URL
-router.post("/upload-url", authenticateToken, attachmentController.getUploadUrl);
+// POST /api/attachments/prepare — create pending attachment records and get signed upload URLs
+router.post("/prepare", authenticateToken, attachmentController.prepareAttachments);
 
 // GET /api/attachments/task/:taskId — all image attachments for the Photos tab
 router.get("/task/:taskId", authenticateToken, attachmentController.getTaskImages);

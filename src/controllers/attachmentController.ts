@@ -5,53 +5,82 @@ import * as attachmentRepo from "../repositories/attachmentRepository";
 import * as storageService from "../services/storageService";
 import { getParamId, requireUserId } from "../helper/helpers";
 
-export async function getUploadUrl(req: Request, res: Response) {
+export async function prepareAttachments(req: Request, res: Response) {
   try {
-    const { task_id, mime_type, file_size } = req.body as {
-      task_id?: string;
-      mime_type?: string;
-      file_size?: number;
-    };
-
-    if (!task_id || !mime_type) {
-      return res
-        .status(400)
-        .json({ success: false, error: "task_id and mime_type are required" });
-    }
-
-    if (!storageService.ALLOWED_MIME_TYPES.has(mime_type)) {
-      return res.status(400).json({ success: false, error: "Unsupported file type" });
-    }
-
-    const MAX_FILE_BYTES = 10 * 1024 * 1024;
-    if (file_size !== undefined && file_size > MAX_FILE_BYTES) {
-      return res.status(413).json({ success: false, error: "File exceeds maximum size of 10 MB" });
-    }
-
     const userId = requireUserId(req, res);
     if (!userId) return;
 
-    const isAdmin = req.user?.role === UserRole.ADMIN;
+    const { taskId, files } = req.body as {
+      taskId?: string;
+      files?: { fileName?: string; mimeType?: string; fileSize?: number }[];
+    };
 
+    if (!taskId || !Array.isArray(files) || files.length === 0) {
+      return res.status(400).json({ success: false, error: "taskId and files are required" });
+    }
+
+    if (files.length > 5) {
+      return res.status(400).json({ success: false, error: "Maximum 5 files per request" });
+    }
+
+    for (const f of files) {
+      if (f === null || typeof f !== "object") {
+        return res.status(400).json({ success: false, error: "Invalid file entry" });
+      }
+      if (f.fileName !== undefined && f.fileName !== null && typeof f.fileName !== "string") {
+        return res.status(400).json({ success: false, error: "Invalid fileName" });
+      }
+      if (f.fileSize !== undefined && f.fileSize !== null && (typeof f.fileSize !== "number" || !Number.isFinite(f.fileSize) || f.fileSize < 0 || !Number.isInteger(f.fileSize))) {
+        return res.status(400).json({ success: false, error: "Invalid fileSize" });
+      }
+      const mimeConfig = f.mimeType ? storageService.ALLOWED_MIME_TYPES[f.mimeType] : undefined;
+      if (!mimeConfig) {
+        return res.status(400).json({ success: false, error: "Unsupported file type" });
+      }
+      if (f.fileSize !== undefined && f.fileSize !== null && f.fileSize > mimeConfig.maxBytes) {
+        return res.status(413).json({ success: false, error: `File exceeds maximum size of ${mimeConfig.maxBytes / (1024 * 1024)} MB` });
+      }
+    }
+
+    const isAdmin = req.user?.role === UserRole.ADMIN;
     const task = await prisma.task.findUnique({
-      where: { task_id },
+      where: { task_id: taskId },
       include: { assignments: { where: { user_id: userId } } },
     });
     if (!task) {
       return res.status(404).json({ success: false, error: "Task not found" });
     }
-
-    const isCreator = task.created_by === userId;
-    const isAssigned = task.assignments.length > 0;
-    if (!isCreator && !isAssigned && !isAdmin) {
+    if (task.created_by !== userId && task.assignments.length === 0 && !isAdmin) {
       return res.status(403).json({ success: false, error: "Access denied" });
     }
 
-    const result = await storageService.generateSignedUploadUrl(task_id, mime_type);
-    res.json({ success: true, data: result });
+    const created: { attachmentId: string; uploadToken: string; uploadUrl: string }[] = [];
+    try {
+      for (const f of files) {
+        const mimeType = f.mimeType as string;
+        const { uploadUrl, gcsPath, publicUrl } = await storageService.generateSignedUploadUrl(taskId, mimeType);
+        const { upload_token, attachment_id } = await attachmentRepo.prepareAttachment({
+          taskId,
+          userId,
+          mimeType,
+          gcsPath,
+          publicUrl,
+          fileName: f.fileName ?? null,
+          fileSize: f.fileSize ?? null,
+        });
+        created.push({ attachmentId: attachment_id, uploadToken: upload_token, uploadUrl });
+      }
+    } catch (error) {
+      await Promise.allSettled(
+        created.map((c) => attachmentRepo.deleteAttachment(c.attachmentId)),
+      );
+      throw error;
+    }
+
+    res.json({ success: true, data: created.map(({ uploadToken, uploadUrl }) => ({ uploadToken, uploadUrl })) });
   } catch (error) {
-    console.error("Error generating upload URL:", error);
-    res.status(500).json({ success: false, error: "Failed to generate upload URL" });
+    console.error("Error preparing attachments:", error);
+    res.status(500).json({ success: false, error: "Failed to prepare attachments" });
   }
 }
 
@@ -74,10 +103,7 @@ export async function getTaskImages(req: Request, res: Response) {
       return res.status(404).json({ success: false, error: "Task not found" });
     }
 
-    const isCreator = task.created_by === userId;
-    const isAssigned = task.assignments.length > 0;
-
-    if (!isCreator && !isAssigned && !isAdmin) {
+    if (task.created_by !== userId && task.assignments.length === 0 && !isAdmin) {
       return res.status(403).json({ success: false, error: "Access denied" });
     }
 
@@ -85,7 +111,7 @@ export async function getTaskImages(req: Request, res: Response) {
     const imagesWithSignedUrls = await Promise.all(
       images.map(async (img) => ({
         ...img,
-        public_url: await storageService.generateSignedReadUrl(img.gcs_path),
+        url: await storageService.generateSignedReadUrl(img.gcs_path),
       })),
     );
     res.json({ success: true, data: imagesWithSignedUrls });
