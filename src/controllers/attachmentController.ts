@@ -20,6 +20,10 @@ export async function getUploadUrl(req: Request, res: Response) {
         .json({ success: false, error: "task_id, file_name, and mime_type are required" });
     }
 
+    if (!storageService.ALLOWED_MIME_TYPES.has(mime_type)) {
+      return res.status(400).json({ success: false, error: "Unsupported file type" });
+    }
+
     const MAX_FILE_BYTES = 10 * 1024 * 1024;
     if (file_size !== undefined && file_size > MAX_FILE_BYTES) {
       return res.status(413).json({ success: false, error: "File exceeds maximum size of 10 MB" });

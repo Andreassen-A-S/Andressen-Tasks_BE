@@ -114,13 +114,19 @@ export async function createComment(req: Request, res: Response) {
       return res.status(403).json({ success: false, error: "Access denied" });
     }
 
+    if (hasAttachments) {
+      for (const a of attachments!) {
+        if (!a.gcs_path || typeof a.gcs_path !== "string") {
+          return res.status(400).json({ success: false, error: "Invalid attachment: gcs_path is required" });
+        }
+        if (!a.gcs_path.startsWith(`tasks/${taskId}/`)) {
+          return res.status(400).json({ success: false, error: "Invalid attachment path" });
+        }
+      }
+    }
+
     const validatedAttachments = hasAttachments
-      ? attachments!.map((a) => {
-          if (!a.gcs_path.startsWith(`tasks/${taskId}/`)) {
-            throw Object.assign(new Error("Invalid attachment path"), { statusCode: 400 });
-          }
-          return { ...a, public_url: storageService.getPublicUrl(a.gcs_path) };
-        })
+      ? attachments!.map((a) => ({ ...a, public_url: storageService.getPublicUrl(a.gcs_path) }))
       : undefined;
 
     const comment = await commentRepo.createComment({
@@ -211,7 +217,17 @@ export async function deleteComment(req: Request, res: Response) {
       });
     }
 
-    // TaskEvent logic before delete — comment FK must still exist
+    // Delete GCS files best-effort — don't block comment deletion on storage failures
+    const attachmentsToDelete = await attachmentRepo.getAttachmentsByCommentId(commentId);
+    await Promise.all(
+      attachmentsToDelete.map((a) =>
+        storageService.deleteFile(a.gcs_path).catch((err) =>
+          console.error("GCS delete failed for path:", a.gcs_path, err),
+        ),
+      ),
+    );
+
+    // Record event and delete comment — comment FK must still exist for the event
     await taskEventRepo.createTaskEvent({
       task: { connect: { task_id: comment.task_id } },
       actor: { connect: { user_id: req.user?.user_id } },
@@ -221,10 +237,6 @@ export async function deleteComment(req: Request, res: Response) {
       before_json: comment,
       after_json: {},
     });
-
-    // Delete GCS files then DB record
-    const attachmentsToDelete = await attachmentRepo.getAttachmentsByCommentId(commentId);
-    await Promise.all(attachmentsToDelete.map((a) => storageService.deleteFile(a.gcs_path)));
 
     await commentRepo.deleteComment(commentId);
 

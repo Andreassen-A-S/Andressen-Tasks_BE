@@ -62,6 +62,19 @@ describe("attachmentController.getUploadUrl", () => {
     expect(res.body).toEqual({ success: false, error: "task_id, file_name, and mime_type are required" });
   });
 
+  test("returns 400 for unsupported mime type", async () => {
+    const req = createRequest({
+      body: { task_id: "t1", file_name: "doc.pdf", mime_type: "application/pdf" },
+      user: { user_id: "u1", role: UserRole.USER },
+    });
+    const res = createMockResponse();
+
+    await attachmentController.getUploadUrl(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "Unsupported file type" });
+  });
+
   test("returns 401 when user is not authenticated", async () => {
     const req = createRequest({ body: { task_id: "t1", file_name: "photo.jpg", mime_type: "image/jpeg" } });
     const res = createMockResponse();

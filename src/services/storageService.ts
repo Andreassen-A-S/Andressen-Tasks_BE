@@ -29,7 +29,7 @@ export function getPublicUrl(gcsPath: string): string {
   return `https://storage.googleapis.com/${getBucketName()}/${gcsPath}`;
 }
 
-const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic"]);
+export const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic"]);
 const MIME_TO_EXT: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",

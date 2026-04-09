@@ -4,6 +4,7 @@ import { Task, UserRole } from "../src/generated/prisma/client";
 import * as commentRepo from "../src/repositories/commentRepository";
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
 import * as userRepo from "../src/repositories/userRepository";
+import * as storageService from "../src/services/storageService";
 
 const findUniqueMock = mock<(...args: any[]) => Promise<Task | null>>();
 const sendPushNotificationMock = mock<(...args: any[]) => Promise<void>>();
@@ -140,9 +141,88 @@ describe("commentController.createComment", () => {
       task_id: "t1",
       user_id: "u1",
       message: "hello",
+      attachments: undefined,
     });
     expect(eventSpy).toHaveBeenCalledTimes(1);
     expect(res.statusCode).toBe(201);
+  });
+
+  test("creates comment with attachments only (no message)", async () => {
+    findUniqueMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
+      created_by: "u1",
+      assignments: [],
+    } as any);
+
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
+    sendPushNotificationMock.mockResolvedValue(undefined);
+    spyOn(storageService, "getPublicUrl").mockReturnValue("https://storage.googleapis.com/bucket/tasks/t1/uuid.jpg");
+
+    const createSpy = spyOn(commentRepo, "createComment").mockResolvedValue({
+      comment_id: "c1",
+      task_id: "t1",
+      user_id: "u1",
+      message: "",
+      attachments: [],
+    } as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+
+    const req = createRequest({
+      params: { taskId: "t1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { attachments: [{ gcs_path: "tasks/t1/uuid.jpg", mime_type: "image/jpeg" }] },
+    });
+    const res = createMockResponse();
+
+    await commentController.createComment(req, res);
+
+    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({
+      attachments: [expect.objectContaining({ gcs_path: "tasks/t1/uuid.jpg" })],
+    }));
+    expect(res.statusCode).toBe(201);
+  });
+
+  test("returns 400 for attachment with invalid gcs_path", async () => {
+    findUniqueMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
+      created_by: "u1",
+      assignments: [],
+    } as any);
+
+    const req = createRequest({
+      params: { taskId: "t1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { attachments: [{ gcs_path: "tasks/other-task/uuid.jpg" }] },
+    });
+    const res = createMockResponse();
+
+    await commentController.createComment(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toMatchObject({ success: false, error: "Invalid attachment path" });
+  });
+
+  test("returns 400 for attachment with missing gcs_path", async () => {
+    findUniqueMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
+      created_by: "u1",
+      assignments: [],
+    } as any);
+
+    const req = createRequest({
+      params: { taskId: "t1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { attachments: [{ mime_type: "image/jpeg" }] },
+    });
+    const res = createMockResponse();
+
+    await commentController.createComment(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toMatchObject({ success: false, error: "Invalid attachment: gcs_path is required" });
   });
 });
 
@@ -157,6 +237,7 @@ describe("commentController.createComment — notification routing", () => {
       attachments: [],
     } as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    spyOn(storageService, "getPublicUrl").mockReturnValue("https://storage.googleapis.com/bucket/tasks/t1/uuid.jpg");
     sendPushNotificationMock.mockResolvedValue(undefined);
   }
 
