@@ -27,11 +27,17 @@ export async function prepareAttachments(req: Request, res: Response) {
       if (f === null || typeof f !== "object") {
         return res.status(400).json({ success: false, error: "Invalid file entry" });
       }
+      if (f.fileName !== undefined && f.fileName !== null && typeof f.fileName !== "string") {
+        return res.status(400).json({ success: false, error: "Invalid fileName" });
+      }
+      if (f.fileSize !== undefined && f.fileSize !== null && (typeof f.fileSize !== "number" || !Number.isFinite(f.fileSize) || f.fileSize < 0)) {
+        return res.status(400).json({ success: false, error: "Invalid fileSize" });
+      }
       const mimeConfig = f.mimeType ? storageService.ALLOWED_MIME_TYPES[f.mimeType] : undefined;
       if (!mimeConfig) {
         return res.status(400).json({ success: false, error: "Unsupported file type" });
       }
-      if (f.fileSize !== undefined && f.fileSize > mimeConfig.maxBytes) {
+      if (f.fileSize !== undefined && f.fileSize !== null && f.fileSize > mimeConfig.maxBytes) {
         return res.status(413).json({ success: false, error: `File exceeds maximum size of ${mimeConfig.maxBytes / (1024 * 1024)} MB` });
       }
     }
@@ -48,11 +54,12 @@ export async function prepareAttachments(req: Request, res: Response) {
       return res.status(403).json({ success: false, error: "Access denied" });
     }
 
-    const prepared = await Promise.all(
-      files.map(async (f) => {
+    const created: { attachmentId: string; uploadToken: string; uploadUrl: string }[] = [];
+    try {
+      for (const f of files) {
         const mimeType = f.mimeType as string;
         const { uploadUrl, gcsPath, publicUrl } = await storageService.generateSignedUploadUrl(taskId, mimeType);
-        const { upload_token } = await attachmentRepo.prepareAttachment({
+        const { upload_token, attachment_id } = await attachmentRepo.prepareAttachment({
           taskId,
           userId,
           mimeType,
@@ -61,11 +68,16 @@ export async function prepareAttachments(req: Request, res: Response) {
           fileName: f.fileName ?? null,
           fileSize: f.fileSize ?? null,
         });
-        return { uploadToken: upload_token, uploadUrl };
-      }),
-    );
+        created.push({ attachmentId: attachment_id, uploadToken: upload_token, uploadUrl });
+      }
+    } catch (error) {
+      await Promise.allSettled(
+        created.map((c) => attachmentRepo.deleteAttachment(c.attachmentId)),
+      );
+      throw error;
+    }
 
-    res.json({ success: true, data: prepared });
+    res.json({ success: true, data: created.map(({ uploadToken, uploadUrl }) => ({ uploadToken, uploadUrl })) });
   } catch (error) {
     console.error("Error preparing attachments:", error);
     res.status(500).json({ success: false, error: "Failed to prepare attachments" });

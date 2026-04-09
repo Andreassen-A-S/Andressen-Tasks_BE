@@ -48,7 +48,7 @@ export async function prepareAttachment(input: PrepareAttachmentInput) {
       file_size: input.fileSize ?? null,
       status: AttachmentStatus.PENDING,
     },
-    select: { upload_token: true },
+    select: { attachment_id: true, upload_token: true },
   });
 }
 

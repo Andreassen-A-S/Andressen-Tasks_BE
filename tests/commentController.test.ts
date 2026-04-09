@@ -120,6 +120,20 @@ describe("commentController.createComment", () => {
     expect(res.body).toEqual({ success: false, error: "Invalid upload tokens" });
   });
 
+  test("returns 400 when uploadTokens contains duplicates", async () => {
+    const req = createRequest({
+      params: { taskId: "t1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { uploadTokens: ["tok1", "tok1"] },
+    });
+    const res = createMockResponse();
+
+    await commentController.createComment(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "Duplicate upload tokens" });
+  });
+
   test("creates comment and logs event", async () => {
     findUniqueMock.mockResolvedValueOnce({
       task_id: "t1",

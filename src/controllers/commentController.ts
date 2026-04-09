@@ -92,6 +92,10 @@ export async function createComment(req: Request, res: Response) {
       return res.status(400).json({ success: false, error: "Invalid upload tokens" });
     }
 
+    if (hasTokens && new Set(uploadTokens).size !== uploadTokens!.length) {
+      return res.status(400).json({ success: false, error: "Duplicate upload tokens" });
+    }
+
     // Verify task exists and user has access (include all assignments for notification)
     const task = await prisma.task.findUnique({
       where: { task_id: taskId },

@@ -105,6 +105,45 @@ describe("attachmentController.prepareAttachments", () => {
     expect(res.body).toEqual({ success: false, error: "Maximum 5 files per request" });
   });
 
+  test("returns 400 when fileSize is NaN", async () => {
+    const req = createRequest({
+      body: { taskId: "t1", files: [{ fileName: "photo.jpg", mimeType: "image/jpeg", fileSize: NaN }] },
+      user: { user_id: "u1", role: UserRole.USER },
+    });
+    const res = createMockResponse();
+
+    await attachmentController.prepareAttachments(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "Invalid fileSize" });
+  });
+
+  test("returns 400 when fileSize is negative", async () => {
+    const req = createRequest({
+      body: { taskId: "t1", files: [{ fileName: "photo.jpg", mimeType: "image/jpeg", fileSize: -1 }] },
+      user: { user_id: "u1", role: UserRole.USER },
+    });
+    const res = createMockResponse();
+
+    await attachmentController.prepareAttachments(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "Invalid fileSize" });
+  });
+
+  test("returns 400 when fileName is not a string", async () => {
+    const req = createRequest({
+      body: { taskId: "t1", files: [{ fileName: 42, mimeType: "image/jpeg", fileSize: 1024 }] },
+      user: { user_id: "u1", role: UserRole.USER },
+    });
+    const res = createMockResponse();
+
+    await attachmentController.prepareAttachments(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "Invalid fileName" });
+  });
+
   test("returns 400 for unsupported mime type", async () => {
     const req = createRequest({
       body: { taskId: "t1", files: [{ fileName: "doc.pdf", mimeType: "application/pdf", fileSize: 1024 }] },
