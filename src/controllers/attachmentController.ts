@@ -10,12 +10,12 @@ export async function prepareAttachments(req: Request, res: Response) {
     const userId = requireUserId(req, res);
     if (!userId) return;
 
-    const { taskId, files } = req.body as {
-      taskId?: string;
-      files?: { fileName?: string; mimeType?: string; fileSize?: number }[];
+    const { task_id, files } = req.body as {
+      task_id?: string;
+      files?: { file_name?: string; mime_type?: string; file_size?: number }[];
     };
 
-    if (!taskId || !Array.isArray(files) || files.length === 0) {
+    if (!task_id || !Array.isArray(files) || files.length === 0) {
       return res.status(400).json({ success: false, error: "taskId and files are required" });
     }
 
@@ -27,24 +27,24 @@ export async function prepareAttachments(req: Request, res: Response) {
       if (f === null || typeof f !== "object") {
         return res.status(400).json({ success: false, error: "Invalid file entry" });
       }
-      if (f.fileName !== undefined && f.fileName !== null && typeof f.fileName !== "string") {
+      if (f.file_name !== undefined && f.file_name !== null && typeof f.file_name !== "string") {
         return res.status(400).json({ success: false, error: "Invalid fileName" });
       }
-      if (f.fileSize !== undefined && f.fileSize !== null && (typeof f.fileSize !== "number" || !Number.isFinite(f.fileSize) || f.fileSize < 0 || !Number.isInteger(f.fileSize))) {
+      if (f.file_size !== undefined && f.file_size !== null && (typeof f.file_size !== "number" || !Number.isFinite(f.file_size) || f.file_size < 0 || !Number.isInteger(f.file_size))) {
         return res.status(400).json({ success: false, error: "Invalid fileSize" });
       }
-      const mimeConfig = f.mimeType ? storageService.ALLOWED_MIME_TYPES[f.mimeType] : undefined;
+      const mimeConfig = f.mime_type ? storageService.ALLOWED_MIME_TYPES[f.mime_type] : undefined;
       if (!mimeConfig) {
         return res.status(400).json({ success: false, error: "Unsupported file type" });
       }
-      if (f.fileSize !== undefined && f.fileSize !== null && f.fileSize > mimeConfig.maxBytes) {
+      if (f.file_size !== undefined && f.file_size !== null && f.file_size > mimeConfig.maxBytes) {
         return res.status(413).json({ success: false, error: `File exceeds maximum size of ${mimeConfig.maxBytes / (1024 * 1024)} MB` });
       }
     }
 
     const isAdmin = req.user?.role === UserRole.ADMIN;
     const task = await prisma.task.findUnique({
-      where: { task_id: taskId },
+      where: { task_id: task_id },
       include: { assignments: { where: { user_id: userId } } },
     });
     if (!task) {
@@ -57,16 +57,16 @@ export async function prepareAttachments(req: Request, res: Response) {
     const created: { attachmentId: string; uploadToken: string; uploadUrl: string }[] = [];
     try {
       for (const f of files) {
-        const mimeType = f.mimeType as string;
-        const { uploadUrl, gcsPath, publicUrl } = await storageService.generateSignedUploadUrl(taskId, mimeType);
+        const mimeType = f.mime_type as string;
+        const { uploadUrl, gcsPath, url } = await storageService.generateSignedUploadUrl(task_id, mimeType);
         const { upload_token, attachment_id } = await attachmentRepo.prepareAttachment({
-          taskId,
+          taskId: task_id,
           userId,
           mimeType,
           gcsPath,
-          publicUrl,
-          fileName: f.fileName ?? null,
-          fileSize: f.fileSize ?? null,
+          url,
+          fileName: f.file_name ?? null,
+          fileSize: f.file_size ?? null,
         });
         created.push({ attachmentId: attachment_id, uploadToken: upload_token, uploadUrl });
       }

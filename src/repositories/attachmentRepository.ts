@@ -30,7 +30,7 @@ export type PrepareAttachmentInput = {
   userId: string;
   mimeType: string;
   gcsPath: string;
-  publicUrl: string;
+  url: string;
   fileName?: string | null;
   fileSize?: number | null;
 };
@@ -42,7 +42,7 @@ export async function prepareAttachment(input: PrepareAttachmentInput) {
       uploaded_by: input.userId,
       type: AttachmentType.IMAGE,
       gcs_path: input.gcsPath,
-      url: input.publicUrl,
+      url: input.url,
       file_name: input.fileName ?? null,
       mime_type: input.mimeType,
       file_size: input.fileSize ?? null,

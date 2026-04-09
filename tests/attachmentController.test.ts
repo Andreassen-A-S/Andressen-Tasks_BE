@@ -54,7 +54,7 @@ afterEach(() => {
 describe("attachmentController.prepareAttachments", () => {
   test("returns 401 when user is not authenticated", async () => {
     const req = createRequest({
-      body: { taskId: "t1", files: [{ fileName: "photo.jpg", mimeType: "image/jpeg", fileSize: 1024 }] },
+      body: { task_id: "t1", files: [{ file_name: "photo.jpg", mime_type: "image/jpeg", file_size: 1024 }] },
     });
     const res = createMockResponse();
 
@@ -65,7 +65,7 @@ describe("attachmentController.prepareAttachments", () => {
 
   test("returns 400 when taskId is missing", async () => {
     const req = createRequest({
-      body: { files: [{ mimeType: "image/jpeg" }] },
+      body: { files: [{ mime_type: "image/jpeg" }] },
       user: { user_id: "u1", role: UserRole.USER },
     });
     const res = createMockResponse();
@@ -78,7 +78,7 @@ describe("attachmentController.prepareAttachments", () => {
 
   test("returns 400 when files is empty", async () => {
     const req = createRequest({
-      body: { taskId: "t1", files: [] },
+      body: { task_id: "t1", files: [] },
       user: { user_id: "u1", role: UserRole.USER },
     });
     const res = createMockResponse();
@@ -92,8 +92,8 @@ describe("attachmentController.prepareAttachments", () => {
   test("returns 400 when more than 5 files", async () => {
     const req = createRequest({
       body: {
-        taskId: "t1",
-        files: Array(6).fill({ fileName: "photo.jpg", mimeType: "image/jpeg", fileSize: 1024 }),
+        task_id: "t1",
+        files: Array(6).fill({ file_name: "photo.jpg", mime_type: "image/jpeg", file_size: 1024 }),
       },
       user: { user_id: "u1", role: UserRole.USER },
     });
@@ -107,7 +107,7 @@ describe("attachmentController.prepareAttachments", () => {
 
   test("returns 400 when fileSize is NaN", async () => {
     const req = createRequest({
-      body: { taskId: "t1", files: [{ fileName: "photo.jpg", mimeType: "image/jpeg", fileSize: NaN }] },
+      body: { task_id: "t1", files: [{ file_name: "photo.jpg", mime_type: "image/jpeg", file_size: NaN }] },
       user: { user_id: "u1", role: UserRole.USER },
     });
     const res = createMockResponse();
@@ -120,7 +120,7 @@ describe("attachmentController.prepareAttachments", () => {
 
   test("returns 400 when fileSize is negative", async () => {
     const req = createRequest({
-      body: { taskId: "t1", files: [{ fileName: "photo.jpg", mimeType: "image/jpeg", fileSize: -1 }] },
+      body: { task_id: "t1", files: [{ file_name: "photo.jpg", mime_type: "image/jpeg", file_size: -1 }] },
       user: { user_id: "u1", role: UserRole.USER },
     });
     const res = createMockResponse();
@@ -133,7 +133,7 @@ describe("attachmentController.prepareAttachments", () => {
 
   test("returns 400 when fileName is not a string", async () => {
     const req = createRequest({
-      body: { taskId: "t1", files: [{ fileName: 42, mimeType: "image/jpeg", fileSize: 1024 }] },
+      body: { task_id: "t1", files: [{ file_name: 42, mime_type: "image/jpeg", file_size: 1024 }] },
       user: { user_id: "u1", role: UserRole.USER },
     });
     const res = createMockResponse();
@@ -146,7 +146,7 @@ describe("attachmentController.prepareAttachments", () => {
 
   test("returns 400 for unsupported mime type", async () => {
     const req = createRequest({
-      body: { taskId: "t1", files: [{ fileName: "doc.pdf", mimeType: "application/pdf", fileSize: 1024 }] },
+      body: { task_id: "t1", files: [{ file_name: "doc.pdf", mime_type: "application/pdf", file_size: 1024 }] },
       user: { user_id: "u1", role: UserRole.USER },
     });
     const res = createMockResponse();
@@ -159,7 +159,7 @@ describe("attachmentController.prepareAttachments", () => {
 
   test("returns 413 when file exceeds size limit", async () => {
     const req = createRequest({
-      body: { taskId: "t1", files: [{ fileName: "photo.jpg", mimeType: "image/jpeg", fileSize: 11 * 1024 * 1024 }] },
+      body: { task_id: "t1", files: [{ file_name: "photo.jpg", mime_type: "image/jpeg", file_size: 11 * 1024 * 1024 }] },
       user: { user_id: "u1", role: UserRole.USER },
     });
     const res = createMockResponse();
@@ -174,7 +174,7 @@ describe("attachmentController.prepareAttachments", () => {
     findUniqueMock.mockResolvedValueOnce(null);
 
     const req = createRequest({
-      body: { taskId: "t1", files: [{ fileName: "photo.jpg", mimeType: "image/jpeg", fileSize: 1024 }] },
+      body: { task_id: "t1", files: [{ file_name: "photo.jpg", mime_type: "image/jpeg", file_size: 1024 }] },
       user: { user_id: "u1", role: UserRole.USER },
     });
     const res = createMockResponse();
@@ -189,7 +189,7 @@ describe("attachmentController.prepareAttachments", () => {
     findUniqueMock.mockResolvedValueOnce({ task_id: "t1", created_by: "other", assignments: [] });
 
     const req = createRequest({
-      body: { taskId: "t1", files: [{ fileName: "photo.jpg", mimeType: "image/jpeg", fileSize: 1024 }] },
+      body: { task_id: "t1", files: [{ file_name: "photo.jpg", mime_type: "image/jpeg", file_size: 1024 }] },
       user: { user_id: "u1", role: UserRole.USER },
     });
     const res = createMockResponse();
@@ -210,7 +210,7 @@ describe("attachmentController.prepareAttachments", () => {
     spyOn(attachmentRepo, "prepareAttachment").mockResolvedValue({ upload_token: "tok1" } as never);
 
     const req = createRequest({
-      body: { taskId: "t1", files: [{ fileName: "photo.jpg", mimeType: "image/jpeg", fileSize: 1024 }] },
+      body: { task_id: "t1", files: [{ file_name: "photo.jpg", mime_type: "image/jpeg", file_size: 1024 }] },
       user: { user_id: "u1", role: UserRole.USER },
     });
     const res = createMockResponse();
