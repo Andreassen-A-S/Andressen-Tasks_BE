@@ -48,7 +48,7 @@ export async function getUploadUrl(req: Request, res: Response) {
       return res.status(403).json({ success: false, error: "Access denied" });
     }
 
-    const result = await storageService.generateSignedUploadUrl(task_id, file_name, mime_type);
+    const result = await storageService.generateSignedUploadUrl(task_id, mime_type);
     res.json({ success: true, data: result });
   } catch (error) {
     console.error("Error generating upload URL:", error);

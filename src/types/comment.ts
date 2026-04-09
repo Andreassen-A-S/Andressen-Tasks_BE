@@ -13,8 +13,15 @@ export interface TaskComment {
   };
 }
 
+export interface CommentAttachmentInput {
+  gcs_path: string;
+  file_name?: string | null;
+  mime_type?: string | null;
+}
+
 export interface CreateCommentRequest {
-  message: string;
+  message?: string;
+  attachments?: CommentAttachmentInput[];
 }
 
 export interface UpdateCommentRequest {

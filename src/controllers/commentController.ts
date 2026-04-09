@@ -8,6 +8,7 @@ import * as taskEventRepo from "../repositories/taskEventRepository";
 import * as userRepo from "../repositories/userRepository";
 import { sendPushNotification } from "../services/notificationService";
 import { getParamId, requireUserId } from "../helper/helpers";
+import { CreateCommentRequest } from "../types/comment";
 
 export async function listTaskComments(req: Request, res: Response) {
   try {
@@ -66,10 +67,7 @@ export async function createComment(req: Request, res: Response) {
     const taskId = getParamId(req, "taskId");
     if (!taskId) return res.status(400).json({ success: false, error: "Missing taskId" });
 
-    const { message, attachments } = req.body as {
-      message?: string;
-      attachments?: commentRepo.AttachmentInput[];
-    };
+    const { message, attachments } = req.body as CreateCommentRequest;
 
     const userId = requireUserId(req, res);
     if (!userId) return;
@@ -116,6 +114,9 @@ export async function createComment(req: Request, res: Response) {
 
     if (hasAttachments) {
       for (const a of attachments!) {
+        if (!a || typeof a !== "object") {
+          return res.status(400).json({ success: false, error: "Invalid attachment" });
+        }
         if (!a.gcs_path || typeof a.gcs_path !== "string") {
           return res.status(400).json({ success: false, error: "Invalid attachment: gcs_path is required" });
         }
@@ -126,7 +127,12 @@ export async function createComment(req: Request, res: Response) {
     }
 
     const validatedAttachments = hasAttachments
-      ? attachments!.map((a) => ({ ...a, public_url: storageService.getPublicUrl(a.gcs_path) }))
+      ? attachments!.filter((a) => a && typeof a === "object").map((a) => ({
+          gcs_path: a.gcs_path,
+          file_name: a.file_name,
+          mime_type: a.mime_type,
+          public_url: storageService.getPublicUrl(a.gcs_path),
+        }))
       : undefined;
 
     const comment = await commentRepo.createComment({

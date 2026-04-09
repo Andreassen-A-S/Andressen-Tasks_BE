@@ -40,7 +40,6 @@ const MIME_TO_EXT: Record<string, string> = {
 
 export async function generateSignedUploadUrl(
   taskId: string,
-  fileName: string,
   mimeType: string,
 ): Promise<{ uploadUrl: string; gcsPath: string; publicUrl: string }> {
   if (!ALLOWED_MIME_TYPES.has(mimeType)) {
