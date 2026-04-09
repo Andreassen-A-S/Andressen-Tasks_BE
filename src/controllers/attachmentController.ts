@@ -24,6 +24,9 @@ export async function prepareAttachments(req: Request, res: Response) {
     }
 
     for (const f of files) {
+      if (f === null || typeof f !== "object") {
+        return res.status(400).json({ success: false, error: "Invalid file entry" });
+      }
       const mimeConfig = f.mimeType ? storageService.ALLOWED_MIME_TYPES[f.mimeType] : undefined;
       if (!mimeConfig) {
         return res.status(400).json({ success: false, error: "Unsupported file type" });
@@ -47,11 +50,12 @@ export async function prepareAttachments(req: Request, res: Response) {
 
     const prepared = await Promise.all(
       files.map(async (f) => {
-        const { uploadUrl, gcsPath, publicUrl } = await storageService.generateSignedUploadUrl(taskId, f.mimeType!);
+        const mimeType = f.mimeType as string;
+        const { uploadUrl, gcsPath, publicUrl } = await storageService.generateSignedUploadUrl(taskId, mimeType);
         const { upload_token } = await attachmentRepo.prepareAttachment({
           taskId,
           userId,
-          mimeType: f.mimeType!,
+          mimeType,
           gcsPath,
           publicUrl,
           fileName: f.fileName ?? null,

@@ -42,9 +42,7 @@ export function initScheduler(): void {
       const stale = await attachmentRepo.getPendingOlderThan(cutoff);
       await Promise.allSettled(
         stale.map(async (a) => {
-          await deleteFile(a.gcs_path).catch((err) =>
-            console.error("GCS cleanup failed for path:", a.gcs_path, err),
-          );
+          await deleteFile(a.gcs_path);
           await attachmentRepo.deleteAttachment(a.attachment_id);
         }),
       );

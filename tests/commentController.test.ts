@@ -4,6 +4,7 @@ import { Task, UserRole } from "../src/generated/prisma/client";
 import * as commentRepo from "../src/repositories/commentRepository";
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
 import * as userRepo from "../src/repositories/userRepository";
+import * as storageService from "../src/services/storageService";
 
 const findUniqueMock = mock<(...args: any[]) => Promise<Task | null>>();
 const sendPushNotificationMock = mock<(...args: any[]) => Promise<void>>();
@@ -195,6 +196,41 @@ describe("commentController.createComment", () => {
     });
     expect(res.statusCode).toBe(201);
     expect(res.body).toMatchObject({ success: true, data: { attachments: [{ attachment_id: "a1" }] } });
+  });
+
+  test("returns signed read URL for attachment in response", async () => {
+    findUniqueMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
+      created_by: "u1",
+      assignments: [],
+    } as any);
+
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
+    spyOn(commentRepo, "createComment").mockResolvedValue({
+      comment_id: "c1",
+      task_id: "t1",
+      user_id: "u1",
+      message: "",
+      attachments: [{ attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg", url: "https://storage.googleapis.com/bucket/tasks/t1/uuid.jpg" }],
+    } as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    spyOn(storageService, "generateSignedReadUrl").mockResolvedValue("https://signed.example.com/uuid.jpg");
+
+    const req = createRequest({
+      params: { taskId: "t1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { uploadTokens: ["tok1"] },
+    });
+    const res = createMockResponse();
+
+    await commentController.createComment(req, res);
+
+    expect(res.statusCode).toBe(201);
+    expect(res.body).toMatchObject({
+      success: true,
+      data: { attachments: [{ attachment_id: "a1", url: "https://signed.example.com/uuid.jpg" }] },
+    });
   });
 });
 

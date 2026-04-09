@@ -117,12 +117,20 @@ export async function createComment(req: Request, res: Response) {
       return res.status(403).json({ success: false, error: "Access denied" });
     }
 
-    const comment = await commentRepo.createComment({
-      task_id: taskId,
-      user_id: userId,
-      message: message?.trim() ?? "",
-      uploadTokens: hasTokens ? uploadTokens : undefined,
-    });
+    let comment;
+    try {
+      comment = await commentRepo.createComment({
+        task_id: taskId,
+        user_id: userId,
+        message: message?.trim() ?? "",
+        uploadTokens: hasTokens ? uploadTokens : undefined,
+      });
+    } catch (err) {
+      if (err instanceof Error && err.message === "One or more upload tokens are invalid or expired") {
+        return res.status(400).json({ success: false, error: err.message });
+      }
+      throw err;
+    }
 
     // TaskEvent logic
     await taskEventRepo.createTaskEvent({

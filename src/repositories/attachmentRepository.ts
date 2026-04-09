@@ -59,23 +59,37 @@ export async function confirmAttachments(
   userId: string,
   taskId: string,
 ) {
+  const uniqueTokens = [...new Set(uploadTokens)];
+
   const attachments = await tx.taskAttachment.findMany({
     where: {
-      upload_token: { in: uploadTokens },
+      upload_token: { in: uniqueTokens },
       uploaded_by: userId,
       task_id: taskId,
       status: AttachmentStatus.PENDING,
+      comment_id: null,
     },
+    select: { upload_token: true },
   });
 
-  if (attachments.length !== uploadTokens.length) {
+  if (attachments.length !== uniqueTokens.length) {
     throw new Error("One or more upload tokens are invalid or expired");
   }
 
-  await tx.taskAttachment.updateMany({
-    where: { upload_token: { in: uploadTokens } },
+  const updated = await tx.taskAttachment.updateMany({
+    where: {
+      upload_token: { in: uniqueTokens },
+      uploaded_by: userId,
+      task_id: taskId,
+      status: AttachmentStatus.PENDING,
+      comment_id: null,
+    },
     data: { status: AttachmentStatus.CONFIRMED, comment_id: commentId },
   });
+
+  if (updated.count !== uniqueTokens.length) {
+    throw new Error("One or more upload tokens are invalid or expired");
+  }
 }
 
 export async function getPendingOlderThan(cutoff: Date) {

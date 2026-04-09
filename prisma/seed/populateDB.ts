@@ -8,6 +8,7 @@ import {
   TaskGoalType,
   TaskEventType,
   AttachmentType,
+  AttachmentStatus,
 } from "../../src/generated/prisma/client";
 import bcrypt from "bcrypt";
 import {
@@ -243,6 +244,7 @@ async function main() {
           task_id: params.taskId,
           uploaded_by: params.userId,
           type: AttachmentType.IMAGE,
+          status: AttachmentStatus.CONFIRMED,
           gcs_path: `tasks/${params.taskId}/seed-${p.fileName}`,
           url: p.url,
           file_name: p.fileName,
