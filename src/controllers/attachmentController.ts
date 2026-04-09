@@ -30,7 +30,7 @@ export async function prepareAttachments(req: Request, res: Response) {
       if (f.fileName !== undefined && f.fileName !== null && typeof f.fileName !== "string") {
         return res.status(400).json({ success: false, error: "Invalid fileName" });
       }
-      if (f.fileSize !== undefined && f.fileSize !== null && (typeof f.fileSize !== "number" || !Number.isFinite(f.fileSize) || f.fileSize < 0)) {
+      if (f.fileSize !== undefined && f.fileSize !== null && (typeof f.fileSize !== "number" || !Number.isFinite(f.fileSize) || f.fileSize < 0 || !Number.isInteger(f.fileSize))) {
         return res.status(400).json({ success: false, error: "Invalid fileSize" });
       }
       const mimeConfig = f.mimeType ? storageService.ALLOWED_MIME_TYPES[f.mimeType] : undefined;

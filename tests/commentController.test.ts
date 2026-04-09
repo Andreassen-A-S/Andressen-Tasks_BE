@@ -134,6 +134,30 @@ describe("commentController.createComment", () => {
     expect(res.body).toEqual({ success: false, error: "Duplicate upload tokens" });
   });
 
+  test("returns 400 when createComment throws invalid token error", async () => {
+    findUniqueMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
+      created_by: "u1",
+      assignments: [],
+    } as any);
+    spyOn(commentRepo, "createComment").mockRejectedValue(
+      new Error("One or more upload tokens are invalid or expired"),
+    );
+
+    const req = createRequest({
+      params: { taskId: "t1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { uploadTokens: ["tok-expired"] },
+    });
+    const res = createMockResponse();
+
+    await commentController.createComment(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "One or more upload tokens are invalid or expired" });
+  });
+
   test("creates comment and logs event", async () => {
     findUniqueMock.mockResolvedValueOnce({
       task_id: "t1",
