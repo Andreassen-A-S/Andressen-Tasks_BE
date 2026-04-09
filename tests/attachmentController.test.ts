@@ -73,7 +73,7 @@ describe("attachmentController.prepareAttachments", () => {
     await attachmentController.prepareAttachments(req, res);
 
     expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "taskId and files are required" });
+    expect(res.body).toEqual({ success: false, error: "task_id and files are required" });
   });
 
   test("returns 400 when files is empty", async () => {
@@ -86,7 +86,7 @@ describe("attachmentController.prepareAttachments", () => {
     await attachmentController.prepareAttachments(req, res);
 
     expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "taskId and files are required" });
+    expect(res.body).toEqual({ success: false, error: "task_id and files are required" });
   });
 
   test("returns 400 when more than 5 files", async () => {
@@ -115,7 +115,7 @@ describe("attachmentController.prepareAttachments", () => {
     await attachmentController.prepareAttachments(req, res);
 
     expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Invalid fileSize" });
+    expect(res.body).toEqual({ success: false, error: "Invalid file_size" });
   });
 
   test("returns 400 when fileSize is negative", async () => {
@@ -128,7 +128,7 @@ describe("attachmentController.prepareAttachments", () => {
     await attachmentController.prepareAttachments(req, res);
 
     expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Invalid fileSize" });
+    expect(res.body).toEqual({ success: false, error: "Invalid file_size" });
   });
 
   test("returns 400 when fileName is not a string", async () => {
@@ -141,7 +141,7 @@ describe("attachmentController.prepareAttachments", () => {
     await attachmentController.prepareAttachments(req, res);
 
     expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Invalid fileName" });
+    expect(res.body).toEqual({ success: false, error: "Invalid file_name" });
   });
 
   test("returns 400 for unsupported mime type", async () => {
@@ -205,7 +205,7 @@ describe("attachmentController.prepareAttachments", () => {
     spyOn(storageService, "generateSignedUploadUrl").mockResolvedValue({
       uploadUrl: "https://storage.googleapis.com/signed",
       gcsPath: "tasks/t1/uuid.jpg",
-      publicUrl: "https://storage.googleapis.com/bucket/tasks/t1/uuid.jpg",
+      url: "https://storage.googleapis.com/bucket/tasks/t1/uuid.jpg",
     });
     spyOn(attachmentRepo, "prepareAttachment").mockResolvedValue({ upload_token: "tok1" } as never);
 

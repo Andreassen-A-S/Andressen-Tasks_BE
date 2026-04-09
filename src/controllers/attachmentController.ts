@@ -16,7 +16,7 @@ export async function prepareAttachments(req: Request, res: Response) {
     };
 
     if (!task_id || !Array.isArray(files) || files.length === 0) {
-      return res.status(400).json({ success: false, error: "taskId and files are required" });
+      return res.status(400).json({ success: false, error: "task_id and files are required" });
     }
 
     if (files.length > 5) {
@@ -28,10 +28,10 @@ export async function prepareAttachments(req: Request, res: Response) {
         return res.status(400).json({ success: false, error: "Invalid file entry" });
       }
       if (f.file_name !== undefined && f.file_name !== null && typeof f.file_name !== "string") {
-        return res.status(400).json({ success: false, error: "Invalid fileName" });
+        return res.status(400).json({ success: false, error: "Invalid file_name" });
       }
       if (f.file_size !== undefined && f.file_size !== null && (typeof f.file_size !== "number" || !Number.isFinite(f.file_size) || f.file_size < 0 || !Number.isInteger(f.file_size))) {
-        return res.status(400).json({ success: false, error: "Invalid fileSize" });
+        return res.status(400).json({ success: false, error: "Invalid file_size" });
       }
       const mimeConfig = f.mime_type ? storageService.ALLOWED_MIME_TYPES[f.mime_type] : undefined;
       if (!mimeConfig) {
