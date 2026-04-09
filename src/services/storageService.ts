@@ -26,7 +26,8 @@ function getBucketName(): string {
 }
 
 export function getPublicUrl(gcsPath: string): string {
-  return `https://storage.googleapis.com/${getBucketName()}/${gcsPath}`;
+  const encodedPath = gcsPath.split("/").map(encodeURIComponent).join("/");
+  return `https://storage.googleapis.com/${getBucketName()}/${encodedPath}`;
 }
 
 export const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic"]);

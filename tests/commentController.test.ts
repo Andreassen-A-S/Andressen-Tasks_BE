@@ -147,6 +147,45 @@ describe("commentController.createComment", () => {
     expect(res.statusCode).toBe(201);
   });
 
+  test("replaces attachment public_url with signed read URL in response", async () => {
+    findUniqueMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
+      created_by: "u1",
+      assignments: [],
+    } as any);
+
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
+    sendPushNotificationMock.mockResolvedValue(undefined);
+    spyOn(storageService, "getPublicUrl").mockReturnValue("https://storage.googleapis.com/bucket/tasks/t1/uuid.jpg");
+    spyOn(commentRepo, "createComment").mockResolvedValue({
+      comment_id: "c1",
+      task_id: "t1",
+      user_id: "u1",
+      message: "hello",
+      attachments: [{ attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg", public_url: "https://storage.googleapis.com/bucket/tasks/t1/uuid.jpg" }],
+    } as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    const signSpy = spyOn(storageService, "generateSignedReadUrl").mockResolvedValue("https://signed-url");
+
+    const req = createRequest({
+      params: { taskId: "t1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { message: "hello" },
+    });
+    const res = createMockResponse();
+
+    await commentController.createComment(req, res);
+
+    expect(signSpy).toHaveBeenCalledWith("tasks/t1/uuid.jpg");
+    expect(res.body).toMatchObject({
+      success: true,
+      data: expect.objectContaining({
+        attachments: [expect.objectContaining({ public_url: "https://signed-url" })],
+      }),
+    });
+  });
+
   test("creates comment with attachments only (no message)", async () => {
     findUniqueMock.mockResolvedValueOnce({
       task_id: "t1",

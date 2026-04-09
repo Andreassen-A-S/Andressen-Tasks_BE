@@ -18,7 +18,7 @@ export async function getCommentsByTaskId(taskId: string) {
 
 export type AttachmentInput = {
   gcs_path: string;
-  public_url?: string; // overwritten server-side — clients need not supply this
+  public_url: string;
   file_name?: string | null;
   mime_type?: string | null;
   type?: AttachmentType;
@@ -43,7 +43,7 @@ export async function createComment(data: {
           uploaded_by: comment.user_id,
           type: a.type ?? AttachmentType.IMAGE,
           gcs_path: a.gcs_path,
-          public_url: a.public_url!,
+          public_url: a.public_url,
           file_name: a.file_name ?? null,
           mime_type: a.mime_type ?? null,
         })),
