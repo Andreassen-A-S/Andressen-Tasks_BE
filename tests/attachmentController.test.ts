@@ -62,10 +62,22 @@ describe("attachmentController.getUploadUrl", () => {
     expect(res.body).toEqual({ success: false, error: "task_id, file_name, and mime_type are required" });
   });
 
+  test("returns 401 when user is not authenticated", async () => {
+    const req = createRequest({ body: { task_id: "t1", file_name: "photo.jpg", mime_type: "image/jpeg" } });
+    const res = createMockResponse();
+
+    await attachmentController.getUploadUrl(req, res);
+
+    expect(res.statusCode).toBe(401);
+  });
+
   test("returns 404 when task does not exist", async () => {
     findUniqueMock.mockResolvedValueOnce(null);
 
-    const req = createRequest({ body: { task_id: "t1", file_name: "photo.jpg", mime_type: "image/jpeg" } });
+    const req = createRequest({
+      body: { task_id: "t1", file_name: "photo.jpg", mime_type: "image/jpeg" },
+      user: { user_id: "u1", role: UserRole.USER },
+    });
     const res = createMockResponse();
 
     await attachmentController.getUploadUrl(req, res);
@@ -74,9 +86,22 @@ describe("attachmentController.getUploadUrl", () => {
     expect(res.body).toEqual({ success: false, error: "Task not found" });
   });
 
-  test("returns 413 when file_size exceeds 10 MB", async () => {
-    findUniqueMock.mockResolvedValueOnce({ task_id: "t1" });
+  test("returns 403 when user has no access to task", async () => {
+    findUniqueMock.mockResolvedValueOnce({ task_id: "t1", created_by: "other", assignments: [] });
 
+    const req = createRequest({
+      body: { task_id: "t1", file_name: "photo.jpg", mime_type: "image/jpeg" },
+      user: { user_id: "u1", role: UserRole.USER },
+    });
+    const res = createMockResponse();
+
+    await attachmentController.getUploadUrl(req, res);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toEqual({ success: false, error: "Access denied" });
+  });
+
+  test("returns 413 when file_size exceeds 10 MB", async () => {
     const req = createRequest({
       body: {
         task_id: "t1",
@@ -84,6 +109,7 @@ describe("attachmentController.getUploadUrl", () => {
         mime_type: "image/jpeg",
         file_size: 11 * 1024 * 1024,
       },
+      user: { user_id: "u1", role: UserRole.USER },
     });
     const res = createMockResponse();
 
@@ -94,7 +120,7 @@ describe("attachmentController.getUploadUrl", () => {
   });
 
   test("returns 200 with upload URL when file_size is exactly 10 MB", async () => {
-    findUniqueMock.mockResolvedValueOnce({ task_id: "t1" });
+    findUniqueMock.mockResolvedValueOnce({ task_id: "t1", created_by: "u1", assignments: [] });
     spyOn(storageService, "generateSignedUploadUrl").mockResolvedValue({
       uploadUrl: "https://storage.googleapis.com/signed",
       gcsPath: "tasks/t1/uuid.jpg",
@@ -108,6 +134,7 @@ describe("attachmentController.getUploadUrl", () => {
         mime_type: "image/jpeg",
         file_size: 10 * 1024 * 1024,
       },
+      user: { user_id: "u1", role: UserRole.USER },
     });
     const res = createMockResponse();
 
@@ -118,14 +145,17 @@ describe("attachmentController.getUploadUrl", () => {
   });
 
   test("returns upload URL when file_size is omitted", async () => {
-    findUniqueMock.mockResolvedValueOnce({ task_id: "t1" });
+    findUniqueMock.mockResolvedValueOnce({ task_id: "t1", created_by: "u1", assignments: [] });
     spyOn(storageService, "generateSignedUploadUrl").mockResolvedValue({
       uploadUrl: "https://storage.googleapis.com/signed",
       gcsPath: "tasks/t1/uuid.jpg",
       publicUrl: "https://storage.googleapis.com/bucket/tasks/t1/uuid.jpg",
     });
 
-    const req = createRequest({ body: { task_id: "t1", file_name: "photo.jpg", mime_type: "image/jpeg" } });
+    const req = createRequest({
+      body: { task_id: "t1", file_name: "photo.jpg", mime_type: "image/jpeg" },
+      user: { user_id: "u1", role: UserRole.USER },
+    });
     const res = createMockResponse();
 
     await attachmentController.getUploadUrl(req, res);
@@ -210,5 +240,64 @@ describe("attachmentController.deleteAttachment", () => {
     await attachmentController.deleteAttachment(req, res);
 
     expect(res.statusCode).toBe(204);
+  });
+});
+
+describe("attachmentController.getTaskImages", () => {
+  test("returns 403 when user has no access to task", async () => {
+    findUniqueMock.mockResolvedValueOnce({ task_id: "t1", created_by: "other", assignments: [] });
+
+    const req = createRequest({
+      params: { taskId: "t1" },
+      user: { user_id: "u1", role: UserRole.USER },
+    });
+    const res = createMockResponse();
+
+    await attachmentController.getTaskImages(req, res);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toEqual({ success: false, error: "Access denied" });
+  });
+
+  test("returns images with signed URLs for task creator", async () => {
+    findUniqueMock.mockResolvedValueOnce({ task_id: "t1", created_by: "u1", assignments: [] });
+    spyOn(attachmentRepo, "getImageAttachmentsByTaskId").mockResolvedValue([
+      { attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg", public_url: "old" } as never,
+    ]);
+    spyOn(storageService, "generateSignedReadUrl").mockResolvedValue("https://signed-read-url");
+
+    const req = createRequest({
+      params: { taskId: "t1" },
+      user: { user_id: "u1", role: UserRole.USER },
+    });
+    const res = createMockResponse();
+
+    await attachmentController.getTaskImages(req, res);
+
+    expect(res.statusCode).toBeUndefined();
+    expect(res.body).toMatchObject({
+      success: true,
+      data: [{ attachment_id: "a1", public_url: "https://signed-read-url" }],
+    });
+  });
+
+  test("returns images for assignee", async () => {
+    findUniqueMock.mockResolvedValueOnce({
+      task_id: "t1",
+      created_by: "other",
+      assignments: [{ user_id: "u1" }],
+    });
+    spyOn(attachmentRepo, "getImageAttachmentsByTaskId").mockResolvedValue([]);
+
+    const req = createRequest({
+      params: { taskId: "t1" },
+      user: { user_id: "u1", role: UserRole.USER },
+    });
+    const res = createMockResponse();
+
+    await attachmentController.getTaskImages(req, res);
+
+    expect(res.statusCode).toBeUndefined();
+    expect(res.body).toMatchObject({ success: true, data: [] });
   });
 });

@@ -25,9 +25,23 @@ export async function getUploadUrl(req: Request, res: Response) {
       return res.status(413).json({ success: false, error: "File exceeds maximum size of 10 MB" });
     }
 
-    const task = await prisma.task.findUnique({ where: { task_id } });
+    const userId = requireUserId(req, res);
+    if (!userId) return;
+
+    const isAdmin = req.user?.role === UserRole.ADMIN;
+
+    const task = await prisma.task.findUnique({
+      where: { task_id },
+      include: { assignments: { where: { user_id: userId } } },
+    });
     if (!task) {
       return res.status(404).json({ success: false, error: "Task not found" });
+    }
+
+    const isCreator = task.created_by === userId;
+    const isAssigned = task.assignments.length > 0;
+    if (!isCreator && !isAssigned && !isAdmin) {
+      return res.status(403).json({ success: false, error: "Access denied" });
     }
 
     const result = await storageService.generateSignedUploadUrl(task_id, file_name, mime_type);

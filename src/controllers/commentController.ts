@@ -7,17 +7,22 @@ import { prisma } from "../db/prisma";
 import * as taskEventRepo from "../repositories/taskEventRepository";
 import * as userRepo from "../repositories/userRepository";
 import { sendPushNotification } from "../services/notificationService";
+import { getParamId, requireUserId } from "../helper/helpers";
 
 export async function listTaskComments(req: Request, res: Response) {
   try {
-    const taskId = req.params.taskId as string;
+    const taskId = getParamId(req, "taskId");
+    if (!taskId) return res.status(400).json({ success: false, error: "Missing taskId" });
+
+    const userId = requireUserId(req, res);
+    if (!userId) return;
 
     // Verify task exists and user has access
     const task = await prisma.task.findUnique({
       where: { task_id: taskId },
       include: {
         assignments: {
-          where: { user_id: req.user?.user_id },
+          where: { user_id: userId },
         },
       },
     });
@@ -27,7 +32,7 @@ export async function listTaskComments(req: Request, res: Response) {
     }
 
     // Check if user is creator, assigned to task, or admin
-    const isCreator = task.created_by === req.user?.user_id;
+    const isCreator = task.created_by === userId;
     const isAssigned = task.assignments.length > 0;
     const isAdmin = req.user?.role === UserRole.ADMIN;
 
@@ -58,19 +63,16 @@ export async function listTaskComments(req: Request, res: Response) {
 
 export async function createComment(req: Request, res: Response) {
   try {
-    const taskId = req.params.taskId as string;
+    const taskId = getParamId(req, "taskId");
+    if (!taskId) return res.status(400).json({ success: false, error: "Missing taskId" });
+
     const { message, attachments } = req.body as {
       message?: string;
       attachments?: commentRepo.AttachmentInput[];
     };
-    const userId = req.user?.user_id;
 
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: "Unauthorized: user not found in token",
-      });
-    }
+    const userId = requireUserId(req, res);
+    if (!userId) return;
 
     const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
 
@@ -112,11 +114,20 @@ export async function createComment(req: Request, res: Response) {
       return res.status(403).json({ success: false, error: "Access denied" });
     }
 
+    const validatedAttachments = hasAttachments
+      ? attachments!.map((a) => {
+          if (!a.gcs_path.startsWith(`tasks/${taskId}/`)) {
+            throw Object.assign(new Error("Invalid attachment path"), { statusCode: 400 });
+          }
+          return { ...a, public_url: storageService.getPublicUrl(a.gcs_path) };
+        })
+      : undefined;
+
     const comment = await commentRepo.createComment({
       task_id: taskId,
       user_id: userId,
       message: message?.trim() ?? "",
-      attachments: hasAttachments ? attachments : undefined,
+      attachments: validatedAttachments,
     });
 
     // TaskEvent logic
@@ -176,8 +187,12 @@ export async function createComment(req: Request, res: Response) {
 
 export async function deleteComment(req: Request, res: Response) {
   try {
-    const commentId = req.params.commentId as string;
-    const userId = req.user?.user_id;
+    const commentId = getParamId(req, "commentId");
+    if (!commentId) return res.status(400).json({ success: false, error: "Missing commentId" });
+
+    const userId = requireUserId(req, res);
+    if (!userId) return;
+
     const userRole = req.user?.role;
 
     const comment = await commentRepo.getCommentById(commentId);
@@ -207,11 +222,9 @@ export async function deleteComment(req: Request, res: Response) {
       after_json: {},
     });
 
-    // Delete GCS files and DB record
+    // Delete GCS files then DB record
     const attachmentsToDelete = await attachmentRepo.getAttachmentsByCommentId(commentId);
-    for (const attachment of attachmentsToDelete) {
-      void storageService.deleteFile(attachment.gcs_path);
-    }
+    await Promise.all(attachmentsToDelete.map((a) => storageService.deleteFile(a.gcs_path)));
 
     await commentRepo.deleteComment(commentId);
 
@@ -224,14 +237,18 @@ export async function deleteComment(req: Request, res: Response) {
 
 export async function updateComment(req: Request, res: Response) {
   try {
-    const commentId = req.params.commentId as string;
+    const commentId = getParamId(req, "commentId");
+    if (!commentId) return res.status(400).json({ success: false, error: "Missing commentId" });
+
     if (!req.body) {
       return res
         .status(400)
         .json({ success: false, error: "Missing request body" });
     }
     const { message } = req.body;
-    const userId = req.user?.user_id;
+    const userId = requireUserId(req, res);
+    if (!userId) return;
+
     const userRole = req.user?.role;
 
     if (!message?.trim()) {

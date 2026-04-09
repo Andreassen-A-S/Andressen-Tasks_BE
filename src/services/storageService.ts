@@ -1,37 +1,51 @@
 import { Storage } from "@google-cloud/storage";
 import { randomUUID } from "crypto";
-import { readFileSync } from "fs";
 
-function getCredentials() {
-  const keyFile = process.env.GCS_KEY_FILE;
-  if (!keyFile) throw new Error("GCS_KEY_FILE environment variable is not set");
-  return JSON.parse(readFileSync(keyFile, "utf-8"));
+function requireEnv(key: string): string {
+  const value = process.env[key];
+  if (!value) throw new Error(`${key} environment variable is not set`);
+  return value;
 }
 
+let _storage: Storage | null = null;
+let _bucketName: string | null = null;
+
 function getStorage(): Storage {
-  const projectId = process.env.GCS_PROJECT_ID;
-  if (!projectId)
-    throw new Error("GCS_PROJECT_ID environment variable is not set");
-  return new Storage({ credentials: getCredentials(), projectId });
+  if (!_storage) {
+    _storage = new Storage({
+      projectId: requireEnv("GCS_PROJECT_ID"),
+      credentials: JSON.parse(requireEnv("GCS_CREDENTIALS")),
+    });
+  }
+  return _storage;
 }
 
 function getBucketName(): string {
-  const bucket = process.env.GCS_BUCKET_NAME;
-  if (!bucket)
-    throw new Error("GCS_BUCKET_NAME environment variable is not set");
-  return bucket;
+  if (!_bucketName) _bucketName = requireEnv("GCS_BUCKET_NAME");
+  return _bucketName;
 }
 
 export function getPublicUrl(gcsPath: string): string {
   return `https://storage.googleapis.com/${getBucketName()}/${gcsPath}`;
 }
 
+const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic"]);
+const MIME_TO_EXT: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/heic": "heic",
+};
+
 export async function generateSignedUploadUrl(
   taskId: string,
   fileName: string,
   mimeType: string,
 ): Promise<{ uploadUrl: string; gcsPath: string; publicUrl: string }> {
-  const ext = fileName.split(".").pop()?.toLowerCase() ?? "jpg";
+  if (!ALLOWED_MIME_TYPES.has(mimeType)) {
+    throw new Error(`Unsupported mime type: ${mimeType}`);
+  }
+  const ext = MIME_TO_EXT[mimeType];
   const gcsPath = `tasks/${taskId}/${randomUUID()}.${ext}`;
   const file = getStorage().bucket(getBucketName()).file(gcsPath);
 
@@ -58,12 +72,8 @@ export async function generateSignedReadUrl(gcsPath: string): Promise<string> {
 }
 
 export async function deleteFile(gcsPath: string): Promise<void> {
-  try {
-    await getStorage()
-      .bucket(getBucketName())
-      .file(gcsPath)
-      .delete({ ignoreNotFound: true });
-  } catch (err) {
-    console.error("GCS delete failed for path:", gcsPath, err);
-  }
+  await getStorage()
+    .bucket(getBucketName())
+    .file(gcsPath)
+    .delete({ ignoreNotFound: true });
 }
