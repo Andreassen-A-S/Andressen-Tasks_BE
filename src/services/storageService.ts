@@ -46,7 +46,7 @@ export const ALLOWED_MIME_TYPES: Record<string, { ext: string; maxBytes: number 
 export async function generateSignedUploadUrl(
   taskId: string,
   mimeType: string,
-): Promise<{ uploadUrl: string; gcsPath: string; publicUrl: string }> {
+): Promise<{ uploadUrl: string; gcsPath: string; url: string }> {
   const config = ALLOWED_MIME_TYPES[mimeType];
   if (!config) {
     throw new Error(`Unsupported mime type: ${mimeType}`);
@@ -62,7 +62,7 @@ export async function generateSignedUploadUrl(
     contentType: mimeType,
   });
 
-  return { uploadUrl, gcsPath, publicUrl: getPublicUrl(gcsPath) };
+  return { uploadUrl, gcsPath, url: getPublicUrl(gcsPath) };
 }
 
 export async function generateSignedReadUrl(gcsPath: string): Promise<string> {
