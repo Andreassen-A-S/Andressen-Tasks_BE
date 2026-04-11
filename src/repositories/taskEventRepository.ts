@@ -13,7 +13,14 @@ export async function getTaskEventsByTaskId(taskId: string) {
       actor: {
         select: { user_id: true, name: true, email: true, position: true },
       },
-      comment: true,
+      comment: {
+        include: {
+          attachments: {
+            where: { status: "CONFIRMED" },
+            orderBy: { created_at: "asc" },
+          },
+        },
+      },
       assignment: {
         include: {
           user: {

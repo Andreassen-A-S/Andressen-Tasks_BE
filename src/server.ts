@@ -41,19 +41,6 @@ const allowedOrigins = (
 app.use(helmet());
 
 app.use(
-  rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 300, // 300 requests per IP per window across all endpoints
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: {
-      success: false,
-      error: "Too many requests, please try again later.",
-    },
-  }),
-);
-
-app.use(
   cors({
     origin: (origin, cb) => {
       // Allow tools like curl/postman in non-production (no Origin header)
@@ -66,6 +53,19 @@ app.use(
     credentials: false, // Bearer tokens in Authorization header
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
+
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 300, // 300 requests per IP per window across all endpoints
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+      success: false,
+      error: "Too many requests, please try again later.",
+    },
   }),
 );
 

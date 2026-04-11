@@ -1,9 +1,9 @@
 import { prisma } from "../db/prisma";
 import { AttachmentStatus, AttachmentType } from "../generated/prisma/client";
 
-export async function getImageAttachmentsByTaskId(taskId: string) {
+export async function getAttachmentsByTaskId(taskId: string) {
   return prisma.taskAttachment.findMany({
-    where: { task_id: taskId, type: AttachmentType.IMAGE, status: AttachmentStatus.CONFIRMED },
+    where: { task_id: taskId, status: AttachmentStatus.CONFIRMED },
     orderBy: { created_at: "asc" },
     include: {
       uploader: { select: { user_id: true, name: true } },
@@ -40,7 +40,7 @@ export async function prepareAttachment(input: PrepareAttachmentInput) {
     data: {
       task_id: input.taskId,
       uploaded_by: input.userId,
-      type: AttachmentType.IMAGE,
+      type: input.mimeType.startsWith("image/") ? AttachmentType.IMAGE : AttachmentType.FILE,
       gcs_path: input.gcsPath,
       url: input.url,
       file_name: input.fileName ?? null,

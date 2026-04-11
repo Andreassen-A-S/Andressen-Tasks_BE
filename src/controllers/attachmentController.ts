@@ -10,6 +10,13 @@ export async function prepareAttachments(req: Request, res: Response) {
     const userId = requireUserId(req, res);
     if (!userId) return;
 
+    // Verify the user actually exists in the DB (guards against stale JWTs after DB resets)
+    const userExists = await prisma.user.findUnique({ where: { user_id: userId }, select: { user_id: true } });
+    if (!userExists) {
+      console.error("prepareAttachments: userId from JWT not found in users table", { userId });
+      return res.status(401).json({ success: false, error: "User not found — please log in again" });
+    }
+
     const { task_id, files } = req.body as {
       task_id?: string;
       files?: { file_name?: string; mime_type?: string; file_size?: number }[];
@@ -77,7 +84,7 @@ export async function prepareAttachments(req: Request, res: Response) {
       throw error;
     }
 
-    res.json({ success: true, data: created.map(({ uploadToken, uploadUrl }) => ({ uploadToken, uploadUrl })) });
+    res.json({ success: true, data: created.map(({ uploadToken, uploadUrl }) => ({ upload_token: uploadToken, upload_url: uploadUrl })) });
   } catch (error) {
     console.error("Error preparing attachments:", error);
     res.status(500).json({ success: false, error: "Failed to prepare attachments" });
@@ -107,14 +114,14 @@ export async function getTaskImages(req: Request, res: Response) {
       return res.status(403).json({ success: false, error: "Access denied" });
     }
 
-    const images = await attachmentRepo.getImageAttachmentsByTaskId(taskId);
-    const imagesWithSignedUrls = await Promise.all(
-      images.map(async (img) => ({
-        ...img,
-        url: await storageService.generateSignedReadUrl(img.gcs_path),
+    const attachments = await attachmentRepo.getAttachmentsByTaskId(taskId);
+    const attachmentsWithSignedUrls = await Promise.all(
+      attachments.map(async (a) => ({
+        ...a,
+        url: await storageService.generateSignedReadUrl(a.gcs_path),
       })),
     );
-    res.json({ success: true, data: imagesWithSignedUrls });
+    res.json({ success: true, data: attachmentsWithSignedUrls });
   } catch (error) {
     console.error("Error fetching task images:", error);
     res.status(500).json({ success: false, error: "Failed to fetch images" });

@@ -39,8 +39,9 @@ export const ALLOWED_MIME_TYPES: Record<string, { ext: string; maxBytes: number 
   "image/png":  { ext: "png", maxBytes: 10 * 1024 * 1024 },
   "image/webp": { ext: "webp", maxBytes: 10 * 1024 * 1024 },
   "image/heic": { ext: "heic", maxBytes: 10 * 1024 * 1024 },
-  // "application/pdf": { ext: "pdf", maxBytes: 50 * 1024 * 1024 },
-  // "video/mp4":       { ext: "mp4", maxBytes: 200 * 1024 * 1024 },
+  "application/pdf": { ext: "pdf", maxBytes: 50 * 1024 * 1024 },
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { ext: "docx", maxBytes: 50 * 1024 * 1024 },
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { ext: "xlsx", maxBytes: 50 * 1024 * 1024 },
 };
 
 export async function generateSignedUploadUrl(

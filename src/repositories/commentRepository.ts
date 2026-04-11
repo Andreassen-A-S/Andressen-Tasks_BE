@@ -22,15 +22,15 @@ export async function createComment(data: {
   task_id: string;
   user_id: string;
   message: string;
-  uploadTokens?: string[];
+  upload_tokens?: string[];
 }) {
-  const { uploadTokens, ...commentData } = data;
+  const { upload_tokens, ...commentData } = data;
 
   return prisma.$transaction(async (tx) => {
     const comment = await tx.taskComment.create({ data: commentData });
 
-    if (uploadTokens && uploadTokens.length > 0) {
-      await confirmAttachments(tx, uploadTokens, comment.comment_id, data.user_id, data.task_id);
+    if (upload_tokens && upload_tokens.length > 0) {
+      await confirmAttachments(tx, upload_tokens, comment.comment_id, data.user_id, data.task_id);
     }
 
     return tx.taskComment.findUniqueOrThrow({

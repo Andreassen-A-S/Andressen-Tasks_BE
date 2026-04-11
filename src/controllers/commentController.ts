@@ -68,12 +68,12 @@ export async function createComment(req: Request, res: Response) {
     const taskId = getParamId(req, "taskId");
     if (!taskId) return res.status(400).json({ success: false, error: "Missing taskId" });
 
-    const { message, uploadTokens } = req.body as CreateCommentRequest;
+    const { message, upload_tokens } = req.body as CreateCommentRequest;
 
     const userId = requireUserId(req, res);
     if (!userId) return;
 
-    const hasTokens = Array.isArray(uploadTokens) && uploadTokens.length > 0;
+    const hasTokens = Array.isArray(upload_tokens) && upload_tokens.length > 0;
 
     if (!message?.trim() && !hasTokens) {
       return res
@@ -88,11 +88,11 @@ export async function createComment(req: Request, res: Response) {
       });
     }
 
-    if (hasTokens && uploadTokens!.some((t) => typeof t !== "string")) {
+    if (hasTokens && upload_tokens!.some((t) => typeof t !== "string")) {
       return res.status(400).json({ success: false, error: "Invalid upload tokens" });
     }
 
-    if (hasTokens && new Set(uploadTokens!).size !== uploadTokens!.length) {
+    if (hasTokens && new Set(upload_tokens!).size !== upload_tokens!.length) {
       return res.status(400).json({ success: false, error: "Duplicate upload tokens" });
     }
 
@@ -127,7 +127,7 @@ export async function createComment(req: Request, res: Response) {
         task_id: taskId,
         user_id: userId,
         message: message?.trim() ?? "",
-        uploadTokens: hasTokens ? uploadTokens : undefined,
+        upload_tokens: hasTokens ? upload_tokens : undefined,
       });
     } catch (err) {
       if (err instanceof Error && err.message === "One or more upload tokens are invalid or expired") {
