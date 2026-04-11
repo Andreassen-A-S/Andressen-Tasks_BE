@@ -5,11 +5,17 @@ import * as attachmentRepo from "../src/repositories/attachmentRepository";
 import * as storageService from "../src/services/storageService";
 
 const findUniqueMock = mock<(...args: any[]) => Promise<any>>();
+const userFindUniqueMock = mock<(...args: any[]) => Promise<any>>(() =>
+  Promise.resolve({ user_id: "u1" })
+);
 
 mock.module("../src/db/prisma", () => ({
   prisma: {
     task: {
       findUnique: findUniqueMock,
+    },
+    user: {
+      findUnique: userFindUniqueMock,
     },
   },
 }));
@@ -61,6 +67,21 @@ describe("attachmentController.prepareAttachments", () => {
     await attachmentController.prepareAttachments(req, res);
 
     expect(res.statusCode).toBe(401);
+  });
+
+  test("returns 401 when JWT user_id does not exist in DB", async () => {
+    userFindUniqueMock.mockResolvedValueOnce(null);
+
+    const req = createRequest({
+      body: { task_id: "t1", files: [{ file_name: "photo.jpg", mime_type: "image/jpeg", file_size: 1024 }] },
+      user: { user_id: "stale-user", role: UserRole.USER },
+    });
+    const res = createMockResponse();
+
+    await attachmentController.prepareAttachments(req, res);
+
+    expect(res.statusCode).toBe(401);
+    expect(res.body).toEqual({ success: false, error: "User not found — please log in again" });
   });
 
   test("returns 400 when taskId is missing", async () => {
@@ -146,7 +167,7 @@ describe("attachmentController.prepareAttachments", () => {
 
   test("returns 400 for unsupported mime type", async () => {
     const req = createRequest({
-      body: { task_id: "t1", files: [{ file_name: "doc.pdf", mime_type: "application/pdf", file_size: 1024 }] },
+      body: { task_id: "t1", files: [{ file_name: "script.exe", mime_type: "application/x-msdownload", file_size: 1024 }] },
       user: { user_id: "u1", role: UserRole.USER },
     });
     const res = createMockResponse();
@@ -155,6 +176,31 @@ describe("attachmentController.prepareAttachments", () => {
 
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({ success: false, error: "Unsupported file type" });
+  });
+
+  test.each([
+    ["application/pdf", "doc.pdf"],
+    ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "doc.docx"],
+    ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "sheet.xlsx"],
+  ])("allows %s files through validation", async (mimeType, fileName) => {
+    findUniqueMock.mockResolvedValueOnce({ task_id: "t1", created_by: "u1", assignments: [] });
+    spyOn(storageService, "generateSignedUploadUrl").mockResolvedValue({
+      uploadUrl: "https://storage.googleapis.com/signed",
+      gcsPath: `tasks/t1/uuid.${fileName.split(".").pop()}`,
+      url: "https://storage.googleapis.com/bucket/tasks/t1/uuid",
+    });
+    spyOn(attachmentRepo, "prepareAttachment").mockResolvedValue({ upload_token: "tok1", attachment_id: "a1" } as never);
+
+    const req = createRequest({
+      body: { task_id: "t1", files: [{ file_name: fileName, mime_type: mimeType, file_size: 1024 }] },
+      user: { user_id: "u1", role: UserRole.USER },
+    });
+    const res = createMockResponse();
+
+    await attachmentController.prepareAttachments(req, res);
+
+    expect(res.statusCode).toBeUndefined();
+    expect(res.body).toMatchObject({ success: true, data: [{ upload_token: "tok1" }] });
   });
 
   test("returns 413 when file exceeds size limit", async () => {
@@ -220,7 +266,7 @@ describe("attachmentController.prepareAttachments", () => {
     expect(res.statusCode).toBeUndefined();
     expect(res.body).toMatchObject({
       success: true,
-      data: [{ uploadToken: "tok1", uploadUrl: "https://storage.googleapis.com/signed" }],
+      data: [{ upload_token: "tok1", upload_url: "https://storage.googleapis.com/signed" }],
     });
   });
 });
@@ -303,7 +349,7 @@ describe("attachmentController.deleteAttachment", () => {
   });
 });
 
-describe("attachmentController.getTaskImages", () => {
+describe("attachmentController.getTaskAttachments", () => {
   test("returns 403 when user has no access to task", async () => {
     findUniqueMock.mockResolvedValueOnce({ task_id: "t1", created_by: "other", assignments: [] });
 
@@ -313,15 +359,15 @@ describe("attachmentController.getTaskImages", () => {
     });
     const res = createMockResponse();
 
-    await attachmentController.getTaskImages(req, res);
+    await attachmentController.getTaskAttachments(req, res);
 
     expect(res.statusCode).toBe(403);
     expect(res.body).toEqual({ success: false, error: "Access denied" });
   });
 
-  test("returns images with signed URLs for task creator", async () => {
+  test("returns attachments with signed URLs for task creator", async () => {
     findUniqueMock.mockResolvedValueOnce({ task_id: "t1", created_by: "u1", assignments: [] });
-    spyOn(attachmentRepo, "getImageAttachmentsByTaskId").mockResolvedValue([
+    spyOn(attachmentRepo, "getAttachmentsByTaskId").mockResolvedValue([
       { attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg", url: "old" } as never,
     ]);
     spyOn(storageService, "generateSignedReadUrl").mockResolvedValue("https://signed-read-url");
@@ -332,7 +378,7 @@ describe("attachmentController.getTaskImages", () => {
     });
     const res = createMockResponse();
 
-    await attachmentController.getTaskImages(req, res);
+    await attachmentController.getTaskAttachments(req, res);
 
     expect(res.statusCode).toBeUndefined();
     expect(res.body).toMatchObject({
@@ -341,13 +387,13 @@ describe("attachmentController.getTaskImages", () => {
     });
   });
 
-  test("returns images for assignee", async () => {
+  test("returns attachments for assignee", async () => {
     findUniqueMock.mockResolvedValueOnce({
       task_id: "t1",
       created_by: "other",
       assignments: [{ user_id: "u1" }],
     });
-    spyOn(attachmentRepo, "getImageAttachmentsByTaskId").mockResolvedValue([]);
+    spyOn(attachmentRepo, "getAttachmentsByTaskId").mockResolvedValue([]);
 
     const req = createRequest({
       params: { taskId: "t1" },
@@ -355,7 +401,7 @@ describe("attachmentController.getTaskImages", () => {
     });
     const res = createMockResponse();
 
-    await attachmentController.getTaskImages(req, res);
+    await attachmentController.getTaskAttachments(req, res);
 
     expect(res.statusCode).toBeUndefined();
     expect(res.body).toMatchObject({ success: true, data: [] });

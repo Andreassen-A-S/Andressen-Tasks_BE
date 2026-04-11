@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma";
 import type { Prisma, TaskEvent } from "../generated/prisma/client";
+import { AttachmentStatus } from "../generated/prisma/client";
 
 export async function createTaskEvent(data: Prisma.TaskEventCreateInput) {
   return prisma.taskEvent.create({ data });
@@ -13,7 +14,25 @@ export async function getTaskEventsByTaskId(taskId: string) {
       actor: {
         select: { user_id: true, name: true, email: true, position: true },
       },
-      comment: true,
+      comment: {
+        include: {
+          attachments: {
+            where: { status: AttachmentStatus.CONFIRMED },
+            orderBy: { created_at: "asc" },
+            select: {
+              attachment_id: true,
+              type: true,
+              file_name: true,
+              mime_type: true,
+              file_size: true,
+              gcs_path: true,
+              url: true,
+              created_at: true,
+              uploaded_by: true,
+            },
+          },
+        },
+      },
       assignment: {
         include: {
           user: {

@@ -106,11 +106,11 @@ describe("commentController.createComment", () => {
     expect(res.body).toEqual({ success: false, error: "Message or attachment is required" });
   });
 
-  test("returns 400 when uploadTokens contains non-string", async () => {
+  test("returns 400 when upload_tokens contains non-string", async () => {
     const req = createRequest({
       params: { taskId: "t1" } as Request["params"],
       user: { user_id: "u1", role: UserRole.USER },
-      body: { uploadTokens: [123] },
+      body: { upload_tokens: [123] },
     });
     const res = createMockResponse();
 
@@ -120,11 +120,11 @@ describe("commentController.createComment", () => {
     expect(res.body).toEqual({ success: false, error: "Invalid upload tokens" });
   });
 
-  test("returns 400 when uploadTokens contains duplicates", async () => {
+  test("returns 400 when upload_tokens contains duplicates", async () => {
     const req = createRequest({
       params: { taskId: "t1" } as Request["params"],
       user: { user_id: "u1", role: UserRole.USER },
-      body: { uploadTokens: ["tok1", "tok1"] },
+      body: { upload_tokens: ["tok1", "tok1"] },
     });
     const res = createMockResponse();
 
@@ -148,7 +148,7 @@ describe("commentController.createComment", () => {
     const req = createRequest({
       params: { taskId: "t1" } as Request["params"],
       user: { user_id: "u1", role: UserRole.USER },
-      body: { uploadTokens: ["tok-expired"] },
+      body: { upload_tokens: ["tok-expired"] },
     });
     const res = createMockResponse();
 
@@ -191,7 +191,7 @@ describe("commentController.createComment", () => {
       task_id: "t1",
       user_id: "u1",
       message: "hello",
-      uploadTokens: undefined,
+      upload_tokens: undefined,
     });
     expect(eventSpy).toHaveBeenCalledTimes(1);
     expect(res.statusCode).toBe(201);
@@ -220,7 +220,7 @@ describe("commentController.createComment", () => {
     const req = createRequest({
       params: { taskId: "t1" } as Request["params"],
       user: { user_id: "u1", role: UserRole.USER },
-      body: { uploadTokens: ["tok1"] },
+      body: { upload_tokens: ["tok1"] },
     });
     const res = createMockResponse();
 
@@ -230,7 +230,7 @@ describe("commentController.createComment", () => {
       task_id: "t1",
       user_id: "u1",
       message: "",
-      uploadTokens: ["tok1"],
+      upload_tokens: ["tok1"],
     });
     expect(res.statusCode).toBe(201);
     expect(res.body).toMatchObject({ success: true, data: { attachments: [{ attachment_id: "a1" }] } });
@@ -258,7 +258,7 @@ describe("commentController.createComment", () => {
     const req = createRequest({
       params: { taskId: "t1" } as Request["params"],
       user: { user_id: "u1", role: UserRole.USER },
-      body: { uploadTokens: ["tok1"] },
+      body: { upload_tokens: ["tok1"] },
     });
     const res = createMockResponse();
 
