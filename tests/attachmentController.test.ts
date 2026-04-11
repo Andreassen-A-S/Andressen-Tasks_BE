@@ -69,6 +69,21 @@ describe("attachmentController.prepareAttachments", () => {
     expect(res.statusCode).toBe(401);
   });
 
+  test("returns 401 when JWT user_id does not exist in DB", async () => {
+    userFindUniqueMock.mockResolvedValueOnce(null);
+
+    const req = createRequest({
+      body: { task_id: "t1", files: [{ file_name: "photo.jpg", mime_type: "image/jpeg", file_size: 1024 }] },
+      user: { user_id: "stale-user", role: UserRole.USER },
+    });
+    const res = createMockResponse();
+
+    await attachmentController.prepareAttachments(req, res);
+
+    expect(res.statusCode).toBe(401);
+    expect(res.body).toEqual({ success: false, error: "User not found — please log in again" });
+  });
+
   test("returns 400 when taskId is missing", async () => {
     const req = createRequest({
       body: { files: [{ mime_type: "image/jpeg" }] },
@@ -161,6 +176,31 @@ describe("attachmentController.prepareAttachments", () => {
 
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({ success: false, error: "Unsupported file type" });
+  });
+
+  test.each([
+    ["application/pdf", "doc.pdf"],
+    ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "doc.docx"],
+    ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "sheet.xlsx"],
+  ])("allows %s files through validation", async (mimeType, fileName) => {
+    findUniqueMock.mockResolvedValueOnce({ task_id: "t1", created_by: "u1", assignments: [] });
+    spyOn(storageService, "generateSignedUploadUrl").mockResolvedValue({
+      uploadUrl: "https://storage.googleapis.com/signed",
+      gcsPath: `tasks/t1/uuid.${fileName.split(".").pop()}`,
+      url: "https://storage.googleapis.com/bucket/tasks/t1/uuid",
+    });
+    spyOn(attachmentRepo, "prepareAttachment").mockResolvedValue({ upload_token: "tok1", attachment_id: "a1" } as never);
+
+    const req = createRequest({
+      body: { task_id: "t1", files: [{ file_name: fileName, mime_type: mimeType, file_size: 1024 }] },
+      user: { user_id: "u1", role: UserRole.USER },
+    });
+    const res = createMockResponse();
+
+    await attachmentController.prepareAttachments(req, res);
+
+    expect(res.statusCode).toBeUndefined();
+    expect(res.body).toMatchObject({ success: true, data: [{ upload_token: "tok1" }] });
   });
 
   test("returns 413 when file exceeds size limit", async () => {

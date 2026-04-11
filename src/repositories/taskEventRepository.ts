@@ -18,6 +18,17 @@ export async function getTaskEventsByTaskId(taskId: string) {
           attachments: {
             where: { status: "CONFIRMED" },
             orderBy: { created_at: "asc" },
+            select: {
+              attachment_id: true,
+              type: true,
+              file_name: true,
+              mime_type: true,
+              file_size: true,
+              gcs_path: true,
+              url: true,
+              created_at: true,
+              uploaded_by: true,
+            },
           },
         },
       },

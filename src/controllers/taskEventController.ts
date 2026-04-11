@@ -9,10 +9,9 @@ export async function listTaskEvents(req: Request, res: Response) {
 
     const eventsWithSignedUrls = await Promise.all(
       events.map(async (event) => {
-        if (!event.comment || !(event.comment as any).attachments?.length) return event;
-        const attachments = (event.comment as any).attachments as { gcs_path: string; [key: string]: any }[];
+        if (!event.comment?.attachments?.length) return event;
         const signedAttachments = await Promise.all(
-          attachments.map(async (a) => ({ ...a, url: await storageService.generateSignedReadUrl(a.gcs_path) }))
+          event.comment.attachments.map(async (a) => ({ ...a, url: await storageService.generateSignedReadUrl(a.gcs_path) }))
         );
         return { ...event, comment: { ...event.comment, attachments: signedAttachments } };
       })
