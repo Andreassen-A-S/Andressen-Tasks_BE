@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma";
 import type { Prisma, TaskEvent } from "../generated/prisma/client";
+import { AttachmentStatus } from "../generated/prisma/client";
 
 export async function createTaskEvent(data: Prisma.TaskEventCreateInput) {
   return prisma.taskEvent.create({ data });
@@ -16,7 +17,7 @@ export async function getTaskEventsByTaskId(taskId: string) {
       comment: {
         include: {
           attachments: {
-            where: { status: "CONFIRMED" },
+            where: { status: AttachmentStatus.CONFIRMED },
             orderBy: { created_at: "asc" },
             select: {
               attachment_id: true,

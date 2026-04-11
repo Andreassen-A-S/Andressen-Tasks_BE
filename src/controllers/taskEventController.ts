@@ -11,7 +11,13 @@ export async function listTaskEvents(req: Request, res: Response) {
       events.map(async (event) => {
         if (!event.comment?.attachments?.length) return event;
         const signedAttachments = await Promise.all(
-          event.comment.attachments.map(async (a) => ({ ...a, url: await storageService.generateSignedReadUrl(a.gcs_path) }))
+          event.comment.attachments.map(async (a) => {
+            try {
+              return { ...a, url: await storageService.generateSignedReadUrl(a.gcs_path) };
+            } catch {
+              return a;
+            }
+          })
         );
         return { ...event, comment: { ...event.comment, attachments: signedAttachments } };
       })
