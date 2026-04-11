@@ -349,7 +349,7 @@ describe("attachmentController.deleteAttachment", () => {
   });
 });
 
-describe("attachmentController.getTaskImages", () => {
+describe("attachmentController.getTaskAttachments", () => {
   test("returns 403 when user has no access to task", async () => {
     findUniqueMock.mockResolvedValueOnce({ task_id: "t1", created_by: "other", assignments: [] });
 
@@ -359,7 +359,7 @@ describe("attachmentController.getTaskImages", () => {
     });
     const res = createMockResponse();
 
-    await attachmentController.getTaskImages(req, res);
+    await attachmentController.getTaskAttachments(req, res);
 
     expect(res.statusCode).toBe(403);
     expect(res.body).toEqual({ success: false, error: "Access denied" });
@@ -378,7 +378,7 @@ describe("attachmentController.getTaskImages", () => {
     });
     const res = createMockResponse();
 
-    await attachmentController.getTaskImages(req, res);
+    await attachmentController.getTaskAttachments(req, res);
 
     expect(res.statusCode).toBeUndefined();
     expect(res.body).toMatchObject({
@@ -401,7 +401,7 @@ describe("attachmentController.getTaskImages", () => {
     });
     const res = createMockResponse();
 
-    await attachmentController.getTaskImages(req, res);
+    await attachmentController.getTaskAttachments(req, res);
 
     expect(res.statusCode).toBeUndefined();
     expect(res.body).toMatchObject({ success: true, data: [] });

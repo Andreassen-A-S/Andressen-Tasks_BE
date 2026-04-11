@@ -7,8 +7,8 @@ const router = Router();
 // POST /api/attachments/prepare — create pending attachment records and get signed upload URLs
 router.post("/prepare", authenticateToken, attachmentController.prepareAttachments);
 
-// GET /api/attachments/task/:taskId — all image attachments for the Photos tab
-router.get("/task/:taskId", authenticateToken, attachmentController.getTaskImages);
+// GET /api/attachments/task/:taskId — all confirmed attachments for a task
+router.get("/task/:taskId", authenticateToken, attachmentController.getTaskAttachments);
 
 // DELETE /api/attachments/:attachmentId — delete from GCS + DB
 router.delete("/:attachmentId", authenticateToken, attachmentController.deleteAttachment);

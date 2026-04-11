@@ -91,7 +91,7 @@ export async function prepareAttachments(req: Request, res: Response) {
   }
 }
 
-export async function getTaskImages(req: Request, res: Response) {
+export async function getTaskAttachments(req: Request, res: Response) {
   try {
     const taskId = getParamId(req, "taskId");
     if (!taskId) return res.status(400).json({ success: false, error: "Missing taskId" });
@@ -123,8 +123,8 @@ export async function getTaskImages(req: Request, res: Response) {
     );
     res.json({ success: true, data: attachmentsWithSignedUrls });
   } catch (error) {
-    console.error("Error fetching task images:", error);
-    res.status(500).json({ success: false, error: "Failed to fetch images" });
+    console.error("Error fetching task attachments:", error);
+    res.status(500).json({ success: false, error: "Failed to fetch attachments" });
   }
 }
 
