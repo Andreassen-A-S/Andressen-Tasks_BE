@@ -5,11 +5,17 @@ import * as attachmentRepo from "../src/repositories/attachmentRepository";
 import * as storageService from "../src/services/storageService";
 
 const findUniqueMock = mock<(...args: any[]) => Promise<any>>();
+const userFindUniqueMock = mock<(...args: any[]) => Promise<any>>(() =>
+  Promise.resolve({ user_id: "u1" })
+);
 
 mock.module("../src/db/prisma", () => ({
   prisma: {
     task: {
       findUnique: findUniqueMock,
+    },
+    user: {
+      findUnique: userFindUniqueMock,
     },
   },
 }));
@@ -146,7 +152,7 @@ describe("attachmentController.prepareAttachments", () => {
 
   test("returns 400 for unsupported mime type", async () => {
     const req = createRequest({
-      body: { task_id: "t1", files: [{ file_name: "doc.pdf", mime_type: "application/pdf", file_size: 1024 }] },
+      body: { task_id: "t1", files: [{ file_name: "script.exe", mime_type: "application/x-msdownload", file_size: 1024 }] },
       user: { user_id: "u1", role: UserRole.USER },
     });
     const res = createMockResponse();
@@ -220,7 +226,7 @@ describe("attachmentController.prepareAttachments", () => {
     expect(res.statusCode).toBeUndefined();
     expect(res.body).toMatchObject({
       success: true,
-      data: [{ uploadToken: "tok1", uploadUrl: "https://storage.googleapis.com/signed" }],
+      data: [{ upload_token: "tok1", upload_url: "https://storage.googleapis.com/signed" }],
     });
   });
 });
@@ -321,7 +327,7 @@ describe("attachmentController.getTaskImages", () => {
 
   test("returns images with signed URLs for task creator", async () => {
     findUniqueMock.mockResolvedValueOnce({ task_id: "t1", created_by: "u1", assignments: [] });
-    spyOn(attachmentRepo, "getImageAttachmentsByTaskId").mockResolvedValue([
+    spyOn(attachmentRepo, "getAttachmentsByTaskId").mockResolvedValue([
       { attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg", url: "old" } as never,
     ]);
     spyOn(storageService, "generateSignedReadUrl").mockResolvedValue("https://signed-read-url");
@@ -347,7 +353,7 @@ describe("attachmentController.getTaskImages", () => {
       created_by: "other",
       assignments: [{ user_id: "u1" }],
     });
-    spyOn(attachmentRepo, "getImageAttachmentsByTaskId").mockResolvedValue([]);
+    spyOn(attachmentRepo, "getAttachmentsByTaskId").mockResolvedValue([]);
 
     const req = createRequest({
       params: { taskId: "t1" },
