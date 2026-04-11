@@ -365,7 +365,7 @@ describe("attachmentController.getTaskAttachments", () => {
     expect(res.body).toEqual({ success: false, error: "Access denied" });
   });
 
-  test("returns images with signed URLs for task creator", async () => {
+  test("returns attachments with signed URLs for task creator", async () => {
     findUniqueMock.mockResolvedValueOnce({ task_id: "t1", created_by: "u1", assignments: [] });
     spyOn(attachmentRepo, "getAttachmentsByTaskId").mockResolvedValue([
       { attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg", url: "old" } as never,
@@ -387,7 +387,7 @@ describe("attachmentController.getTaskAttachments", () => {
     });
   });
 
-  test("returns images for assignee", async () => {
+  test("returns attachments for assignee", async () => {
     findUniqueMock.mockResolvedValueOnce({
       task_id: "t1",
       created_by: "other",

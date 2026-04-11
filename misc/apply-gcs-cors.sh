@@ -1,6 +1,16 @@
 #!/bin/bash
 # Usage: FRONTEND_URL="https://app.example.com" GCS_BUCKET="your-bucket" ./misc/apply-gcs-cors.sh
-set -e
+set -euo pipefail
+
+if ! command -v jq &>/dev/null; then
+  echo "Error: jq is not installed" >&2
+  exit 1
+fi
+
+if ! command -v gsutil &>/dev/null; then
+  echo "Error: gsutil is not installed" >&2
+  exit 1
+fi
 
 if [ -z "$FRONTEND_URL" ]; then
   echo "Error: FRONTEND_URL is not set" >&2
