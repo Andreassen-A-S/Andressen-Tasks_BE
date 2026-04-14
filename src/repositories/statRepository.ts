@@ -430,7 +430,7 @@ export async function getUserWeeklyStats(
   const plannedWhere = {
     user_id: userId,
     task: {
-      scheduled_date: { gte: weekStart, lt: weekEnd },
+      start_date: { gte: weekStart, lt: weekEnd },
     },
   } as const;
 
@@ -444,7 +444,7 @@ export async function getUserWeeklyStats(
       where: {
         user_id: userId,
         task: {
-          scheduled_date: { gte: weekStart, lt: weekEnd },
+          start_date: { gte: weekStart, lt: weekEnd },
           status: TaskStatus.DONE,
           completed_by: userId,
         },

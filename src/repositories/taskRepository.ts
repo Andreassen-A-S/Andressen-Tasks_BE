@@ -92,7 +92,7 @@ export async function createTaskWithAssignments(data: CreateTaskInput) {
         ...(data.parent_task_id
           ? { parent: { connect: { task_id: data.parent_task_id } } }
           : {}),
-        scheduled_date: data.scheduled_date,
+        start_date: data.start_date,
         unit: data.unit ?? TaskUnit.NONE,
         goal_type: data.goal_type ?? TaskGoalType.OPEN,
         target_quantity: data.target_quantity ?? null,
@@ -294,7 +294,7 @@ export async function getTodayTasksPerUser(
   const assignments = await prisma.taskAssignment.findMany({
     where: {
       task: {
-        scheduled_date: { lt: end },
+        start_date: { lt: end },
         status: { notIn: [TaskStatus.DONE, TaskStatus.REJECTED, TaskStatus.ARCHIVED] },
       },
       user: { push_token: { not: null } },
@@ -331,7 +331,7 @@ export async function getUsersWithNoActivityToday(
     where: {
       task: {
         status: { in: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS] },
-        scheduled_date: { gte: start, lt: end },
+        start_date: { gte: start, lt: end },
       },
       user: { push_token: { not: null } },
     },

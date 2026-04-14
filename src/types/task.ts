@@ -15,7 +15,7 @@ export interface UpdateTaskInput {
   assigned_users?: string[];
   unit?: TaskUnit;
   target_quantity?: number;
-  scheduled_date?: Date;
+  start_date?: Date;
 }
 
 export interface CreateTaskInput {
@@ -25,7 +25,7 @@ export interface CreateTaskInput {
   status?: TaskStatus;
   deadline: Date;
   parent_task_id?: string;
-  scheduled_date: Date;
+  start_date: Date;
   created_by: string;
   project_id: string;
   assigned_users?: string[];

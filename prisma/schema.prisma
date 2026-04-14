@@ -222,7 +222,7 @@ model Task {
   completed_by         String?
   completed_at         DateTime?
 
-  scheduled_date       DateTime
+  start_date           DateTime
   unit                 TaskUnit     @default(NONE)
   goal_type            TaskGoalType @default(OPEN)
   target_quantity      Float?
@@ -247,7 +247,7 @@ model Task {
   @@index([status])
   @@index([deadline])
   @@index([parent_task_id])
-  @@index([scheduled_date])
+  @@index([start_date])
   @@index([recurring_template_id, occurrence_date])
   @@map("tasks")
 }

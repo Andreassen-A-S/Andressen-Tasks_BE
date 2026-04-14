@@ -256,7 +256,7 @@ export class RecurringTaskService {
         priority: template.priority,
         status: TaskStatus.PENDING,
         deadline: deadlineDate,
-        scheduled_date: occurrenceDate,
+        start_date: occurrenceDate,
         occurrence_date: occurrenceDate,
         unit: template.unit,
         goal_type: template.goal_type,
