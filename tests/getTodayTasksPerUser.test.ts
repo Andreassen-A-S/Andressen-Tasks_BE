@@ -24,7 +24,7 @@ function makeAssignment(
     task: {
       task_id: `task-${userId}`,
       status: TaskStatus.PENDING,
-      scheduled_date: new Date("2026-04-01T00:00:00.000Z"),
+      start_date: new Date("2026-04-01T00:00:00.000Z"),
       ...taskOverrides,
     },
   };
@@ -36,11 +36,11 @@ afterEach(() => {
 });
 
 describe("getTodayTasksPerUser", () => {
-  test("includes overdue tasks (scheduled before today): no lower bound on scheduled_date", async () => {
+  test("includes overdue tasks (scheduled before today): no lower bound on start_date", async () => {
     findManyMock.mockResolvedValue([
       makeAssignment("u1", "token-u1", {
         task_id: "overdue-task",
-        scheduled_date: new Date("2026-03-01T00:00:00.000Z"),
+        start_date: new Date("2026-03-01T00:00:00.000Z"),
       }),
     ]);
 
@@ -49,9 +49,9 @@ describe("getTodayTasksPerUser", () => {
     expect(result).toHaveLength(1);
     expect(result[0].tasks[0].task_id).toBe("overdue-task");
 
-    // Intentionally no gte lower bound — overdue tasks have no scheduled_date floor
+    // Intentionally no gte lower bound — overdue tasks have no start_date floor
     const callArg = findManyMock.mock.calls[0][0] as any;
-    expect(callArg.where.task.scheduled_date.gte).toBeUndefined();
+    expect(callArg.where.task.start_date.gte).toBeUndefined();
   });
 
   test("query excludes DONE, REJECTED, ARCHIVED statuses", async () => {
@@ -72,7 +72,7 @@ describe("getTodayTasksPerUser", () => {
     await getTodayTasksPerUser(new Date("2026-04-01T06:25:00Z"));
 
     const callArg = findManyMock.mock.calls[0][0] as any;
-    const lt: Date = callArg.where.task.scheduled_date.lt;
+    const lt: Date = callArg.where.task.start_date.lt;
     expect(lt.toISOString()).toBe("2026-04-01T22:00:00.000Z");
   });
 

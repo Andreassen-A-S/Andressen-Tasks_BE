@@ -280,7 +280,7 @@ async function main() {
         priority: TaskPriority.HIGH,
         status: TaskStatus.PENDING,
         deadline: addDays(now, 2),
-        scheduled_date: atTime(addDays(weekStart, 1), 8, 0), // Tue this week
+        start_date: atTime(addDays(weekStart, 1), 8, 0), // Tue this week
         goal_type: TaskGoalType.FIXED,
         unit: TaskUnit.METERS,
         target_quantity: 100,
@@ -298,7 +298,7 @@ async function main() {
         priority: TaskPriority.MEDIUM,
         status: TaskStatus.PENDING,
         deadline: addDays(now, 1),
-        scheduled_date: atTime(addDays(weekStart, 2), 12, 0), // Wed this week
+        start_date: atTime(addDays(weekStart, 2), 12, 0), // Wed this week
         goal_type: TaskGoalType.OPEN,
         unit: TaskUnit.NONE,
         target_quantity: null,
@@ -317,7 +317,7 @@ async function main() {
         priority: TaskPriority.LOW,
         status: TaskStatus.PENDING,
         deadline: addDays(now, 4),
-        scheduled_date: atTime(addDays(weekStart, 4), 14, 0), // Fri this week
+        start_date: atTime(addDays(weekStart, 4), 14, 0), // Fri this week
         goal_type: TaskGoalType.OPEN,
         unit: TaskUnit.NONE,
         target_quantity: null,
@@ -336,7 +336,7 @@ async function main() {
         priority: TaskPriority.MEDIUM,
         status: TaskStatus.PENDING,
         deadline: addDays(now, 10),
-        scheduled_date: atTime(addDays(nextWeekStart, 1), 8, 0), // Tue next week
+        start_date: atTime(addDays(nextWeekStart, 1), 8, 0), // Tue next week
         goal_type: TaskGoalType.FIXED,
         unit: TaskUnit.KILOMETERS,
         target_quantity: 2.5,
@@ -354,7 +354,7 @@ async function main() {
         priority: TaskPriority.HIGH,
         status: TaskStatus.PENDING,
         deadline: addDays(now, -2), // overdue
-        scheduled_date: atTime(addDays(weekStart, 0), 9, 0), // Mon this week
+        start_date: atTime(addDays(weekStart, 0), 9, 0), // Mon this week
         goal_type: TaskGoalType.OPEN,
         unit: TaskUnit.NONE,
         target_quantity: null,
