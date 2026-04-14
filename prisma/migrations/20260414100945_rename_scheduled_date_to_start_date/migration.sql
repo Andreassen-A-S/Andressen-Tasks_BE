@@ -1,9 +1,8 @@
 /*
-  Warnings:
-
-  - You are about to drop the column `scheduled_date` on the `tasks` table. All the data in the column will be lost.
-  - Added the required column `start_date` to the `tasks` table without a default value. This is not possible if the table is not empty.
-
+  Migration notes:
+  - Renames `scheduled_date` to `start_date` on the `tasks` table.
+  - Replaces the related index so it matches the renamed column.
+  - This migration does not drop task date data or add a new required column.
 */
 -- DropIndex
 DROP INDEX `tasks_scheduled_date_idx` ON `tasks`;
