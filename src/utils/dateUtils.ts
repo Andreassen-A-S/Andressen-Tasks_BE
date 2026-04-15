@@ -53,16 +53,16 @@ export function appDateKey(date = new Date()): string {
 }
 
 function dateKeyToLocal(key: string): Date {
-  const [y, m, d] = key.split("-").map(Number);
+  const [y, m, d] = key.split("-").map(Number) as [number, number, number];
   return new Date(y, m - 1, d);
 }
 
 /**
- * Returns the UTC DateTime bounds for a given YYYY-MM-DD date key in Copenhagen.
+ * Returns the UTC DateTime bounds for a given YYYY-MM-DD date key.
  * Uses noon UTC to safely handle DST transition days.
  */
 export function dateKeyBounds(key: string): { start: Date; end: Date } {
-  const [y, m, d] = key.split("-").map(Number);
+  const [y, m, d] = key.split("-").map(Number) as [number, number, number];
   return appDayBounds(new Date(Date.UTC(y, m - 1, d, 12)));
 }
 
