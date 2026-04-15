@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { copenhagenDayBounds } from "../src/repositories/taskRepository";
+import { appDayBounds } from "../src/utils/dateUtils";
 
 /**
  * Copenhagen is UTC+1 (CET) in winter and UTC+2 (CEST) in summer.
@@ -8,11 +8,11 @@ import { copenhagenDayBounds } from "../src/repositories/taskRepository";
  *   CEST: previous day at 22:00 UTC
  */
 
-describe("copenhagenDayBounds", () => {
+describe("appDayBounds", () => {
   test("CET (UTC+1): returns correct [start, end) for a winter date", () => {
     // 2024-01-15 at 07:25 CET = 06:25 UTC (cron fire time)
     const input = new Date("2024-01-15T06:25:00Z");
-    const { start, end } = copenhagenDayBounds(input);
+    const { start, end } = appDayBounds(input);
 
     expect(start.toISOString()).toBe("2024-01-14T23:00:00.000Z"); // midnight CET
     expect(end.toISOString()).toBe("2024-01-15T23:00:00.000Z"); // next midnight CET
@@ -22,7 +22,7 @@ describe("copenhagenDayBounds", () => {
   test("CEST (UTC+2): returns correct [start, end) for a summer date", () => {
     // 2024-07-15 at 08:25 CEST = 06:25 UTC
     const input = new Date("2024-07-15T06:25:00Z");
-    const { start, end } = copenhagenDayBounds(input);
+    const { start, end } = appDayBounds(input);
 
     expect(start.toISOString()).toBe("2024-07-14T22:00:00.000Z"); // midnight CEST
     expect(end.toISOString()).toBe("2024-07-15T22:00:00.000Z"); // next midnight CEST
@@ -34,7 +34,7 @@ describe("copenhagenDayBounds", () => {
     // Midnight Copenhagen = 2024-03-30T23:00Z (CET).
     // Next midnight Copenhagen = 2024-03-31T22:00Z (CEST).
     const input = new Date("2024-03-31T18:00:00Z"); // 20:00 CEST
-    const { start, end } = copenhagenDayBounds(input);
+    const { start, end } = appDayBounds(input);
 
     expect(start.toISOString()).toBe("2024-03-30T23:00:00.000Z");
     expect(end.toISOString()).toBe("2024-03-31T22:00:00.000Z");
@@ -46,7 +46,7 @@ describe("copenhagenDayBounds", () => {
     // Midnight Copenhagen = 2024-10-26T22:00Z (CEST).
     // Next midnight Copenhagen = 2024-10-27T23:00Z (CET).
     const input = new Date("2024-10-27T18:00:00Z"); // 20:00 CEST → 19:00 CET
-    const { start, end } = copenhagenDayBounds(input);
+    const { start, end } = appDayBounds(input);
 
     expect(start.toISOString()).toBe("2024-10-26T22:00:00.000Z");
     expect(end.toISOString()).toBe("2024-10-27T23:00:00.000Z");
@@ -62,15 +62,15 @@ describe("copenhagenDayBounds", () => {
     ];
     for (const iso of cases) {
       const input = new Date(iso);
-      const { start, end } = copenhagenDayBounds(input);
+      const { start, end } = appDayBounds(input);
       expect(input.getTime()).toBeGreaterThanOrEqual(start.getTime());
       expect(input.getTime()).toBeLessThan(end.getTime());
     }
   });
 
   test("adjacent days produce non-overlapping, contiguous ranges", () => {
-    const day1 = copenhagenDayBounds(new Date("2024-01-15T12:00:00Z"));
-    const day2 = copenhagenDayBounds(new Date("2024-01-16T12:00:00Z"));
+    const day1 = appDayBounds(new Date("2024-01-15T12:00:00Z"));
+    const day2 = appDayBounds(new Date("2024-01-16T12:00:00Z"));
 
     expect(day1.end.getTime()).toBe(day2.start.getTime());
   });

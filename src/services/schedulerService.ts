@@ -3,6 +3,7 @@ import * as taskRepo from "../repositories/taskRepository";
 import * as attachmentRepo from "../repositories/attachmentRepository";
 import { sendPushNotification } from "./notificationService";
 import { deleteFile } from "./storageService";
+import { APP_TIMEZONE } from "../utils/dateUtils";
 
 let initialized = false;
 
@@ -32,7 +33,7 @@ export function initScheduler(): void {
         console.error("Morning task notification error:", err);
       }
     },
-    { timezone: "Europe/Copenhagen" },
+    { timezone: APP_TIMEZONE },
   );
 
   // Pending attachment cleanup — every 30 minutes
@@ -73,6 +74,6 @@ export function initScheduler(): void {
         console.error("No activity notification error:", err);
       }
     },
-    { timezone: "Europe/Copenhagen" },
+    { timezone: APP_TIMEZONE },
   );
 }

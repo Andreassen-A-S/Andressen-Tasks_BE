@@ -153,8 +153,8 @@ model RecurringTaskTemplate {
   days_of_week      Json?               // Optional: For weekly - [1,3,5] = Mon, Wed, Fri
   day_of_month      Int?                // Optional: For monthly - 15 = 15th of month
   
-  start_date        DateTime
-  end_date          DateTime?
+  start_date        DateTime  @db.Date
+  end_date          DateTime? @db.Date
   is_active         Boolean             @default(true)
   
   created_at        DateTime            @default(now())
@@ -211,7 +211,7 @@ model Task {
   description          String       @db.Text
   priority             TaskPriority @default(MEDIUM)
   status               TaskStatus   @default(PENDING)
-  deadline             DateTime
+  deadline             DateTime @db.Date
   created_at           DateTime     @default(now())
   updated_at           DateTime     @updatedAt
 
@@ -222,7 +222,7 @@ model Task {
   completed_by         String?
   completed_at         DateTime?
 
-  start_date           DateTime
+  start_date           DateTime @db.Date
   unit                 TaskUnit     @default(NONE)
   goal_type            TaskGoalType @default(OPEN)
   target_quantity      Float?

@@ -3,10 +3,10 @@ import {
   addWeeks,
   addMonths,
   addYears,
-  startOfDay,
   differenceInWeeks,
   isAfter,
 } from "date-fns";
+import { appDateKey } from "../utils/dateUtils";
 import { prisma } from "../db/prisma";
 import * as templateRepository from "../repositories/templateRepository";
 import {
@@ -246,16 +246,12 @@ export class RecurringTaskService {
 
     // Batch create all instances
     const taskData = occurrences.map((occurrenceDate) => {
-      // Create deadline as a Date object
-      const deadlineDate = new Date(occurrenceDate);
-      deadlineDate.setHours(23, 59, 59, 999);
-
       return {
         title: template.title,
         description: template.description || "",
         priority: template.priority,
         status: TaskStatus.PENDING,
-        deadline: deadlineDate,
+        deadline: occurrenceDate,
         start_date: occurrenceDate,
         occurrence_date: occurrenceDate,
         unit: template.unit,
@@ -316,8 +312,8 @@ export class RecurringTaskService {
     existingDates: Set<number>,
   ): Date[] {
     const occurrences: Date[] = [];
-    let currentDate = startOfDay(template.start_date);
-    const endDate = template.end_date ? startOfDay(template.end_date) : null;
+    let currentDate = template.start_date; // @db.Date — already UTC midnight
+    const endDate = template.end_date ?? null; // @db.Date — already UTC midnight
 
     // Safety limit to prevent infinite loops
     const maxIterations = count * 100;
@@ -368,7 +364,7 @@ export class RecurringTaskService {
         if (!daysOfWeek || daysOfWeek.length === 0) {
           return true;
         }
-        const dayOfWeek = date.getDay();
+        const dayOfWeek = date.getUTCDay();
         return daysOfWeek.includes(dayOfWeek);
       }
 
@@ -377,7 +373,7 @@ export class RecurringTaskService {
         if (!dayOfMonth) {
           return true;
         }
-        return date.getDate() === dayOfMonth;
+        return date.getUTCDate() === dayOfMonth;
       }
 
       case RecurrenceFrequency.YEARLY:
@@ -428,7 +424,7 @@ export class RecurringTaskService {
 
     const sortedDays = [...daysOfWeek].sort((a, b) => a - b);
     const currentDayOfWeek = fromDate.getDay();
-    const startDate = startOfDay(template.start_date);
+    const startDate = template.start_date; // @db.Date — already UTC midnight
 
     // Calculate which week we're in relative to start_date
     const weeksSinceStart = differenceInWeeks(fromDate, startDate);
@@ -476,13 +472,11 @@ export class RecurringTaskService {
 
     let nextDate = addMonths(fromDate, template.interval);
     const daysInMonth = new Date(
-      nextDate.getFullYear(),
-      nextDate.getMonth() + 1,
-      0,
-    ).getDate();
+      Date.UTC(nextDate.getUTCFullYear(), nextDate.getUTCMonth() + 1, 0),
+    ).getUTCDate();
 
     // Handle case where day doesn't exist (e.g., Feb 31 -> Feb 28)
-    nextDate.setDate(Math.min(dayOfMonth, daysInMonth));
+    nextDate.setUTCDate(Math.min(dayOfMonth, daysInMonth));
 
     return nextDate;
   }
@@ -551,7 +545,7 @@ export class RecurringTaskService {
     tx: Prisma.TransactionClient,
     templateId: string,
   ): Promise<void> {
-    const today = startOfDay(new Date());
+    const today = new Date(appDateKey());
 
     // Delete future PENDING instances that haven't been worked on
     await tx.task.deleteMany({
@@ -653,7 +647,7 @@ export class RecurringTaskService {
       return;
     }
 
-    const today = startOfDay(new Date());
+    const today = new Date(appDateKey());
     const futureInstances = await prisma.task.count({
       where: {
         recurring_template_id: templateId,
