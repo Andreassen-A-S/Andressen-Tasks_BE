@@ -26,8 +26,8 @@ export async function prepareAttachments(req: Request, res: Response) {
       return res.status(400).json({ success: false, error: "task_id and files are required" });
     }
 
-    if (files.length > 5) {
-      return res.status(400).json({ success: false, error: "Maximum 5 files per request" });
+    if (files.length > 20) {
+      return res.status(400).json({ success: false, error: "Maximum 20 files per request" });
     }
 
     for (const f of files) {

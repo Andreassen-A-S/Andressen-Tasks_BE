@@ -110,11 +110,11 @@ describe("attachmentController.prepareAttachments", () => {
     expect(res.body).toEqual({ success: false, error: "task_id and files are required" });
   });
 
-  test("returns 400 when more than 5 files", async () => {
+  test("returns 400 when more than 20 files", async () => {
     const req = createRequest({
       body: {
         task_id: "t1",
-        files: Array(6).fill({ file_name: "photo.jpg", mime_type: "image/jpeg", file_size: 1024 }),
+        files: Array(21).fill({ file_name: "photo.jpg", mime_type: "image/jpeg", file_size: 1024 }),
       },
       user: { user_id: "u1", role: UserRole.USER },
     });
@@ -123,7 +123,7 @@ describe("attachmentController.prepareAttachments", () => {
     await attachmentController.prepareAttachments(req, res);
 
     expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Maximum 5 files per request" });
+    expect(res.body).toEqual({ success: false, error: "Maximum 20 files per request" });
   });
 
   test("returns 400 when fileSize is NaN", async () => {
