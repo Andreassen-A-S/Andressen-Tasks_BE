@@ -5,12 +5,14 @@ import {
   type Prisma,
 } from "../generated/prisma/client";
 import {
-  startOfDay,
-  startOfWeek,
-  startOfMonth,
-  subDays,
-  addDays,
-} from "date-fns";
+  appDayBounds,
+  appWeekBoundsUTC,
+  appMonthStartUTC,
+  dateKeyBounds,
+  appDateKey,
+  subDaysFromKey,
+  addDaysToKey,
+} from "../utils/dateUtils";
 
 /**
  * Stats repository with transaction support
@@ -25,7 +27,8 @@ type PrismaClient = typeof prisma | TransactionClient;
  */
 export async function getOverviewStats(client: PrismaClient = prisma) {
   const now = new Date();
-  const todayStart = startOfDay(now);
+  const { start: todayStart } = appDayBounds(now);
+  const todayKey = appDateKey(now);
 
   const [totalTasks, completedToday, pendingTasks, overdueTasks] =
     await Promise.all([
@@ -50,7 +53,7 @@ export async function getOverviewStats(client: PrismaClient = prisma) {
       // Overdue tasks (not completed, past deadline)
       client.task.count({
         where: {
-          deadline: { lt: now },
+          deadline: { lt: new Date(todayKey) },
           status: { not: TaskStatus.DONE },
         },
       }),
@@ -69,9 +72,9 @@ export async function getOverviewStats(client: PrismaClient = prisma) {
  */
 export async function getCompletionRates(client: PrismaClient = prisma) {
   const now = new Date();
-  const todayStart = startOfDay(now);
-  const weekStart = startOfWeek(now, { weekStartsOn: 1 }); // Monday
-  const monthStart = startOfMonth(now);
+  const todayStart = appDayBounds(now).start;
+  const weekStart = appWeekBoundsUTC(now).start;
+  const monthStart = appMonthStartUTC(now);
 
   const [todayStats, weekStats, monthStats] = await Promise.all([
     // Today
@@ -113,7 +116,7 @@ export async function getCompletionRates(client: PrismaClient = prisma) {
   const completedTasks = await client.task.findMany({
     where: {
       status: TaskStatus.DONE,
-      created_at: { gte: monthStart },
+      completed_at: { gte: monthStart },
     },
     select: {
       created_at: true,
@@ -156,7 +159,7 @@ export async function getPriorityStats(client: PrismaClient = prisma) {
   const overdueCounts = await client.task.groupBy({
     by: ["priority"],
     where: {
-      deadline: { lt: now },
+      deadline: { lt: new Date(appDateKey(now)) },
       status: { not: TaskStatus.DONE },
     },
     _count: true,
@@ -221,7 +224,7 @@ export async function getTopPerformers(
   limit: number = 5,
   client: PrismaClient = prisma,
 ) {
-  const monthStart = startOfMonth(new Date());
+  const monthStart = appMonthStartUTC();
 
   const performers = await client.task.groupBy({
     by: ["completed_by"],
@@ -302,7 +305,8 @@ export async function getWorkloadDistribution(client: PrismaClient = prisma) {
  */
 export async function getRecurringStats(client: PrismaClient = prisma) {
   const now = new Date();
-  const nextWeek = addDays(now, 7);
+  const nextWeekKey = addDaysToKey(appDateKey(now), 7);
+  const nextWeek = new Date(nextWeekKey);
 
   const [
     activeTemplates,
@@ -362,33 +366,30 @@ export async function getTaskTrends(
   days: number = 7,
   client: PrismaClient = prisma,
 ) {
-  const dates = Array.from({ length: days }, (_, i) => {
-    return startOfDay(subDays(new Date(), days - 1 - i));
-  });
+  const todayKey = appDateKey();
+  const dateKeys = Array.from({ length: days }, (_, i) =>
+    subDaysFromKey(todayKey, days - 1 - i),
+  );
 
   const trends = await Promise.all(
-    dates.map(async (date) => {
-      const nextDay = addDays(date, 1);
+    dateKeys.map(async (dateKey) => {
+      const { start, end } = dateKeyBounds(dateKey);
 
       const [created, completed] = await Promise.all([
         client.task.count({
           where: {
-            created_at: { gte: date, lt: nextDay },
+            created_at: { gte: start, lt: end },
           },
         }),
         client.task.count({
           where: {
             status: TaskStatus.DONE,
-            completed_at: { gte: date, lt: nextDay },
+            completed_at: { gte: start, lt: end },
           },
         }),
       ]);
 
-      return {
-        date: date.toISOString().split("T")[0],
-        created,
-        completed,
-      };
+      return { date: dateKey, created, completed };
     }),
   );
 
@@ -402,10 +403,9 @@ export async function getUserOverdueTasks(
   userId: string,
   client: PrismaClient = prisma,
 ) {
-  const now = new Date();
   return client.task.count({
     where: {
-      deadline: { lt: now },
+      deadline: { lt: new Date(appDateKey()) },
       status: {
         notIn: [TaskStatus.DONE, TaskStatus.ARCHIVED, TaskStatus.REJECTED],
       },
@@ -423,8 +423,7 @@ export async function getUserWeeklyStats(
   userId: string,
   client: PrismaClient = prisma,
 ) {
-  const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
-  const weekEnd = addDays(weekStart, 7);
+  const { start: weekStart, end: weekEnd } = appWeekBoundsUTC();
 
   // planned tasks = assignments where task is scheduled this week
   const plannedWhere = {
