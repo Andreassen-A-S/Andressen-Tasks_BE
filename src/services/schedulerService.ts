@@ -13,7 +13,7 @@ export function initScheduler(): void {
     return;
   }
   initialized = true;
-  // Morning tasks — 06:25 Europe/Copenhagen local time (CET in winter, CEST in summer), Mon–Fri
+  // Morning tasks — 06:25 APP_TIMEZONE local time, Mon–Fri
   cron.schedule(
     "25 6 * * 1-5",
     async () => {
@@ -55,7 +55,7 @@ export function initScheduler(): void {
     }
   });
 
-  // No activity reminder — 20:00 Europe/Copenhagen local time (CET in winter, CEST in summer), Mon–Fri
+  // No activity reminder — 20:00 APP_TIMEZONE local time, Mon–Fri
   cron.schedule(
     "0 20 * * 1-5",
     async () => {

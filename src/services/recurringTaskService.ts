@@ -423,7 +423,7 @@ export class RecurringTaskService {
     }
 
     const sortedDays = [...daysOfWeek].sort((a, b) => a - b);
-    const currentDayOfWeek = fromDate.getDay();
+    const currentDayOfWeek = fromDate.getUTCDay();
     const startDate = template.start_date; // @db.Date — already UTC midnight
 
     // Calculate which week we're in relative to start_date
@@ -446,7 +446,7 @@ export class RecurringTaskService {
     const nextCycleWeek = addWeeks(fromDate, weeksToNextCycle);
 
     // Find the first target day in that week
-    const nextCycleDayOfWeek = nextCycleWeek.getDay();
+    const nextCycleDayOfWeek = nextCycleWeek.getUTCDay();
     const firstTargetDay = sortedDays[0]!;
 
     let daysToTarget = firstTargetDay - nextCycleDayOfWeek;
