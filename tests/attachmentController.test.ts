@@ -117,12 +117,12 @@ describe("attachmentController.prepareAttachments", () => {
       gcsPath: "tasks/t1/uuid.jpg",
       url: "https://storage.googleapis.com/bucket/tasks/t1/uuid",
     });
-    spyOn(attachmentRepo, "prepareAttachment").mockResolvedValue({ upload_token: "tok1", attachment_id: "a1" } as never);
+    spyOn(attachmentRepo, "prepareAttachment").mockResolvedValue({ upload_token: "tok1", attachment_id: "a1" } as { upload_token: string; attachment_id: string });
 
     const req = createRequest({
       body: {
         task_id: "t1",
-        files: Array(20).fill({ file_name: "photo.jpg", mime_type: "image/jpeg", file_size: 1024 }),
+        files: Array.from({ length: 20 }, (_, i) => ({ file_name: `photo_${i}.jpg`, mime_type: "image/jpeg", file_size: 1024 })),
       },
       user: { user_id: "u1", role: UserRole.USER },
     });

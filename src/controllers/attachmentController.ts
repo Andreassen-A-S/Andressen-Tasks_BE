@@ -5,6 +5,8 @@ import * as attachmentRepo from "../repositories/attachmentRepository";
 import * as storageService from "../services/storageService";
 import { getParamId, requireUserId } from "../helper/helpers";
 
+const MAX_FILES_PER_REQUEST = 20;
+
 export async function prepareAttachments(req: Request, res: Response) {
   try {
     const userId = requireUserId(req, res);
@@ -26,8 +28,8 @@ export async function prepareAttachments(req: Request, res: Response) {
       return res.status(400).json({ success: false, error: "task_id and files are required" });
     }
 
-    if (files.length > 20) {
-      return res.status(400).json({ success: false, error: "Maximum 20 files per request" });
+    if (files.length > MAX_FILES_PER_REQUEST) {
+      return res.status(400).json({ success: false, error: `Maximum ${MAX_FILES_PER_REQUEST} files per request` });
     }
 
     for (const f of files) {
