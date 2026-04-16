@@ -1,5 +1,11 @@
 import type { Request, Response } from "express";
-import { TaskEventType } from "../generated/prisma/client";
+import {
+  TaskEventType,
+  TaskPriority,
+  TaskStatus,
+} from "../generated/prisma/client";
+
+
 import * as taskEventRepo from "../repositories/taskEventRepository";
 import * as taskRepo from "../repositories/taskRepository";
 import * as userRepo from "../repositories/userRepository";
@@ -108,11 +114,21 @@ export async function createTask(req: Request, res: Response) {
       });
     }
 
-    if (!body.project_id || typeof body.project_id !== "string" || body.project_id.trim() === "") {
-      return res.status(400).json({ success: false, error: "project_id is required" });
+    if (
+      !body.project_id ||
+      typeof body.project_id !== "string" ||
+      body.project_id.trim() === ""
+    ) {
+      return res
+        .status(400)
+        .json({ success: false, error: "project_id is required" });
     }
 
-    const input: CreateTaskInput = { ...body, created_by: userId, project_id: body.project_id.trim() };
+    const input: CreateTaskInput = {
+      ...body,
+      created_by: userId,
+      project_id: body.project_id.trim(),
+    };
     const task = await taskRepo.createTaskWithAssignments(input);
 
     if (!task) {
@@ -177,7 +193,9 @@ export async function updateTask(req: Request, res: Response) {
 
   const id = getParamId(req);
   if (!id) {
-    return res.status(400).json({ success: false, error: "Missing or invalid id" });
+    return res
+      .status(400)
+      .json({ success: false, error: "Missing or invalid id" });
   }
 
   try {
@@ -191,13 +209,17 @@ export async function updateTask(req: Request, res: Response) {
 
     const updatedTask = await taskRepo.updateTask(id, updateData, userId);
     if (!updatedTask) {
-      return res.status(404).json({ success: false, error: "Task not found or update failed" });
+      return res
+        .status(404)
+        .json({ success: false, error: "Task not found or update failed" });
     }
 
     // Diff and emit assignment events if assignments were part of the update.
     if (updateData.assigned_users !== undefined) {
       const oldUserIds = new Set(oldTask.assigned_users ?? []);
-      const added = updatedTask.assignments.filter((a) => !oldUserIds.has(a.user_id));
+      const added = updatedTask.assignments.filter(
+        (a) => !oldUserIds.has(a.user_id),
+      );
       const removedUserIds = (oldTask.assigned_users ?? []).filter(
         (uid) => !updatedTask.assignments.some((a) => a.user_id === uid),
       );
@@ -209,7 +231,9 @@ export async function updateTask(req: Request, res: Response) {
             actor,
             type: TaskEventType.ASSIGNMENT_CREATED,
             message: "Created assignment",
-            assignment: { connect: { assignment_id: assignment.assignment_id } },
+            assignment: {
+              connect: { assignment_id: assignment.assignment_id },
+            },
             before_json: undefined,
             after_json: assignment,
           }),
@@ -226,7 +250,9 @@ export async function updateTask(req: Request, res: Response) {
         ),
       ]);
 
-      const tokenMap = await userRepo.getPushTokensForUsers(added.map((a) => a.user_id));
+      const tokenMap = await userRepo.getPushTokensForUsers(
+        added.map((a) => a.user_id),
+      );
       for (const [uid, pushToken] of tokenMap) {
         void sendPushNotification(
           pushToken,
@@ -260,15 +286,56 @@ export async function updateTask(req: Request, res: Response) {
       if (updatedTask.status === "DONE") {
         const admins = await userRepo.getAdminPushTokens();
         for (const { user_id, push_token } of admins) {
-          void sendPushNotification(push_token, "Opgave afsluttet", updatedTask.title, {
-            taskId: updatedTask.task_id,
-          }, user_id);
+          void sendPushNotification(
+            push_token,
+            "Opgave afsluttet",
+            updatedTask.title,
+            {
+              taskId: updatedTask.task_id,
+            },
+            user_id,
+          );
         }
       }
     }
 
+    // Notify assignees when priority is raised to HIGH on an active task.
+    // Active = start_date has passed (includes overdue) and not in a terminal status.
+    const priorityChangedToHigh =
+      updateData.priority === TaskPriority.HIGH &&
+      oldTask.priority !== TaskPriority.HIGH;
+    const now = new Date();
+    const taskIsActive =
+      updatedTask.start_date !== null &&
+      updatedTask.start_date <= now &&
+      updatedTask.status !== TaskStatus.DONE &&
+      updatedTask.status !== TaskStatus.REJECTED &&
+      updatedTask.status !== TaskStatus.ARCHIVED;
+
+    if (
+      priorityChangedToHigh &&
+      taskIsActive &&
+      updatedTask.assignments.length > 0
+    ) {
+      const tokenMap = await userRepo.getPushTokensForUsers(
+        updatedTask.assignments.map((a) => a.user_id),
+      );
+      for (const [uid, pushToken] of tokenMap) {
+        void sendPushNotification(
+          pushToken,
+          "Høj prioritet",
+          `${updatedTask.title} – prioritet ændret til høj`,
+          { taskId: updatedTask.task_id },
+          uid,
+        );
+      }
+    }
+
     const { assignments, ...taskData } = updatedTask;
-    return res.json({ success: true, data: { ...taskData, assigned_users: assignments.map((a) => a.user_id) } });
+    return res.json({
+      success: true,
+      data: { ...taskData, assigned_users: assignments.map((a) => a.user_id) },
+    });
   } catch (error) {
     return handleDomainError(error, res, "Failed to update task");
   }
