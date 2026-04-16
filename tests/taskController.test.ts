@@ -414,7 +414,7 @@ describe("taskController.updateTask", () => {
   });
 
   test("notifies assignees when priority changes to HIGH on an active task", async () => {
-    const pastDate = new Date(Date.now() - 86_400_000); // yesterday
+    const pastDate = new Date("2020-06-15T12:00:00Z");
     const oldTask = { task_id: "t1", title: "My Task", priority: TaskPriority.MEDIUM, assigned_users: ["u2"] };
     const updatedTask = {
       task_id: "t1",
@@ -453,7 +453,7 @@ describe("taskController.updateTask", () => {
   });
 
   test("does not notify when priority changes to HIGH but task has not started yet", async () => {
-    const futureDate = new Date(Date.now() + 86_400_000); // tomorrow
+    const futureDate = new Date("2099-01-01T12:00:00Z");
     const oldTask = { task_id: "t1", priority: TaskPriority.LOW, assigned_users: ["u2"] };
     const updatedTask = {
       task_id: "t1",
@@ -481,7 +481,7 @@ describe("taskController.updateTask", () => {
   });
 
   test("does not notify when priority changes to HIGH but task is in a terminal status", async () => {
-    const pastDate = new Date(Date.now() - 86_400_000);
+    const pastDate = new Date("2020-06-15T12:00:00Z");
     const oldTask = { task_id: "t1", priority: TaskPriority.LOW, assigned_users: ["u2"] };
     const updatedTask = {
       task_id: "t1",
@@ -510,7 +510,7 @@ describe("taskController.updateTask", () => {
   });
 
   test("does not notify when priority was already HIGH", async () => {
-    const pastDate = new Date(Date.now() - 86_400_000);
+    const pastDate = new Date("2020-06-15T12:00:00Z");
     const oldTask = { task_id: "t1", priority: TaskPriority.HIGH, assigned_users: ["u2"] };
     const updatedTask = {
       task_id: "t1",
