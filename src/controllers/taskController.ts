@@ -18,6 +18,7 @@ import {
 } from "../repositories/taskRepository";
 import type { CreateTaskInput, UpdateTaskInput } from "../types/task";
 import { getParamId, requireUserId } from "../helper/helpers";
+import { appDateKey } from "../utils/dateUtils";
 
 /**
  * These routes are protected by auth middleware.
@@ -283,7 +284,7 @@ export async function updateTask(req: Request, res: Response) {
         after_json: { status: updatedTask.status },
       });
 
-      if (updatedTask.status === "DONE") {
+      if (updatedTask.status === TaskStatus.DONE) {
         const admins = await userRepo.getAdminPushTokens();
         for (const { user_id, push_token } of admins) {
           void sendPushNotification(
@@ -304,10 +305,9 @@ export async function updateTask(req: Request, res: Response) {
     const priorityChangedToHigh =
       updateData.priority === TaskPriority.HIGH &&
       oldTask.priority !== TaskPriority.HIGH;
-    const now = new Date();
     const taskIsActive =
       updatedTask.start_date !== null &&
-      updatedTask.start_date <= now &&
+      appDateKey(updatedTask.start_date) <= appDateKey() &&
       updatedTask.status !== TaskStatus.DONE &&
       updatedTask.status !== TaskStatus.REJECTED &&
       updatedTask.status !== TaskStatus.ARCHIVED;
@@ -323,7 +323,7 @@ export async function updateTask(req: Request, res: Response) {
       for (const [uid, pushToken] of tokenMap) {
         void sendPushNotification(
           pushToken,
-          "Høj prioritet",
+          "Prioritet ændret",
           `${updatedTask.title} – prioritet ændret til høj`,
           { taskId: updatedTask.task_id },
           uid,

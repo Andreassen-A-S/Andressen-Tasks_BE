@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { Request, Response } from "express";
 import {
   TaskEventType,
+  TaskPriority,
   TaskStatus,
   TaskUnit,
 } from "../src/generated/prisma/client";
@@ -409,6 +410,130 @@ describe("taskController.updateTask", () => {
     );
 
     expect(adminSpy).not.toHaveBeenCalled();
+    expect(sendPushNotificationMock).not.toHaveBeenCalled();
+  });
+
+  test("notifies assignees when priority changes to HIGH on an active task", async () => {
+    const pastDate = new Date(Date.now() - 86_400_000); // yesterday
+    const oldTask = { task_id: "t1", title: "My Task", priority: TaskPriority.MEDIUM, assigned_users: ["u2"] };
+    const updatedTask = {
+      task_id: "t1",
+      title: "My Task",
+      priority: TaskPriority.HIGH,
+      status: TaskStatus.IN_PROGRESS,
+      start_date: pastDate,
+      assignments: [{ assignment_id: "a1", user_id: "u2" }],
+      project: { name: "P1", color: null },
+    };
+    spyOn(taskRepo, "getTaskById").mockResolvedValue(oldTask as never);
+    spyOn(taskRepo, "updateTask").mockResolvedValue(updatedTask as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    spyOn(userRepo, "getPushTokensForUsers").mockResolvedValue(
+      new Map([["u2", "token-u2"]]),
+    );
+    sendPushNotificationMock.mockResolvedValue(undefined);
+
+    await taskController.updateTask(
+      createRequest({
+        user: { user_id: "u1" },
+        params: { id: "t1" } as Request["params"],
+        body: { priority: TaskPriority.HIGH },
+      }),
+      createMockResponse(),
+    );
+
+    expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
+    expect(sendPushNotificationMock).toHaveBeenCalledWith(
+      "token-u2",
+      "Prioritet ændret",
+      "My Task – prioritet ændret til høj",
+      { taskId: "t1" },
+      "u2",
+    );
+  });
+
+  test("does not notify when priority changes to HIGH but task has not started yet", async () => {
+    const futureDate = new Date(Date.now() + 86_400_000); // tomorrow
+    const oldTask = { task_id: "t1", priority: TaskPriority.LOW, assigned_users: ["u2"] };
+    const updatedTask = {
+      task_id: "t1",
+      title: "My Task",
+      priority: TaskPriority.HIGH,
+      status: TaskStatus.PENDING,
+      start_date: futureDate,
+      assignments: [{ assignment_id: "a1", user_id: "u2" }],
+      project: { name: "P1", color: null },
+    };
+    spyOn(taskRepo, "getTaskById").mockResolvedValue(oldTask as never);
+    spyOn(taskRepo, "updateTask").mockResolvedValue(updatedTask as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+
+    await taskController.updateTask(
+      createRequest({
+        user: { user_id: "u1" },
+        params: { id: "t1" } as Request["params"],
+        body: { priority: TaskPriority.HIGH },
+      }),
+      createMockResponse(),
+    );
+
+    expect(sendPushNotificationMock).not.toHaveBeenCalled();
+  });
+
+  test("does not notify when priority changes to HIGH but task is in a terminal status", async () => {
+    const pastDate = new Date(Date.now() - 86_400_000);
+    const oldTask = { task_id: "t1", priority: TaskPriority.LOW, assigned_users: ["u2"] };
+    const updatedTask = {
+      task_id: "t1",
+      title: "My Task",
+      priority: TaskPriority.HIGH,
+      status: TaskStatus.DONE,
+      start_date: pastDate,
+      assignments: [{ assignment_id: "a1", user_id: "u2" }],
+      project: { name: "P1", color: null },
+    };
+    spyOn(taskRepo, "getTaskById").mockResolvedValue(oldTask as never);
+    spyOn(taskRepo, "updateTask").mockResolvedValue(updatedTask as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
+
+    await taskController.updateTask(
+      createRequest({
+        user: { user_id: "u1" },
+        params: { id: "t1" } as Request["params"],
+        body: { priority: TaskPriority.HIGH },
+      }),
+      createMockResponse(),
+    );
+
+    expect(sendPushNotificationMock).not.toHaveBeenCalled();
+  });
+
+  test("does not notify when priority was already HIGH", async () => {
+    const pastDate = new Date(Date.now() - 86_400_000);
+    const oldTask = { task_id: "t1", priority: TaskPriority.HIGH, assigned_users: ["u2"] };
+    const updatedTask = {
+      task_id: "t1",
+      title: "My Task",
+      priority: TaskPriority.HIGH,
+      status: TaskStatus.IN_PROGRESS,
+      start_date: pastDate,
+      assignments: [{ assignment_id: "a1", user_id: "u2" }],
+      project: { name: "P1", color: null },
+    };
+    spyOn(taskRepo, "getTaskById").mockResolvedValue(oldTask as never);
+    spyOn(taskRepo, "updateTask").mockResolvedValue(updatedTask as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+
+    await taskController.updateTask(
+      createRequest({
+        user: { user_id: "u1" },
+        params: { id: "t1" } as Request["params"],
+        body: { priority: TaskPriority.HIGH },
+      }),
+      createMockResponse(),
+    );
+
     expect(sendPushNotificationMock).not.toHaveBeenCalled();
   });
 
