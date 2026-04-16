@@ -110,11 +110,37 @@ describe("attachmentController.prepareAttachments", () => {
     expect(res.body).toEqual({ success: false, error: "task_id and files are required" });
   });
 
-  test("returns 400 when more than 5 files", async () => {
+  test("accepts exactly 20 files", async () => {
+    findUniqueMock.mockResolvedValueOnce({ task_id: "t1", created_by: "u1", assignments: [] });
+    spyOn(storageService, "generateSignedUploadUrl").mockResolvedValue({
+      uploadUrl: "https://storage.googleapis.com/signed",
+      gcsPath: "tasks/t1/uuid.jpg",
+      url: "https://storage.googleapis.com/bucket/tasks/t1/uuid",
+    });
+    spyOn(attachmentRepo, "prepareAttachment").mockResolvedValue({ upload_token: "tok1", attachment_id: "a1" } as { upload_token: string; attachment_id: string });
+
     const req = createRequest({
       body: {
         task_id: "t1",
-        files: Array(6).fill({ file_name: "photo.jpg", mime_type: "image/jpeg", file_size: 1024 }),
+        files: Array.from({ length: 20 }, (_, i) => ({ file_name: `photo_${i}.jpg`, mime_type: "image/jpeg", file_size: 1024 })),
+      },
+      user: { user_id: "u1", role: UserRole.USER },
+    });
+    const res = createMockResponse();
+
+    await attachmentController.prepareAttachments(req, res);
+
+    expect(res.statusCode).toBeUndefined();
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toHaveLength(20);
+    expect(res.body.data[0]).toMatchObject({ upload_token: "tok1" });
+  });
+
+  test("returns 400 when more than 20 files", async () => {
+    const req = createRequest({
+      body: {
+        task_id: "t1",
+        files: Array(21).fill({ file_name: "photo.jpg", mime_type: "image/jpeg", file_size: 1024 }),
       },
       user: { user_id: "u1", role: UserRole.USER },
     });
@@ -123,7 +149,7 @@ describe("attachmentController.prepareAttachments", () => {
     await attachmentController.prepareAttachments(req, res);
 
     expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Maximum 5 files per request" });
+    expect(res.body).toEqual({ success: false, error: "Maximum 20 files per request" });
   });
 
   test("returns 400 when fileSize is NaN", async () => {
