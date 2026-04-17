@@ -6,6 +6,7 @@ import { sendPushNotification } from "./notificationService";
 import { deleteFile } from "./storageService";
 import { APP_TIMEZONE } from "../utils/dateUtils";
 import { TaskEventType, TaskStatus } from "../generated/prisma/client";
+import { TaskArchivedError } from "../repositories/taskRepository";
 
 const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -103,6 +104,7 @@ export function initScheduler(): void {
               }
             }
           } catch (err) {
+            if (err instanceof TaskArchivedError) continue;
             console.error(`Failed to archive task ${task.task_id}:`, err);
           }
         }

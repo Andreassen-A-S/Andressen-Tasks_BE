@@ -28,6 +28,13 @@ export class TaskAlreadyDoneError extends Error {
   }
 }
 
+export class TaskArchivedError extends Error {
+  constructor() {
+    super("Task is archived and cannot be modified.");
+    this.name = "TaskArchivedError";
+  }
+}
+
 export class AssignmentNotFoundError extends Error {
   constructor() {
     super("Assignment not found for this task and user.");
@@ -146,6 +153,10 @@ export async function updateTask(
     });
     if (!existingTask) throw new TaskNotFoundError(id);
 
+    if (existingTask.status === TaskStatus.ARCHIVED) {
+      throw new TaskArchivedError();
+    }
+
     if (data.status === TaskStatus.DONE && existingTask.status === TaskStatus.DONE) {
       throw new TaskAlreadyDoneError();
     }
@@ -170,7 +181,8 @@ export async function updateTask(
 
     if (assigned_users !== undefined) {
       if (finalStatus === TaskStatus.DONE || preserveCompletion) {
-        // Preserve existing completion timestamps; stamp new assignees for DONE transitions.
+        // Preserve existing completion timestamps for DONE and DONE→ARCHIVED transitions.
+        // New assignees added during DONE→ARCHIVED get null (they weren't assigned at completion time).
         const existingAssignments = await tx.taskAssignment.findMany({
           where: { task_id: id },
           select: { user_id: true, completed_at: true },
