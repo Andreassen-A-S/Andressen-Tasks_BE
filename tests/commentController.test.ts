@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { Request, Response } from "express";
 import { Task, UserRole } from "../src/generated/prisma/client";
 import * as commentRepo from "../src/repositories/commentRepository";
+import * as attachmentRepo from "../src/repositories/attachmentRepository";
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
 import * as userRepo from "../src/repositories/userRepository";
 import * as storageService from "../src/services/storageService";
@@ -467,5 +468,290 @@ describe("commentController.updateComment", () => {
       success: true,
       data: { comment_id: "c1", user_id: "u1", task_id: "t1", message: "new" },
     });
+  });
+
+  test("returns 403 when non-owner tries to update", async () => {
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "owner",
+      task_id: "t1",
+      message: "old",
+    } as never);
+
+    const req = createRequest({
+      params: { commentId: "c1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { message: "new" },
+    });
+    const res = createMockResponse();
+
+    await commentController.updateComment(req, res);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toEqual({ success: false, error: "Not authorized to edit this comment" });
+  });
+
+  test("returns 403 when admin tries to update another user's comment", async () => {
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "owner",
+      task_id: "t1",
+      message: "old",
+    } as never);
+
+    const req = createRequest({
+      params: { commentId: "c1" } as Request["params"],
+      user: { user_id: "admin1", role: UserRole.ADMIN },
+      body: { message: "new" },
+    });
+    const res = createMockResponse();
+
+    await commentController.updateComment(req, res);
+
+    expect(res.statusCode).toBe(403);
+  });
+
+  test("returns 400 when upload_tokens is not an array", async () => {
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "u1",
+      task_id: "t1",
+      message: "old",
+    } as never);
+
+    const req = createRequest({
+      params: { commentId: "c1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { message: "new", upload_tokens: "not-an-array" },
+    });
+    const res = createMockResponse();
+
+    await commentController.updateComment(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "Invalid upload tokens" });
+  });
+
+  test("returns 400 when upload_tokens contains non-string", async () => {
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "u1",
+      task_id: "t1",
+      message: "old",
+    } as never);
+
+    const req = createRequest({
+      params: { commentId: "c1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { message: "new", upload_tokens: [123] },
+    });
+    const res = createMockResponse();
+
+    await commentController.updateComment(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "Invalid upload tokens" });
+  });
+
+  test("returns 400 when upload_tokens contains duplicates", async () => {
+    const req = createRequest({
+      params: { commentId: "c1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { message: "new", upload_tokens: ["tok1", "tok1"] },
+    });
+    const res = createMockResponse();
+
+    await commentController.updateComment(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "Duplicate upload tokens" });
+  });
+
+  test("returns 400 when updateComment throws invalid token error", async () => {
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "u1",
+      task_id: "t1",
+      message: "old",
+    } as never);
+    spyOn(commentRepo, "updateComment").mockRejectedValue(
+      new Error("One or more upload tokens are invalid or expired"),
+    );
+
+    const req = createRequest({
+      params: { commentId: "c1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { message: "new", upload_tokens: ["tok-expired"] },
+    });
+    const res = createMockResponse();
+
+    await commentController.updateComment(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "One or more upload tokens are invalid or expired" });
+  });
+
+  test("forwards upload_tokens to repository", async () => {
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "u1",
+      task_id: "t1",
+      message: "old",
+    } as never);
+    const updateSpy = spyOn(commentRepo, "updateComment").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "u1",
+      task_id: "t1",
+      message: "new",
+    } as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+
+    const req = createRequest({
+      params: { commentId: "c1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { message: "new", upload_tokens: ["tok1", "tok2"] },
+    });
+    const res = createMockResponse();
+
+    await commentController.updateComment(req, res);
+
+    expect(updateSpy).toHaveBeenCalledWith("c1", "new", ["tok1", "tok2"], undefined);
+  });
+
+  test("returns 400 when remove_attachment_ids is not an array", async () => {
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "u1",
+      task_id: "t1",
+      message: "old",
+    } as never);
+
+    const req = createRequest({
+      params: { commentId: "c1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { message: "new", remove_attachment_ids: "not-an-array" },
+    });
+    const res = createMockResponse();
+
+    await commentController.updateComment(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "Invalid remove_attachment_ids" });
+  });
+
+  test("returns 400 when remove_attachment_ids contains non-string", async () => {
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "u1",
+      task_id: "t1",
+      message: "old",
+    } as never);
+
+    const req = createRequest({
+      params: { commentId: "c1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { message: "new", remove_attachment_ids: [123] },
+    });
+    const res = createMockResponse();
+
+    await commentController.updateComment(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "Invalid remove_attachment_ids" });
+  });
+
+  test("returns 400 when no changes are provided", async () => {
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "u1",
+      task_id: "t1",
+      message: "old",
+    } as never);
+
+    const req = createRequest({
+      params: { commentId: "c1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: {},
+    });
+    const res = createMockResponse();
+
+    await commentController.updateComment(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "No changes provided" });
+  });
+
+  test("updates without message when only remove_attachment_ids provided", async () => {
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "u1",
+      task_id: "t1",
+      message: "existing",
+    } as never);
+    const updateSpy = spyOn(commentRepo, "updateComment").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "u1",
+      task_id: "t1",
+      message: "existing",
+    } as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    spyOn(attachmentRepo, "getAttachmentsByCommentId").mockResolvedValue([
+      { attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg" },
+    ] as never);
+    spyOn(storageService, "deleteFile").mockResolvedValue(undefined);
+
+    const req = createRequest({
+      params: { commentId: "c1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { remove_attachment_ids: ["a1"] },
+    });
+    const res = createMockResponse();
+
+    await commentController.updateComment(req, res);
+
+    expect(updateSpy).toHaveBeenCalledWith("c1", undefined, undefined, ["a1"]);
+    expect(res.body).toMatchObject({ success: true });
+  });
+
+  test("fetches attachments, runs DB update, then deletes GCS files when removing attachments", async () => {
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "u1",
+      task_id: "t1",
+      message: "old",
+    } as never);
+    const updateSpy = spyOn(commentRepo, "updateComment").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "u1",
+      task_id: "t1",
+      message: "new",
+    } as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    const getAttachmentsSpy = spyOn(attachmentRepo, "getAttachmentsByCommentId").mockResolvedValue([
+      { attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg" },
+    ] as never);
+    const deleteFileSpy = spyOn(storageService, "deleteFile").mockResolvedValue(undefined);
+
+    const callOrder: string[] = [];
+    updateSpy.mockImplementation(async (...args) => {
+      callOrder.push("db");
+      return { comment_id: "c1", user_id: "u1", task_id: "t1", message: "new" } as never;
+    });
+    deleteFileSpy.mockImplementation(async () => {
+      callOrder.push("gcs");
+    });
+
+    const req = createRequest({
+      params: { commentId: "c1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { message: "new", remove_attachment_ids: ["a1"] },
+    });
+    const res = createMockResponse();
+
+    await commentController.updateComment(req, res);
+
+    expect(getAttachmentsSpy).toHaveBeenCalledWith("c1");
+    expect(deleteFileSpy).toHaveBeenCalledWith("tasks/t1/uuid.jpg");
+    expect(callOrder).toEqual(["db", "gcs"]);
   });
 });
