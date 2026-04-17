@@ -11,4 +11,8 @@ VALUES (
   'SYSTEM',
   NOW(),
   NOW()
-) ON DUPLICATE KEY UPDATE user_id = user_id;
+) ON DUPLICATE KEY UPDATE
+  name = VALUES(name),
+  role = VALUES(role),
+  password = VALUES(password),
+  updated_at = VALUES(updated_at);

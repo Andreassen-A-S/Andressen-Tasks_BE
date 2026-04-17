@@ -76,7 +76,7 @@ export function initScheduler(): void {
           const actor = { connect: { user_id: SYSTEM_USER_ID } } as const;
           const taskConnect = { connect: { task_id: task.task_id } } as const;
 
-          await Promise.all([
+          const eventResults = await Promise.allSettled([
             taskEventRepo.createTaskEvent({
               task: taskConnect,
               actor,
@@ -94,6 +94,11 @@ export function initScheduler(): void {
               after_json: { status: TaskStatus.ARCHIVED },
             }),
           ]);
+          for (const result of eventResults) {
+            if (result.status === "rejected") {
+              console.error(`Failed to write task event for ${task.task_id}:`, result.reason);
+            }
+          }
         }
         if (staleTasks.length > 0) {
           console.log(`Auto-archived ${staleTasks.length} task(s)`);

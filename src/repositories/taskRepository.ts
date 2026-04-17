@@ -169,8 +169,8 @@ export async function updateTask(
     await tx.task.update({ where: { task_id: id }, data: updateData });
 
     if (assigned_users !== undefined) {
-      if (finalStatus === TaskStatus.DONE) {
-        // Preserve existing completion timestamps; stamp new assignees now.
+      if (finalStatus === TaskStatus.DONE || preserveCompletion) {
+        // Preserve existing completion timestamps; stamp new assignees for DONE transitions.
         const existingAssignments = await tx.taskAssignment.findMany({
           where: { task_id: id },
           select: { user_id: true, completed_at: true },
@@ -182,7 +182,7 @@ export async function updateTask(
             data: assigned_users.map((assigneeId) => ({
               task_id: id,
               user_id: assigneeId,
-              completed_at: existingMap.get(assigneeId) ?? completionTimestamp,
+              completed_at: existingMap.get(assigneeId) ?? (finalStatus === TaskStatus.DONE ? completionTimestamp : null),
             })),
           });
         }
