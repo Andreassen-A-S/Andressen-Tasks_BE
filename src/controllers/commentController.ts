@@ -282,6 +282,10 @@ export async function updateComment(req: Request, res: Response) {
       return res.status(400).json({ success: false, error: "Invalid upload tokens" });
     }
 
+    if (Array.isArray(upload_tokens) && new Set(upload_tokens).size !== upload_tokens.length) {
+      return res.status(400).json({ success: false, error: "Duplicate upload tokens" });
+    }
+
     if (remove_attachment_ids !== undefined && !Array.isArray(remove_attachment_ids)) {
       return res.status(400).json({ success: false, error: "Invalid remove_attachment_ids" });
     }
@@ -292,7 +296,8 @@ export async function updateComment(req: Request, res: Response) {
 
     const hasTokens = Array.isArray(upload_tokens) && upload_tokens.length > 0;
     const hasRemovals = Array.isArray(remove_attachment_ids) && remove_attachment_ids.length > 0;
-    if (trimmedMessage === undefined && !hasTokens && !hasRemovals) {
+    const hasMessage = trimmedMessage !== undefined && trimmedMessage.length > 0;
+    if (!hasMessage && !hasTokens && !hasRemovals) {
       return res.status(400).json({ success: false, error: "No changes provided" });
     }
 
@@ -319,12 +324,20 @@ export async function updateComment(req: Request, res: Response) {
         .map((a) => a.gcs_path);
     }
 
-    const updatedComment = await commentRepo.updateComment(
-      commentId,
-      trimmedMessage,
-      Array.isArray(upload_tokens) && upload_tokens.length > 0 ? upload_tokens : undefined,
-      hasRemovals ? remove_attachment_ids : undefined,
-    );
+    let updatedComment;
+    try {
+      updatedComment = await commentRepo.updateComment(
+        commentId,
+        hasMessage ? trimmedMessage : undefined,
+        hasTokens ? upload_tokens : undefined,
+        hasRemovals ? remove_attachment_ids : undefined,
+      );
+    } catch (err) {
+      if (err instanceof Error && err.message === "One or more upload tokens are invalid or expired") {
+        return res.status(400).json({ success: false, error: err.message });
+      }
+      throw err;
+    }
 
     // Delete GCS files only after the DB transaction succeeds
     if (gcsPathsToDelete.length > 0) {

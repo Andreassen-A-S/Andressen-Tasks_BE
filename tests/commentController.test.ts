@@ -553,6 +553,44 @@ describe("commentController.updateComment", () => {
     expect(res.body).toEqual({ success: false, error: "Invalid upload tokens" });
   });
 
+  test("returns 400 when upload_tokens contains duplicates", async () => {
+    const req = createRequest({
+      params: { commentId: "c1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { message: "new", upload_tokens: ["tok1", "tok1"] },
+    });
+    const res = createMockResponse();
+
+    await commentController.updateComment(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "Duplicate upload tokens" });
+  });
+
+  test("returns 400 when updateComment throws invalid token error", async () => {
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "u1",
+      task_id: "t1",
+      message: "old",
+    } as never);
+    spyOn(commentRepo, "updateComment").mockRejectedValue(
+      new Error("One or more upload tokens are invalid or expired"),
+    );
+
+    const req = createRequest({
+      params: { commentId: "c1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { message: "new", upload_tokens: ["tok-expired"] },
+    });
+    const res = createMockResponse();
+
+    await commentController.updateComment(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "One or more upload tokens are invalid or expired" });
+  });
+
   test("forwards upload_tokens to repository", async () => {
     spyOn(commentRepo, "getCommentById").mockResolvedValue({
       comment_id: "c1",
