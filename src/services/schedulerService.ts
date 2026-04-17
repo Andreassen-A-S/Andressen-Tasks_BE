@@ -65,43 +65,49 @@ export function initScheduler(): void {
     async () => {
       try {
         const staleTasks = await taskRepo.getStaleDoneTasks(7);
+        let archivedCount = 0;
         for (const task of staleTasks) {
-          const updated = await taskRepo.updateTask(
-            task.task_id,
-            { status: TaskStatus.ARCHIVED },
-            SYSTEM_USER_ID,
-          );
-          if (!updated) continue;
+          try {
+            const updated = await taskRepo.updateTask(
+              task.task_id,
+              { status: TaskStatus.ARCHIVED },
+              SYSTEM_USER_ID,
+            );
+            if (!updated) continue;
 
-          const actor = { connect: { user_id: SYSTEM_USER_ID } } as const;
-          const taskConnect = { connect: { task_id: task.task_id } } as const;
+            archivedCount++;
+            const actor = { connect: { user_id: SYSTEM_USER_ID } } as const;
+            const taskConnect = { connect: { task_id: task.task_id } } as const;
 
-          const eventResults = await Promise.allSettled([
-            taskEventRepo.createTaskEvent({
-              task: taskConnect,
-              actor,
-              type: TaskEventType.TASK_UPDATED,
-              message: "Task auto-archived by scheduler",
-              before_json: task,
-              after_json: updated,
-            }),
-            taskEventRepo.createTaskEvent({
-              task: taskConnect,
-              actor,
-              type: TaskEventType.TASK_STATUS_CHANGED,
-              message: `Status changed from ${TaskStatus.DONE} to ${TaskStatus.ARCHIVED}`,
-              before_json: { status: TaskStatus.DONE },
-              after_json: { status: TaskStatus.ARCHIVED },
-            }),
-          ]);
-          for (const result of eventResults) {
-            if (result.status === "rejected") {
-              console.error(`Failed to write task event for ${task.task_id}:`, result.reason);
+            const eventResults = await Promise.allSettled([
+              taskEventRepo.createTaskEvent({
+                task: taskConnect,
+                actor,
+                type: TaskEventType.TASK_UPDATED,
+                message: "Task auto-archived by scheduler",
+                before_json: task,
+                after_json: updated,
+              }),
+              taskEventRepo.createTaskEvent({
+                task: taskConnect,
+                actor,
+                type: TaskEventType.TASK_STATUS_CHANGED,
+                message: `Status changed from ${TaskStatus.DONE} to ${TaskStatus.ARCHIVED}`,
+                before_json: { status: TaskStatus.DONE },
+                after_json: { status: TaskStatus.ARCHIVED },
+              }),
+            ]);
+            for (const result of eventResults) {
+              if (result.status === "rejected") {
+                console.error(`Failed to write task event for ${task.task_id}:`, result.reason);
+              }
             }
+          } catch (err) {
+            console.error(`Failed to archive task ${task.task_id}:`, err);
           }
         }
-        if (staleTasks.length > 0) {
-          console.log(`Auto-archived ${staleTasks.length} task(s)`);
+        if (archivedCount > 0) {
+          console.log(`Auto-archived ${archivedCount} task(s)`);
         }
       } catch (err) {
         console.error("Auto-archive task error:", err);
