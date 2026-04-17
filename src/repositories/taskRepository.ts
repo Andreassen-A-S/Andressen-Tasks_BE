@@ -396,3 +396,17 @@ export async function upsertProgressLog(
     return { progressLog, updatedTask };
   });
 }
+
+export async function getStaleDoneTasks(olderThanDays: number) {
+  const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
+  return prisma.task.findMany({
+    where: {
+      status: TaskStatus.DONE,
+      completed_at: { lt: cutoff },
+    },
+    include: {
+      assignments: { select: { assignment_id: true, user_id: true } },
+      project: { select: { name: true, color: true } },
+    },
+  });
+}

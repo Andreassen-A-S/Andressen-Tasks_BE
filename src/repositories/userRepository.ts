@@ -1,5 +1,5 @@
 import { prisma } from "../db/prisma";
-import { Prisma } from "../generated/prisma/client";
+import { Prisma, UserRole } from "../generated/prisma/client";
 import type { User } from "../generated/prisma/client";
 import { hashPassword } from "../helper/helpers";
 import {
@@ -11,14 +11,15 @@ import {
 
 export async function getAllUsers(): Promise<SafeUser[]> {
   return prisma.user.findMany({
+    where: { role: { not: UserRole.SYSTEM } },
     select: userSelect,
     orderBy: { created_at: "desc" },
   });
 }
 
 export async function getUserById(id: string): Promise<SafeUser | null> {
-  return prisma.user.findUnique({
-    where: { user_id: id },
+  return prisma.user.findFirst({
+    where: { user_id: id, role: { not: UserRole.SYSTEM } },
     select: userSelect,
   });
 }
@@ -43,7 +44,7 @@ export async function updateUser(
     data.password = await hashPassword(data.password);
   }
   return prisma.user.update({
-    where: { user_id: id },
+    where: { user_id: id, role: { not: UserRole.SYSTEM } },
     data,
     select: userSelect,
   });
@@ -51,7 +52,7 @@ export async function updateUser(
 
 export async function deleteUser(id: string): Promise<void> {
   await prisma.user.delete({
-    where: { user_id: id },
+    where: { user_id: id, role: { not: UserRole.SYSTEM } },
   });
 }
 
