@@ -261,9 +261,9 @@ export async function updateComment(req: Request, res: Response) {
     const userId = requireUserId(req, res);
     if (!userId) return;
 
-    const trimmedMessage = message?.trim() ?? "";
+    const trimmedMessage = message !== undefined ? message.trim() : undefined;
 
-    if (trimmedMessage.length > 2000) {
+    if (trimmedMessage !== undefined && trimmedMessage.length > 2000) {
       return res.status(400).json({
         success: false,
         error: "Message too long (max 2000 characters)",
@@ -276,6 +276,14 @@ export async function updateComment(req: Request, res: Response) {
 
     if (Array.isArray(upload_tokens) && upload_tokens.some((t) => typeof t !== "string")) {
       return res.status(400).json({ success: false, error: "Invalid upload tokens" });
+    }
+
+    if (remove_attachment_ids !== undefined && !Array.isArray(remove_attachment_ids)) {
+      return res.status(400).json({ success: false, error: "Invalid remove_attachment_ids" });
+    }
+
+    if (Array.isArray(remove_attachment_ids) && remove_attachment_ids.some((id) => typeof id !== "string")) {
+      return res.status(400).json({ success: false, error: "Invalid remove_attachment_ids" });
     }
 
     const comment = await commentRepo.getCommentById(commentId);

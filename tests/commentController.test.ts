@@ -580,6 +580,48 @@ describe("commentController.updateComment", () => {
     expect(updateSpy).toHaveBeenCalledWith("c1", "new", ["tok1", "tok2"], undefined);
   });
 
+  test("returns 400 when remove_attachment_ids is not an array", async () => {
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "u1",
+      task_id: "t1",
+      message: "old",
+    } as never);
+
+    const req = createRequest({
+      params: { commentId: "c1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { message: "new", remove_attachment_ids: "not-an-array" },
+    });
+    const res = createMockResponse();
+
+    await commentController.updateComment(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "Invalid remove_attachment_ids" });
+  });
+
+  test("returns 400 when remove_attachment_ids contains non-string", async () => {
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "u1",
+      task_id: "t1",
+      message: "old",
+    } as never);
+
+    const req = createRequest({
+      params: { commentId: "c1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { message: "new", remove_attachment_ids: [123] },
+    });
+    const res = createMockResponse();
+
+    await commentController.updateComment(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "Invalid remove_attachment_ids" });
+  });
+
   test("fetches attachments, runs DB update, then deletes GCS files when removing attachments", async () => {
     spyOn(commentRepo, "getCommentById").mockResolvedValue({
       comment_id: "c1",
