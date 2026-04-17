@@ -1,5 +1,5 @@
 import { prisma } from "../db/prisma";
-import { Prisma } from "../generated/prisma/client";
+import { Prisma, UserRole } from "../generated/prisma/client";
 import type { User } from "../generated/prisma/client";
 import { hashPassword } from "../helper/helpers";
 import {
@@ -11,14 +11,15 @@ import {
 
 export async function getAllUsers(): Promise<SafeUser[]> {
   return prisma.user.findMany({
+    where: { role: { not: UserRole.SYSTEM } },
     select: userSelect,
     orderBy: { created_at: "desc" },
   });
 }
 
 export async function getUserById(id: string): Promise<SafeUser | null> {
-  return prisma.user.findUnique({
-    where: { user_id: id },
+  return prisma.user.findFirst({
+    where: { user_id: id, role: { not: UserRole.SYSTEM } },
     select: userSelect,
   });
 }
@@ -39,6 +40,13 @@ export async function updateUser(
   id: string,
   data: UpdateUserInput,
 ): Promise<SafeUser> {
+  const existing = await prisma.user.findUnique({
+    where: { user_id: id },
+    select: { role: true },
+  });
+  if (!existing || existing.role === UserRole.SYSTEM) {
+    throw new Error("User not found");
+  }
   if (data.password) {
     data.password = await hashPassword(data.password);
   }
@@ -50,9 +58,12 @@ export async function updateUser(
 }
 
 export async function deleteUser(id: string): Promise<void> {
-  await prisma.user.delete({
-    where: { user_id: id },
+  const result = await prisma.user.deleteMany({
+    where: { user_id: id, role: { not: UserRole.SYSTEM } },
   });
+  if (result.count === 0) {
+    throw new Error("User not found");
+  }
 }
 
 export async function updatePushToken(

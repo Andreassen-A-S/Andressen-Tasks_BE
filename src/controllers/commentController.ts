@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { TaskEventType, UserRole } from "../generated/prisma/client";
+import { TaskEventType, TaskStatus, UserRole } from "../generated/prisma/client";
 import * as commentRepo from "../repositories/commentRepository";
 import * as attachmentRepo from "../repositories/attachmentRepository";
 import * as storageService from "../services/storageService";
@@ -112,6 +112,10 @@ export async function createComment(req: Request, res: Response) {
       return res.status(404).json({ success: false, error: "Task not found" });
     }
 
+    if (task.status === TaskStatus.ARCHIVED) {
+      return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
+    }
+
     // Check if user is creator, assigned to task, or admin
     const isCreator = task.created_by === userId;
     const isAssigned = task.assignments.some((a) => a.user_id === userId);
@@ -207,6 +211,14 @@ export async function deleteComment(req: Request, res: Response) {
       return res
         .status(404)
         .json({ success: false, error: "Comment not found" });
+    }
+
+    const deleteCommentTask = await prisma.task.findUnique({
+      where: { task_id: comment.task_id },
+      select: { status: true },
+    });
+    if (deleteCommentTask?.status === TaskStatus.ARCHIVED) {
+      return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
     }
 
     // Check if user owns the comment or is admin
@@ -307,6 +319,14 @@ export async function updateComment(req: Request, res: Response) {
       return res
         .status(404)
         .json({ success: false, error: "Comment not found" });
+    }
+
+    const commentTask = await prisma.task.findUnique({
+      where: { task_id: comment.task_id },
+      select: { status: true },
+    });
+    if (commentTask?.status === TaskStatus.ARCHIVED) {
+      return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
     }
 
     if (comment.user_id !== userId) {

@@ -13,6 +13,7 @@ import { sendPushNotification } from "../services/notificationService";
 import {
   AssignmentNotFoundError,
   TaskAlreadyDoneError,
+  TaskArchivedError,
   TaskNotFoundError,
   TaskNotProgressableError,
 } from "../repositories/taskRepository";
@@ -49,6 +50,9 @@ function handleDomainError(
 ): Response {
   if (error instanceof TaskNotFoundError) {
     return res.status(404).json({ success: false, error: error.message });
+  }
+  if (error instanceof TaskArchivedError) {
+    return res.status(409).json({ success: false, error: error.message });
   }
   if (error instanceof TaskAlreadyDoneError) {
     return res.status(400).json({ success: false, error: error.message });

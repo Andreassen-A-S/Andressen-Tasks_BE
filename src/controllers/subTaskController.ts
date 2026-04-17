@@ -1,6 +1,6 @@
 import * as taskRepo from "../repositories/taskRepository";
 import * as taskEventRepo from "../repositories/taskEventRepository";
-import { TaskEventType } from "../generated/prisma/client";
+import { TaskEventType, TaskStatus } from "../generated/prisma/client";
 import type { Request, Response } from "express";
 
 export async function createSubtask(req: Request, res: Response) {
@@ -18,6 +18,10 @@ export async function createSubtask(req: Request, res: Response) {
       return res
         .status(404)
         .json({ success: false, error: "Parent task not found" });
+    }
+
+    if (parentTask.status === TaskStatus.ARCHIVED) {
+      return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
     }
 
     // Create subtask + assignments (safe)

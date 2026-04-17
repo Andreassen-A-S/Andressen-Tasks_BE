@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { Request, Response } from "express";
-import { TaskEventType } from "../src/generated/prisma/client";
+import { TaskEventType, TaskStatus } from "../src/generated/prisma/client";
 import * as assignmentController from "../src/controllers/assignmentController";
 import * as assignmentRepo from "../src/repositories/assignmentRepository";
+import * as taskRepo from "../src/repositories/taskRepository";
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
 import * as userRepo from "../src/repositories/userRepository";
 
@@ -62,6 +63,9 @@ describe("assignmentController.listAssignments", () => {
 describe("assignmentController.assignTask", () => {
   test("creates assignment and logs ASSIGNMENT_CREATED", async () => {
     const assignment = { assignment_id: "a1", task_id: "t1" };
+    spyOn(taskRepo, "getTaskById").mockResolvedValue(
+      { task_id: "t1", status: TaskStatus.IN_PROGRESS } as never,
+    );
     spyOn(assignmentRepo, "assignTaskToUser").mockResolvedValue(
       assignment as never,
     );

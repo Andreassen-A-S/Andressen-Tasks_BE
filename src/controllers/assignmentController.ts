@@ -3,7 +3,8 @@ import type { Request, Response } from "express";
 import type { CreateTaskAssignmentInput } from "../types/assignment";
 import type { TaskAssignment } from "../generated/prisma/client";
 import * as taskEventRepo from "../repositories/taskEventRepository";
-import { TaskEventType } from "../generated/prisma/client";
+import { TaskEventType, TaskStatus } from "../generated/prisma/client";
+import * as taskRepo from "../repositories/taskRepository";
 import * as userRepo from "../repositories/userRepository";
 import { sendPushNotification } from "../services/notificationService";
 
@@ -39,6 +40,15 @@ export async function listAssignments(req: Request, res: Response) {
 export async function assignTask(req: Request, res: Response) {
   try {
     const body = req.body as CreateTaskAssignmentInput;
+
+    const task = await taskRepo.getTaskById(body.task_id);
+    if (!task) {
+      return res.status(404).json({ success: false, error: "Task not found" });
+    }
+    if (task.status === TaskStatus.ARCHIVED) {
+      return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
+    }
+
     const assignment = await assignmentRepo.assignTaskToUser(body);
 
     // TaskEvent logic
@@ -117,6 +127,10 @@ export async function updateAssignment(req: Request, res: Response) {
         .json({ success: false, error: "Assignment not found" });
     }
 
+    if ((existingAssignment as any).task?.status === TaskStatus.ARCHIVED) {
+      return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
+    }
+
     // Update the assignment
     const assignment = await assignmentRepo.updateAssignment(id, updateData);
 
@@ -163,6 +177,10 @@ export async function deleteAssignment(req: Request, res: Response) {
       return res
         .status(404)
         .json({ success: false, error: "Assignment not found" });
+    }
+
+    if ((existingAssignment as any).task?.status === TaskStatus.ARCHIVED) {
+      return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
     }
 
     // TaskEvent logic

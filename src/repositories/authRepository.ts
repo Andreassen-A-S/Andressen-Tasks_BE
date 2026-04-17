@@ -1,10 +1,11 @@
 import { prisma } from "../db/prisma";
+import { UserRole } from "../generated/prisma/client";
 import type { User } from "../generated/prisma/client";
 import type { SafeUser } from "../types/user";
 
 export async function getUserByEmail(email: string): Promise<User | null> {
-  return prisma.user.findUnique({
-    where: { email },
+  return prisma.user.findFirst({
+    where: { email, role: { not: UserRole.SYSTEM } },
   });
 }
 

@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { UserRole } from "../generated/prisma/client";
+import { TaskStatus, UserRole } from "../generated/prisma/client";
 import { prisma } from "../db/prisma";
 import * as attachmentRepo from "../repositories/attachmentRepository";
 import * as storageService from "../services/storageService";
@@ -58,6 +58,9 @@ export async function prepareAttachments(req: Request, res: Response) {
     });
     if (!task) {
       return res.status(404).json({ success: false, error: "Task not found" });
+    }
+    if (task.status === TaskStatus.ARCHIVED) {
+      return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
     }
     if (task.created_by !== userId && task.assignments.length === 0 && !isAdmin) {
       return res.status(403).json({ success: false, error: "Access denied" });
@@ -143,6 +146,14 @@ export async function deleteAttachment(req: Request, res: Response) {
     const attachment = await attachmentRepo.getAttachmentById(attachmentId);
     if (!attachment) {
       return res.status(404).json({ success: false, error: "Attachment not found" });
+    }
+
+    const attachmentTask = await prisma.task.findUnique({
+      where: { task_id: attachment.task_id },
+      select: { status: true },
+    });
+    if (attachmentTask?.status === TaskStatus.ARCHIVED) {
+      return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
     }
 
     if (attachment.uploaded_by !== userId && !isAdmin) {

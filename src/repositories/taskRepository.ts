@@ -28,6 +28,13 @@ export class TaskAlreadyDoneError extends Error {
   }
 }
 
+export class TaskArchivedError extends Error {
+  constructor() {
+    super("Task is archived and cannot be modified.");
+    this.name = "TaskArchivedError";
+  }
+}
+
 export class AssignmentNotFoundError extends Error {
   constructor() {
     super("Assignment not found for this task and user.");
@@ -146,6 +153,10 @@ export async function updateTask(
     });
     if (!existingTask) throw new TaskNotFoundError(id);
 
+    if (existingTask.status === TaskStatus.ARCHIVED) {
+      throw new TaskArchivedError();
+    }
+
     if (data.status === TaskStatus.DONE && existingTask.status === TaskStatus.DONE) {
       throw new TaskAlreadyDoneError();
     }
@@ -154,11 +165,14 @@ export async function updateTask(
     const finalStatus = data.status ?? existingTask.status;
     const completionTimestamp = new Date();
 
+    const preserveCompletion =
+      data.status === TaskStatus.ARCHIVED && existingTask.status === TaskStatus.DONE;
+
     const updateData: Prisma.TaskUpdateInput = {
       ...taskUpdateData,
       ...(data.status === TaskStatus.DONE
         ? userId ? { completed_by: userId, completed_at: completionTimestamp } : {}
-        : data.status !== undefined
+        : data.status !== undefined && !preserveCompletion
           ? { completed_by: null, completed_at: null }
           : {}),
     };
@@ -166,8 +180,9 @@ export async function updateTask(
     await tx.task.update({ where: { task_id: id }, data: updateData });
 
     if (assigned_users !== undefined) {
-      if (finalStatus === TaskStatus.DONE) {
-        // Preserve existing completion timestamps; stamp new assignees now.
+      if (finalStatus === TaskStatus.DONE || preserveCompletion) {
+        // Preserve existing completion timestamps for DONE and DONE→ARCHIVED transitions.
+        // New assignees added during DONE→ARCHIVED get null (they weren't assigned at completion time).
         const existingAssignments = await tx.taskAssignment.findMany({
           where: { task_id: id },
           select: { user_id: true, completed_at: true },
@@ -179,7 +194,7 @@ export async function updateTask(
             data: assigned_users.map((assigneeId) => ({
               task_id: id,
               user_id: assigneeId,
-              completed_at: existingMap.get(assigneeId) ?? completionTimestamp,
+              completed_at: existingMap.get(assigneeId) ?? (finalStatus === TaskStatus.DONE ? completionTimestamp : null),
             })),
           });
         }
@@ -200,7 +215,7 @@ export async function updateTask(
         where: { task_id: id },
         data: { completed_at: completionTimestamp },
       });
-    } else if (data.status !== undefined) {
+    } else if (data.status !== undefined && !preserveCompletion) {
       await tx.taskAssignment.updateMany({
         where: { task_id: id },
         data: { completed_at: null },
@@ -394,5 +409,19 @@ export async function upsertProgressLog(
     }
 
     return { progressLog, updatedTask };
+  });
+}
+
+export async function getStaleDoneTasks(olderThanDays: number) {
+  const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
+  return prisma.task.findMany({
+    where: {
+      status: TaskStatus.DONE,
+      completed_at: { lt: cutoff },
+    },
+    include: {
+      assignments: { select: { assignment_id: true, user_id: true } },
+      project: { select: { name: true, color: true } },
+    },
   });
 }

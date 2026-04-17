@@ -64,6 +64,7 @@ enum TaskGoalType {
 enum UserRole {
   USER
   ADMIN
+  SYSTEM
 }
 
 enum TaskEventType {
