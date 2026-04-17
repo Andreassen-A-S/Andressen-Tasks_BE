@@ -154,11 +154,14 @@ export async function updateTask(
     const finalStatus = data.status ?? existingTask.status;
     const completionTimestamp = new Date();
 
+    const preserveCompletion =
+      data.status === TaskStatus.ARCHIVED && existingTask.status === TaskStatus.DONE;
+
     const updateData: Prisma.TaskUpdateInput = {
       ...taskUpdateData,
       ...(data.status === TaskStatus.DONE
         ? userId ? { completed_by: userId, completed_at: completionTimestamp } : {}
-        : data.status !== undefined
+        : data.status !== undefined && !preserveCompletion
           ? { completed_by: null, completed_at: null }
           : {}),
     };
@@ -200,7 +203,7 @@ export async function updateTask(
         where: { task_id: id },
         data: { completed_at: completionTimestamp },
       });
-    } else if (data.status !== undefined) {
+    } else if (data.status !== undefined && !preserveCompletion) {
       await tx.taskAssignment.updateMany({
         where: { task_id: id },
         data: { completed_at: null },

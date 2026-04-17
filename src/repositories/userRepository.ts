@@ -40,20 +40,30 @@ export async function updateUser(
   id: string,
   data: UpdateUserInput,
 ): Promise<SafeUser> {
+  const existing = await prisma.user.findUnique({
+    where: { user_id: id },
+    select: { role: true },
+  });
+  if (!existing || existing.role === UserRole.SYSTEM) {
+    throw new Error("User not found");
+  }
   if (data.password) {
     data.password = await hashPassword(data.password);
   }
   return prisma.user.update({
-    where: { user_id: id, role: { not: UserRole.SYSTEM } },
+    where: { user_id: id },
     data,
     select: userSelect,
   });
 }
 
 export async function deleteUser(id: string): Promise<void> {
-  await prisma.user.delete({
+  const result = await prisma.user.deleteMany({
     where: { user_id: id, role: { not: UserRole.SYSTEM } },
   });
+  if (result.count === 0) {
+    throw new Error("User not found");
+  }
 }
 
 export async function updatePushToken(
