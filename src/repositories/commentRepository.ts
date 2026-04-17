@@ -47,11 +47,28 @@ export async function getCommentById(commentId: string) {
   });
 }
 
-export async function updateComment(commentId: string, message: string) {
-  return prisma.taskComment.update({
-    where: { comment_id: commentId },
-    data: { message },
-    include: COMMENT_INCLUDE,
+export async function updateComment(commentId: string, message: string, upload_tokens?: string[], remove_attachment_ids?: string[]) {
+  return prisma.$transaction(async (tx) => {
+    if (remove_attachment_ids && remove_attachment_ids.length > 0) {
+      await tx.taskAttachment.deleteMany({
+        where: { attachment_id: { in: remove_attachment_ids }, comment_id: commentId },
+      });
+    }
+
+    const comment = await tx.taskComment.update({
+      where: { comment_id: commentId },
+      data: { message },
+      include: COMMENT_INCLUDE,
+    });
+
+    if (upload_tokens && upload_tokens.length > 0) {
+      await confirmAttachments(tx, upload_tokens, comment.comment_id, comment.user_id, comment.task_id);
+    }
+
+    return tx.taskComment.findUniqueOrThrow({
+      where: { comment_id: comment.comment_id },
+      include: COMMENT_INCLUDE,
+    });
   });
 }
 

@@ -257,7 +257,7 @@ export async function updateComment(req: Request, res: Response) {
         .status(400)
         .json({ success: false, error: "Missing request body" });
     }
-    const { message } = req.body;
+    const { message, upload_tokens, remove_attachment_ids } = req.body;
     const userId = requireUserId(req, res);
     if (!userId) return;
 
@@ -291,9 +291,24 @@ export async function updateComment(req: Request, res: Response) {
         .json({ success: false, error: "Not authorized to edit this comment" });
     }
 
+    // Delete GCS files for removed attachments best-effort
+    if (Array.isArray(remove_attachment_ids) && remove_attachment_ids.length > 0) {
+      const attachmentsToRemove = await attachmentRepo.getAttachmentsByCommentId(commentId);
+      const toDelete = attachmentsToRemove.filter((a) => remove_attachment_ids.includes(a.attachment_id));
+      await Promise.all(
+        toDelete.map((a) =>
+          storageService.deleteFile(a.gcs_path).catch((err) =>
+            console.error("GCS delete failed for path:", a.gcs_path, err),
+          ),
+        ),
+      );
+    }
+
     const updatedComment = await commentRepo.updateComment(
       commentId,
       message.trim(),
+      upload_tokens,
+      Array.isArray(remove_attachment_ids) && remove_attachment_ids.length > 0 ? remove_attachment_ids : undefined,
     );
 
     // TaskEvent logic
