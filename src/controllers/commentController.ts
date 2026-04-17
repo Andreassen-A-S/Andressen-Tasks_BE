@@ -261,7 +261,11 @@ export async function updateComment(req: Request, res: Response) {
     const userId = requireUserId(req, res);
     if (!userId) return;
 
-    const trimmedMessage = message !== undefined ? message.trim() : undefined;
+    if (message !== undefined && typeof message !== "string") {
+      return res.status(400).json({ success: false, error: "Invalid message" });
+    }
+
+    const trimmedMessage = message !== undefined ? (message as string).trim() : undefined;
 
     if (trimmedMessage !== undefined && trimmedMessage.length > 2000) {
       return res.status(400).json({
@@ -286,6 +290,12 @@ export async function updateComment(req: Request, res: Response) {
       return res.status(400).json({ success: false, error: "Invalid remove_attachment_ids" });
     }
 
+    const hasTokens = Array.isArray(upload_tokens) && upload_tokens.length > 0;
+    const hasRemovals = Array.isArray(remove_attachment_ids) && remove_attachment_ids.length > 0;
+    if (trimmedMessage === undefined && !hasTokens && !hasRemovals) {
+      return res.status(400).json({ success: false, error: "No changes provided" });
+    }
+
     const comment = await commentRepo.getCommentById(commentId);
 
     if (!comment) {
@@ -301,7 +311,6 @@ export async function updateComment(req: Request, res: Response) {
     }
 
     // Fetch GCS paths before the DB transaction so we have them if deletion is needed
-    const hasRemovals = Array.isArray(remove_attachment_ids) && remove_attachment_ids.length > 0;
     let gcsPathsToDelete: string[] = [];
     if (hasRemovals) {
       const attachmentsToRemove = await attachmentRepo.getAttachmentsByCommentId(commentId);

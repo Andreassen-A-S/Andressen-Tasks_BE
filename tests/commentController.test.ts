@@ -622,6 +622,59 @@ describe("commentController.updateComment", () => {
     expect(res.body).toEqual({ success: false, error: "Invalid remove_attachment_ids" });
   });
 
+  test("returns 400 when no changes are provided", async () => {
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "u1",
+      task_id: "t1",
+      message: "old",
+    } as never);
+
+    const req = createRequest({
+      params: { commentId: "c1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: {},
+    });
+    const res = createMockResponse();
+
+    await commentController.updateComment(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "No changes provided" });
+  });
+
+  test("updates without message when only remove_attachment_ids provided", async () => {
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "u1",
+      task_id: "t1",
+      message: "existing",
+    } as never);
+    const updateSpy = spyOn(commentRepo, "updateComment").mockResolvedValue({
+      comment_id: "c1",
+      user_id: "u1",
+      task_id: "t1",
+      message: "existing",
+    } as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    spyOn(attachmentRepo, "getAttachmentsByCommentId").mockResolvedValue([
+      { attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg" },
+    ] as never);
+    spyOn(storageService, "deleteFile").mockResolvedValue(undefined);
+
+    const req = createRequest({
+      params: { commentId: "c1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { remove_attachment_ids: ["a1"] },
+    });
+    const res = createMockResponse();
+
+    await commentController.updateComment(req, res);
+
+    expect(updateSpy).toHaveBeenCalledWith("c1", undefined, undefined, ["a1"]);
+    expect(res.body).toMatchObject({ success: true });
+  });
+
   test("fetches attachments, runs DB update, then deletes GCS files when removing attachments", async () => {
     spyOn(commentRepo, "getCommentById").mockResolvedValue({
       comment_id: "c1",

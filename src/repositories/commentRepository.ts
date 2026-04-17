@@ -55,10 +55,9 @@ export async function updateComment(commentId: string, message: string | undefin
       });
     }
 
-    const comment = await tx.taskComment.update({
-      where: { comment_id: commentId },
-      data: message !== undefined ? { message } : {},
-    });
+    const comment = message !== undefined
+      ? await tx.taskComment.update({ where: { comment_id: commentId }, data: { message } })
+      : await tx.taskComment.findUniqueOrThrow({ where: { comment_id: commentId } });
 
     if (upload_tokens && upload_tokens.length > 0) {
       await confirmAttachments(tx, upload_tokens, comment.comment_id, comment.user_id, comment.task_id);
