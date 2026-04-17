@@ -261,19 +261,21 @@ export async function updateComment(req: Request, res: Response) {
     const userId = requireUserId(req, res);
     if (!userId) return;
 
-    const userRole = req.user?.role;
+    const trimmedMessage = message?.trim() ?? "";
 
-    if (!message?.trim()) {
-      return res
-        .status(400)
-        .json({ success: false, error: "Message is required" });
-    }
-
-    if (message.trim().length > 2000) {
+    if (trimmedMessage.length > 2000) {
       return res.status(400).json({
         success: false,
         error: "Message too long (max 2000 characters)",
       });
+    }
+
+    if (upload_tokens !== undefined && !Array.isArray(upload_tokens)) {
+      return res.status(400).json({ success: false, error: "Invalid upload tokens" });
+    }
+
+    if (Array.isArray(upload_tokens) && upload_tokens.some((t) => typeof t !== "string")) {
+      return res.status(400).json({ success: false, error: "Invalid upload tokens" });
     }
 
     const comment = await commentRepo.getCommentById(commentId);
@@ -284,32 +286,39 @@ export async function updateComment(req: Request, res: Response) {
         .json({ success: false, error: "Comment not found" });
     }
 
-    // Check if user owns the comment or is admin
-    if (comment.user_id !== userId && userRole !== UserRole.ADMIN) {
+    if (comment.user_id !== userId) {
       return res
         .status(403)
         .json({ success: false, error: "Not authorized to edit this comment" });
     }
 
-    // Delete GCS files for removed attachments best-effort
-    if (Array.isArray(remove_attachment_ids) && remove_attachment_ids.length > 0) {
+    // Fetch GCS paths before the DB transaction so we have them if deletion is needed
+    const hasRemovals = Array.isArray(remove_attachment_ids) && remove_attachment_ids.length > 0;
+    let gcsPathsToDelete: string[] = [];
+    if (hasRemovals) {
       const attachmentsToRemove = await attachmentRepo.getAttachmentsByCommentId(commentId);
-      const toDelete = attachmentsToRemove.filter((a) => remove_attachment_ids.includes(a.attachment_id));
-      await Promise.all(
-        toDelete.map((a) =>
-          storageService.deleteFile(a.gcs_path).catch((err) =>
-            console.error("GCS delete failed for path:", a.gcs_path, err),
-          ),
-        ),
-      );
+      gcsPathsToDelete = attachmentsToRemove
+        .filter((a) => remove_attachment_ids.includes(a.attachment_id))
+        .map((a) => a.gcs_path);
     }
 
     const updatedComment = await commentRepo.updateComment(
       commentId,
-      message.trim(),
-      upload_tokens,
-      Array.isArray(remove_attachment_ids) && remove_attachment_ids.length > 0 ? remove_attachment_ids : undefined,
+      trimmedMessage,
+      Array.isArray(upload_tokens) && upload_tokens.length > 0 ? upload_tokens : undefined,
+      hasRemovals ? remove_attachment_ids : undefined,
     );
+
+    // Delete GCS files only after the DB transaction succeeds
+    if (gcsPathsToDelete.length > 0) {
+      await Promise.all(
+        gcsPathsToDelete.map((path) =>
+          storageService.deleteFile(path).catch((err) =>
+            console.error("GCS delete failed for path:", path, err),
+          ),
+        ),
+      );
+    }
 
     // TaskEvent logic
     await taskEventRepo.createTaskEvent({

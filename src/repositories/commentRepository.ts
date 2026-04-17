@@ -58,7 +58,6 @@ export async function updateComment(commentId: string, message: string, upload_t
     const comment = await tx.taskComment.update({
       where: { comment_id: commentId },
       data: { message },
-      include: COMMENT_INCLUDE,
     });
 
     if (upload_tokens && upload_tokens.length > 0) {
