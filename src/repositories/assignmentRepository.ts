@@ -51,6 +51,7 @@ export async function assignTaskToUser(
     data,
     include: {
       task: { select: { task_id: true, title: true } },
+      user: { select: { user_id: true, name: true, email: true, position: true } },
     },
   });
 }

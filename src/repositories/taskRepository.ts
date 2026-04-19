@@ -225,7 +225,11 @@ export async function updateTask(
     return tx.task.findUnique({
       where: { task_id: id },
       include: {
-        assignments: { select: { assignment_id: true, user_id: true } },
+        assignments: {
+          include: {
+            user: { select: { user_id: true, name: true, email: true, position: true } },
+          },
+        },
         project: { select: { name: true, color: true } },
       },
     });
