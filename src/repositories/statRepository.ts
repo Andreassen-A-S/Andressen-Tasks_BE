@@ -66,7 +66,7 @@ export async function getOverviewStats(client: PrismaClient = prisma) {
       // Overdue tasks (not completed, past deadline)
       client.task.count({
         where: {
-          deadline: { lt: new Date(todayKey) },
+          deadline: { lt: todayStart },
           status: { not: TaskStatus.DONE },
         },
       }),
@@ -97,7 +97,7 @@ export async function getCompletionRatesForWindow(
   const windowStartKey = subDaysFromKey(appDateKey(now), days - 1);
   const windowStart = dateKeyBounds(windowStartKey).start;
 
-  const [todayStats, weekStats, monthStats] = await Promise.all([
+  const [todayStats, weekStats, periodStats] = await Promise.all([
     // Today
     client.task.groupBy({
       by: ["status"],
@@ -181,7 +181,7 @@ export async function getCompletionRatesForWindow(
   return {
     today_rate: calculateRate(todayStats),
     week_rate: calculateRate(weekStats),
-    month_rate: calculateRate(monthStats),
+    period_rate: calculateRate(periodStats),
     avg_completion_days: avgCompletionDays,
     completed_in_period: completedTasks.length,
     on_time_completed: onTimeCompleted,
@@ -488,7 +488,7 @@ export async function getProjectStatsForWindow(
       client.task.groupBy({
         by: ["project_id"],
         where: {
-          deadline: { lt: new Date(todayKey) },
+          deadline: { lt: appDayBounds(now).start },
           status: { notIn: inactiveStatuses },
         },
         _count: { task_id: true },
@@ -533,6 +533,9 @@ export async function getProjectStatsForWindow(
     completedByProject.set(task.project_id, current);
   }
 
+  const activeByProject = new Map(activeTasks.map(t => [t.project_id, t._count.task_id]));
+  const overdueByProject = new Map(overdueActiveTasks.map(t => [t.project_id, t._count.task_id]));
+
   return projects
     .map((project) => {
       const completion = completedByProject.get(project.project_id) ?? {
@@ -540,12 +543,8 @@ export async function getProjectStatsForWindow(
         onTime: 0,
         late: 0,
       };
-      const activeCount =
-        activeTasks.find((task) => task.project_id === project.project_id)
-          ?._count.task_id ?? 0;
-      const overdueCount =
-        overdueActiveTasks.find((task) => task.project_id === project.project_id)
-          ?._count.task_id ?? 0;
+      const activeCount = activeByProject.get(project.project_id) ?? 0;
+      const overdueCount = overdueByProject.get(project.project_id) ?? 0;
 
       return {
         project_id: project.project_id,
@@ -674,7 +673,7 @@ export async function getStatsForWindow(
     getTopPerformersForWindow(days, 5, client),
     getWorkloadDistribution(client),
     getRecurringStats(client),
-    getTaskTrends(days, client),
+    getTaskTrends(Math.min(days, 90), client),
     getProjectStatsForWindow(days, client),
   ]);
 

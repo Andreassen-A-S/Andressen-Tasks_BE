@@ -156,7 +156,8 @@ export async function getTaskTrends(req: Request, res: Response) {
  */
 export async function getDashboardStats(req: Request, res: Response) {
   try {
-    const days = parseInt(req.query.days as string) || 30;
+    const raw = parseInt(req.query.days as string, 10);
+    const days = Number.isNaN(raw) ? 30 : raw;
     const stats = await statsService.getStatsForWindow(days);
     return res.json({ success: true, data: stats });
   } catch (error) {

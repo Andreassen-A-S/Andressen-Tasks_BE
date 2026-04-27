@@ -12,7 +12,7 @@ export interface OverviewStats {
 export interface CompletionRates {
   today_rate: number;
   week_rate: number;
-  month_rate: number;
+  period_rate: number;
   avg_completion_days: number;
   completed_in_period: number;
   on_time_completed: number;
