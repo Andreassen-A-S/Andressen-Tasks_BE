@@ -154,12 +154,18 @@ export async function getTaskTrends(req: Request, res: Response) {
  * Get all dashboard statistics in a single optimized call
  * This is the recommended endpoint for loading the full dashboard
  */
-export async function getDashboardStats(_req: Request, res: Response) {
+export async function getDashboardStats(req: Request, res: Response) {
   try {
-    const stats = await statsService.getAllStats();
+    const days = parseInt(req.query.days as string) || 30;
+    const stats = await statsService.getStatsForWindow(days);
     return res.json({ success: true, data: stats });
   } catch (error) {
     console.error("Error in getDashboardStats:", error);
+
+    if (error instanceof Error && error.message.includes("must be between")) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+
     return res
       .status(500)
       .json({ success: false, error: "Failed to fetch dashboard stats" });

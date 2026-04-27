@@ -22,6 +22,19 @@ import {
 type TransactionClient = Prisma.TransactionClient;
 type PrismaClient = typeof prisma | TransactionClient;
 
+function dateKeyDiffInDays(fromKey: string, toKey: string): number {
+  const [fromYear, fromMonth, fromDay] = fromKey
+    .split("-")
+    .map(Number) as [number, number, number];
+  const [toYear, toMonth, toDay] = toKey
+    .split("-")
+    .map(Number) as [number, number, number];
+  const from = Date.UTC(fromYear, fromMonth - 1, fromDay);
+  const to = Date.UTC(toYear, toMonth - 1, toDay);
+
+  return Math.round((to - from) / (1000 * 60 * 60 * 24));
+}
+
 /**
  * Get overview statistics
  */
@@ -71,10 +84,18 @@ export async function getOverviewStats(client: PrismaClient = prisma) {
  * Get completion rate statistics for different time periods
  */
 export async function getCompletionRates(client: PrismaClient = prisma) {
+  return getCompletionRatesForWindow(30, client);
+}
+
+export async function getCompletionRatesForWindow(
+  days: number = 30,
+  client: PrismaClient = prisma,
+) {
   const now = new Date();
   const todayStart = appDayBounds(now).start;
   const weekStart = appWeekBoundsUTC(now).start;
-  const monthStart = appMonthStartUTC(now);
+  const windowStartKey = subDaysFromKey(appDateKey(now), days - 1);
+  const windowStart = dateKeyBounds(windowStartKey).start;
 
   const [todayStats, weekStats, monthStats] = await Promise.all([
     // Today
@@ -99,7 +120,7 @@ export async function getCompletionRates(client: PrismaClient = prisma) {
     client.task.groupBy({
       by: ["status"],
       where: {
-        created_at: { gte: monthStart },
+        created_at: { gte: windowStart },
       },
       _count: true,
     }),
@@ -116,15 +137,20 @@ export async function getCompletionRates(client: PrismaClient = prisma) {
   const completedTasks = await client.task.findMany({
     where: {
       status: TaskStatus.DONE,
-      completed_at: { gte: monthStart },
+      completed_at: { gte: windowStart },
     },
     select: {
       created_at: true,
       completed_at: true,
+      deadline: true,
     },
   });
 
   let avgCompletionDays = 0;
+  let onTimeCompleted = 0;
+  let lateTasks = 0;
+  let totalDelayDays = 0;
+
   if (completedTasks.length > 0) {
     const totalDays = completedTasks.reduce((sum, task) => {
       if (!task.completed_at) return sum;
@@ -135,6 +161,21 @@ export async function getCompletionRates(client: PrismaClient = prisma) {
       return sum + days;
     }, 0);
     avgCompletionDays = Math.round(totalDays / completedTasks.length);
+
+    for (const task of completedTasks) {
+      if (!task.completed_at) continue;
+
+      const completedKey = appDateKey(task.completed_at);
+      const deadlineKey = appDateKey(task.deadline);
+      const delayDays = dateKeyDiffInDays(deadlineKey, completedKey);
+
+      if (delayDays <= 0) {
+        onTimeCompleted += 1;
+      } else {
+        lateTasks += 1;
+        totalDelayDays += delayDays;
+      }
+    }
   }
 
   return {
@@ -142,6 +183,14 @@ export async function getCompletionRates(client: PrismaClient = prisma) {
     week_rate: calculateRate(weekStats),
     month_rate: calculateRate(monthStats),
     avg_completion_days: avgCompletionDays,
+    completed_in_period: completedTasks.length,
+    on_time_completed: onTimeCompleted,
+    on_time_rate:
+      completedTasks.length > 0
+        ? Math.round((onTimeCompleted / completedTasks.length) * 100)
+        : 0,
+    avg_delay_days:
+      lateTasks > 0 ? Math.round(totalDelayDays / lateTasks) : 0,
   };
 }
 
@@ -224,14 +273,23 @@ export async function getTopPerformers(
   limit: number = 5,
   client: PrismaClient = prisma,
 ) {
-  const monthStart = appMonthStartUTC();
+  return getTopPerformersForWindow(30, limit, client);
+}
+
+export async function getTopPerformersForWindow(
+  days: number = 30,
+  limit: number = 5,
+  client: PrismaClient = prisma,
+) {
+  const windowStartKey = subDaysFromKey(appDateKey(), days - 1);
+  const windowStart = dateKeyBounds(windowStartKey).start;
 
   const performers = await client.task.groupBy({
     by: ["completed_by"],
     where: {
       status: TaskStatus.DONE,
       completed_by: { not: null },
-      completed_at: { gte: monthStart },
+      completed_at: { gte: windowStart },
     },
     _count: { task_id: true },
     _sum: { current_quantity: true },
@@ -396,6 +454,130 @@ export async function getTaskTrends(
   return trends;
 }
 
+export async function getProjectStatsForWindow(
+  days: number = 30,
+  client: PrismaClient = prisma,
+) {
+  const now = new Date();
+  const todayKey = appDateKey(now);
+  const windowStartKey = subDaysFromKey(todayKey, days - 1);
+  const windowStart = dateKeyBounds(windowStartKey).start;
+  const inactiveStatuses = [
+    TaskStatus.DONE,
+    TaskStatus.ARCHIVED,
+    TaskStatus.REJECTED,
+  ];
+
+  const [projects, activeTasks, overdueActiveTasks, completedTasks] =
+    await Promise.all([
+      client.project.findMany({
+        select: {
+          project_id: true,
+          name: true,
+          color: true,
+        },
+        orderBy: { name: "asc" },
+      }),
+      client.task.groupBy({
+        by: ["project_id"],
+        where: {
+          status: { notIn: inactiveStatuses },
+        },
+        _count: { task_id: true },
+      }),
+      client.task.groupBy({
+        by: ["project_id"],
+        where: {
+          deadline: { lt: new Date(todayKey) },
+          status: { notIn: inactiveStatuses },
+        },
+        _count: { task_id: true },
+      }),
+      client.task.findMany({
+        where: {
+          status: TaskStatus.DONE,
+          completed_at: { gte: windowStart },
+        },
+        select: {
+          project_id: true,
+          deadline: true,
+          completed_at: true,
+        },
+      }),
+    ]);
+
+  const completedByProject = new Map<
+    string,
+    { completed: number; onTime: number; late: number }
+  >();
+
+  for (const task of completedTasks) {
+    if (!task.completed_at) continue;
+
+    const current = completedByProject.get(task.project_id) ?? {
+      completed: 0,
+      onTime: 0,
+      late: 0,
+    };
+    const completedKey = appDateKey(task.completed_at);
+    const deadlineKey = appDateKey(task.deadline);
+    const delayDays = dateKeyDiffInDays(deadlineKey, completedKey);
+
+    current.completed += 1;
+    if (delayDays <= 0) {
+      current.onTime += 1;
+    } else {
+      current.late += 1;
+    }
+
+    completedByProject.set(task.project_id, current);
+  }
+
+  return projects
+    .map((project) => {
+      const completion = completedByProject.get(project.project_id) ?? {
+        completed: 0,
+        onTime: 0,
+        late: 0,
+      };
+      const activeCount =
+        activeTasks.find((task) => task.project_id === project.project_id)
+          ?._count.task_id ?? 0;
+      const overdueCount =
+        overdueActiveTasks.find((task) => task.project_id === project.project_id)
+          ?._count.task_id ?? 0;
+
+      return {
+        project_id: project.project_id,
+        name: project.name,
+        color: project.color,
+        completed_count: completion.completed,
+        on_time_rate:
+          completion.completed > 0
+            ? Math.round((completion.onTime / completion.completed) * 100)
+            : 0,
+        late_completed_count: completion.late,
+        active_tasks: activeCount,
+        overdue_active_tasks: overdueCount,
+      };
+    })
+    .filter(
+      (project) =>
+        project.completed_count > 0 ||
+        project.active_tasks > 0 ||
+        project.overdue_active_tasks > 0,
+    )
+    .sort((a, b) => {
+      if (b.overdue_active_tasks !== a.overdue_active_tasks) {
+        return b.overdue_active_tasks - a.overdue_active_tasks;
+      }
+      if (b.late_completed_count !== a.late_completed_count) {
+        return b.late_completed_count - a.late_completed_count;
+      }
+      return a.on_time_rate - b.on_time_rate;
+    });
+}
+
 /**
  * Get user overdue tasks count
  */
@@ -467,6 +649,13 @@ export async function getUserWeeklyStats(
  * Get all dashboard stats in a single call (optimized)
  */
 export async function getAllStats(client: PrismaClient = prisma) {
+  return getStatsForWindow(30, client);
+}
+
+export async function getStatsForWindow(
+  days: number = 30,
+  client: PrismaClient = prisma,
+) {
   const [
     overview,
     completion,
@@ -476,15 +665,17 @@ export async function getAllStats(client: PrismaClient = prisma) {
     workload,
     recurring,
     trends,
+    projects,
   ] = await Promise.all([
     getOverviewStats(client),
-    getCompletionRates(client),
+    getCompletionRatesForWindow(days, client),
     getPriorityStats(client),
     getStatusStats(client),
-    getTopPerformers(5, client),
+    getTopPerformersForWindow(days, 5, client),
     getWorkloadDistribution(client),
     getRecurringStats(client),
-    getTaskTrends(7, client),
+    getTaskTrends(days, client),
+    getProjectStatsForWindow(days, client),
   ]);
 
   return {
@@ -496,5 +687,6 @@ export async function getAllStats(client: PrismaClient = prisma) {
     workload,
     recurring,
     trends,
+    projects,
   };
 }
