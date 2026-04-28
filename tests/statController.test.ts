@@ -179,6 +179,7 @@ describe("statController.getDashboardStats", () => {
     await statController.getDashboardStats(req, res);
 
     expect(getStatsForWindowSpy).toHaveBeenCalledWith(30);
+    expect(res.body).toEqual({ success: true, data: {} });
   });
 
   test("returns 400 for out-of-range days", async () => {

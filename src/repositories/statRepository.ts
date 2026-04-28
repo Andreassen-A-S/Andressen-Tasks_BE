@@ -458,8 +458,7 @@ export async function getProjectStatsForWindow(
   client: PrismaClient = prisma,
 ) {
   const now = new Date();
-  const todayKey = appDateKey(now);
-  const windowStartKey = subDaysFromKey(todayKey, days - 1);
+  const windowStartKey = subDaysFromKey(appDateKey(now), days - 1);
   const windowStart = dateKeyBounds(windowStartKey).start;
   const inactiveStatuses = [
     TaskStatus.DONE,
