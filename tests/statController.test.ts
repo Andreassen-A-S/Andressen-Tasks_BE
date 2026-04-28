@@ -150,3 +150,51 @@ describe("statController.getTopPerformers", () => {
     });
   });
 });
+
+describe("statController.getDashboardStats", () => {
+  test("defaults to 30 days when query param is missing", async () => {
+    const getStatsForWindowSpy = spyOn(
+      StatsService.prototype,
+      "getStatsForWindow",
+    ).mockResolvedValue({} as never);
+
+    const req = createRequest({ query: {} as Request["query"] });
+    const res = createMockResponse();
+
+    await statController.getDashboardStats(req, res);
+
+    expect(getStatsForWindowSpy).toHaveBeenCalledWith(30);
+    expect(res.body).toEqual({ success: true, data: {} });
+  });
+
+  test("defaults to 30 days when query param is not a number", async () => {
+    const getStatsForWindowSpy = spyOn(
+      StatsService.prototype,
+      "getStatsForWindow",
+    ).mockResolvedValue({} as never);
+
+    const req = createRequest({ query: { days: "abc" } as Request["query"] });
+    const res = createMockResponse();
+
+    await statController.getDashboardStats(req, res);
+
+    expect(getStatsForWindowSpy).toHaveBeenCalledWith(30);
+  });
+
+  test("returns 400 for out-of-range days", async () => {
+    spyOn(StatsService.prototype, "getStatsForWindow").mockRejectedValue(
+      new Error("Days must be between 1 and 365"),
+    );
+
+    const req = createRequest({ query: { days: "366" } as Request["query"] });
+    const res = createMockResponse();
+
+    await statController.getDashboardStats(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({
+      success: false,
+      error: "Days must be between 1 and 365",
+    });
+  });
+});

@@ -116,7 +116,7 @@ export async function getCompletionRatesForWindow(
       _count: true,
     }),
 
-    // This month
+    // This period (rolling window of `days` days)
     client.task.groupBy({
       by: ["status"],
       where: {

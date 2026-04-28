@@ -74,6 +74,10 @@ export class StatsService {
     return await statsRepository.getAllStats();
   }
 
+  /**
+   * Get all dashboard statistics for a rolling window of the last N days (1–365).
+   * Includes overview, completion rates, trends, project stats, and leaderboard.
+   */
   async getStatsForWindow(days: number = 30) {
     if (days < 1 || days > 365) {
       throw new Error("Days must be between 1 and 365");
