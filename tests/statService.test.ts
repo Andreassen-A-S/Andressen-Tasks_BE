@@ -112,4 +112,20 @@ describe("StatsService validations", () => {
       "Days must be between 1 and 365",
     );
   });
+
+  test("getStatsForWindow throws for NaN", async () => {
+    const service = new StatsService();
+
+    await expect(service.getStatsForWindow(NaN)).rejects.toThrow(
+      "Days must be between 1 and 365",
+    );
+  });
+
+  test("getStatsForWindow throws for non-integer days", async () => {
+    const service = new StatsService();
+
+    await expect(service.getStatsForWindow(1.5)).rejects.toThrow(
+      "Days must be between 1 and 365",
+    );
+  });
 });
