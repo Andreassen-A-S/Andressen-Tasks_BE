@@ -7,7 +7,6 @@ import {
 import {
   appDayBounds,
   appWeekBoundsUTC,
-  appMonthStartUTC,
   dateKeyBounds,
   appDateKey,
   subDaysFromKey,
@@ -533,8 +532,8 @@ export async function getProjectStatsForWindow(
     completedByProject.set(task.project_id, current);
   }
 
-  const activeByProject = new Map(activeTasks.map(t => [t.project_id, t._count.task_id]));
-  const overdueByProject = new Map(overdueActiveTasks.map(t => [t.project_id, t._count.task_id]));
+  const activeByProject = new Map(activeTasks.map((t) => [t.project_id, t._count.task_id]));
+  const overdueByProject = new Map(overdueActiveTasks.map((t) => [t.project_id, t._count.task_id]));
 
   return projects
     .map((project) => {
