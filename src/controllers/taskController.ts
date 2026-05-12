@@ -71,9 +71,10 @@ function handleDomainError(
 // Handlers
 // ---------------------------------------------------------------------------
 
-export async function listTasks(_req: Request, res: Response) {
+export async function listTasks(req: Request, res: Response) {
   try {
-    const tasks = await taskRepo.getAllTasks();
+    const orgId = req.user?.organization_id ?? null;
+    const tasks = await taskRepo.getAllTasks(orgId);
     return res.json({ success: true, data: tasks });
   } catch (error) {
     console.error("Error in listTasks:", error);
@@ -92,7 +93,8 @@ export async function getTask(req: Request, res: Response) {
   }
 
   try {
-    const task = await taskRepo.getTaskById(id);
+    const orgId = req.user?.organization_id ?? null;
+    const task = await taskRepo.getTaskById(id, orgId);
     if (!task) {
       return res.status(404).json({ success: false, error: "Task not found" });
     }
@@ -207,7 +209,8 @@ export async function updateTask(req: Request, res: Response) {
     const updateData = req.body as UpdateTaskInput;
     const actor = actorConnect(userId);
 
-    const oldTask = await taskRepo.getTaskById(id);
+    const orgId = req.user?.organization_id ?? null;
+    const oldTask = await taskRepo.getTaskById(id, orgId);
     if (!oldTask) {
       return res.status(404).json({ success: false, error: "Task not found" });
     }
@@ -357,7 +360,8 @@ export async function deleteTask(req: Request, res: Response) {
   }
 
   try {
-    const task = await taskRepo.getTaskById(id);
+    const orgId = req.user?.organization_id ?? null;
+    const task = await taskRepo.getTaskById(id, orgId);
     if (!task) {
       return res.status(404).json({ success: false, error: "Task not found" });
     }

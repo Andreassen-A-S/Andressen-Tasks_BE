@@ -18,9 +18,10 @@ const recurringService = new RecurringTaskService();
  * GET /api/recurring-templates
  * List all recurring templates
  */
-export async function listTemplates(_req: Request, res: Response) {
+export async function listTemplates(req: Request, res: Response) {
   try {
-    const templates = await recurringService.getAllTemplates();
+    const orgId = req.user?.organization_id ?? null;
+    const templates = await recurringService.getAllTemplates(orgId);
     return res.json({ success: true, data: templates });
   } catch (error) {
     console.error("Error in listTemplates:", error);
@@ -34,9 +35,10 @@ export async function listTemplates(_req: Request, res: Response) {
  * GET /api/recurring-templates/active
  * List all active recurring templates
  */
-export async function listActiveTemplates(_req: Request, res: Response) {
+export async function listActiveTemplates(req: Request, res: Response) {
   try {
-    const templates = await recurringService.getActiveTemplates();
+    const orgId = req.user?.organization_id ?? null;
+    const templates = await recurringService.getAllTemplates(orgId);
     return res.json({ success: true, data: templates });
   } catch (error) {
     console.error("Error in listActiveTemplates:", error);
