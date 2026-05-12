@@ -53,8 +53,9 @@ export class TaskNotProgressableError extends Error {
 // Reads
 // ---------------------------------------------------------------------------
 
-export async function getAllTasks() {
+export async function getAllTasks(orgId: string | null) {
   const tasks = await prisma.task.findMany({
+    where: orgId ? { project: { organization_id: orgId } } : undefined,
     orderBy: { created_at: "desc" },
     include: { assignments: { select: { user_id: true } } },
   });
@@ -64,9 +65,12 @@ export async function getAllTasks() {
   }));
 }
 
-export async function getTaskById(id: string) {
-  const task = await prisma.task.findUnique({
-    where: { task_id: id },
+export async function getTaskById(id: string, orgId: string | null) {
+  const task = await prisma.task.findFirst({
+    where: {
+      task_id: id,
+      ...(orgId ? { project: { organization_id: orgId } } : {}),
+    },
     include: {
       project: { select: { name: true, color: true } },
       assignments: { select: { user_id: true } },
