@@ -21,6 +21,26 @@ import {
 type TransactionClient = Prisma.TransactionClient;
 type PrismaClient = typeof prisma | TransactionClient;
 
+// ---------------------------------------------------------------------------
+// Org filter helpers — all return empty objects when orgId is null (SUPER_ADMIN)
+// ---------------------------------------------------------------------------
+
+function taskOrgFilter(orgId: string | null): Prisma.TaskWhereInput {
+  return orgId ? { project: { organization_id: orgId } } : {};
+}
+
+function projectOrgFilter(orgId: string | null): Prisma.ProjectWhereInput {
+  return orgId ? { organization_id: orgId } : {};
+}
+
+function assignmentOrgFilter(orgId: string | null): Prisma.TaskAssignmentWhereInput {
+  return orgId ? { task: { project: { organization_id: orgId } } } : {};
+}
+
+function templateOrgFilter(orgId: string | null): Prisma.RecurringTaskTemplateWhereInput {
+  return orgId ? { project: { organization_id: orgId } } : {};
+}
+
 function dateKeyDiffInDays(fromKey: string, toKey: string): number {
   const [fromYear, fromMonth, fromDay] = fromKey
     .split("-")
@@ -37,19 +57,20 @@ function dateKeyDiffInDays(fromKey: string, toKey: string): number {
 /**
  * Get overview statistics
  */
-export async function getOverviewStats(client: PrismaClient = prisma) {
+export async function getOverviewStats(orgId: string | null = null, client: PrismaClient = prisma) {
   const now = new Date();
   const { start: todayStart } = appDayBounds(now);
-  const todayKey = appDateKey(now);
+  const orgFilter = taskOrgFilter(orgId);
 
   const [totalTasks, completedToday, pendingTasks, overdueTasks] =
     await Promise.all([
       // Total tasks count
-      client.task.count(),
+      client.task.count({ where: { ...orgFilter } }),
 
       // Completed today
       client.task.count({
         where: {
+          ...orgFilter,
           status: TaskStatus.DONE,
           updated_at: { gte: todayStart },
         },
@@ -58,6 +79,7 @@ export async function getOverviewStats(client: PrismaClient = prisma) {
       // Pending tasks
       client.task.count({
         where: {
+          ...orgFilter,
           status: TaskStatus.PENDING,
         },
       }),
@@ -65,6 +87,7 @@ export async function getOverviewStats(client: PrismaClient = prisma) {
       // Overdue tasks (not completed, past deadline)
       client.task.count({
         where: {
+          ...orgFilter,
           deadline: { lt: todayStart },
           status: { not: TaskStatus.DONE },
         },
@@ -82,12 +105,13 @@ export async function getOverviewStats(client: PrismaClient = prisma) {
 /**
  * Get completion rate statistics for different time periods
  */
-export async function getCompletionRates(client: PrismaClient = prisma) {
-  return getCompletionRatesForWindow(30, client);
+export async function getCompletionRates(orgId: string | null = null, client: PrismaClient = prisma) {
+  return getCompletionRatesForWindow(30, orgId, client);
 }
 
 export async function getCompletionRatesForWindow(
   days: number = 30,
+  orgId: string | null = null,
   client: PrismaClient = prisma,
 ) {
   const now = new Date();
@@ -95,32 +119,27 @@ export async function getCompletionRatesForWindow(
   const weekStart = appWeekBoundsUTC(now).start;
   const windowStartKey = subDaysFromKey(appDateKey(now), days - 1);
   const windowStart = dateKeyBounds(windowStartKey).start;
+  const orgFilter = taskOrgFilter(orgId);
 
   const [todayStats, weekStats, periodStats] = await Promise.all([
     // Today
     client.task.groupBy({
       by: ["status"],
-      where: {
-        created_at: { gte: todayStart },
-      },
+      where: { ...orgFilter, created_at: { gte: todayStart } },
       _count: true,
     }),
 
     // This week
     client.task.groupBy({
       by: ["status"],
-      where: {
-        created_at: { gte: weekStart },
-      },
+      where: { ...orgFilter, created_at: { gte: weekStart } },
       _count: true,
     }),
 
     // This period (rolling window of `days` days)
     client.task.groupBy({
       by: ["status"],
-      where: {
-        created_at: { gte: windowStart },
-      },
+      where: { ...orgFilter, created_at: { gte: windowStart } },
       _count: true,
     }),
   ]);
@@ -135,6 +154,7 @@ export async function getCompletionRatesForWindow(
   // Calculate average completion time
   const completedTasks = await client.task.findMany({
     where: {
+      ...orgFilter,
       status: TaskStatus.DONE,
       completed_at: { gte: windowStart },
     },
@@ -196,17 +216,20 @@ export async function getCompletionRatesForWindow(
 /**
  * Get priority breakdown statistics
  */
-export async function getPriorityStats(client: PrismaClient = prisma) {
+export async function getPriorityStats(orgId: string | null = null, client: PrismaClient = prisma) {
   const now = new Date();
+  const orgFilter = taskOrgFilter(orgId);
 
   const priorityGroups = await client.task.groupBy({
     by: ["priority", "status"],
+    where: { ...orgFilter },
     _count: true,
   });
 
   const overdueCounts = await client.task.groupBy({
     by: ["priority"],
     where: {
+      ...orgFilter,
       deadline: { lt: new Date(appDateKey(now)) },
       status: { not: TaskStatus.DONE },
     },
@@ -244,9 +267,12 @@ export async function getPriorityStats(client: PrismaClient = prisma) {
 /**
  * Get status distribution
  */
-export async function getStatusStats(client: PrismaClient = prisma) {
+export async function getStatusStats(orgId: string | null = null, client: PrismaClient = prisma) {
+  const orgFilter = taskOrgFilter(orgId);
+
   const statusGroups = await client.task.groupBy({
     by: ["status"],
+    where: { ...orgFilter },
     _count: true,
   });
 
@@ -270,22 +296,26 @@ export async function getStatusStats(client: PrismaClient = prisma) {
  */
 export async function getTopPerformers(
   limit: number = 5,
+  orgId: string | null = null,
   client: PrismaClient = prisma,
 ) {
-  return getTopPerformersForWindow(30, limit, client);
+  return getTopPerformersForWindow(30, limit, orgId, client);
 }
 
 export async function getTopPerformersForWindow(
   days: number = 30,
   limit: number = 5,
+  orgId: string | null = null,
   client: PrismaClient = prisma,
 ) {
   const windowStartKey = subDaysFromKey(appDateKey(), days - 1);
   const windowStart = dateKeyBounds(windowStartKey).start;
+  const orgFilter = taskOrgFilter(orgId);
 
   const performers = await client.task.groupBy({
     by: ["completed_by"],
     where: {
+      ...orgFilter,
       status: TaskStatus.DONE,
       completed_by: { not: null },
       completed_at: { gte: windowStart },
@@ -318,9 +348,13 @@ export async function getTopPerformersForWindow(
 /**
  * Get workload distribution (assigned tasks per user)
  */
-export async function getWorkloadDistribution(client: PrismaClient = prisma) {
+export async function getWorkloadDistribution(orgId: string | null = null, client: PrismaClient = prisma) {
+  const assignmentFilter = assignmentOrgFilter(orgId);
+  const taskFilter = taskOrgFilter(orgId);
+
   const assignments = await client.taskAssignment.groupBy({
     by: ["user_id"],
+    where: { ...assignmentFilter },
     _count: { task_id: true },
   });
 
@@ -328,6 +362,7 @@ export async function getWorkloadDistribution(client: PrismaClient = prisma) {
   const completions = await client.task.groupBy({
     by: ["completed_by"],
     where: {
+      ...taskFilter,
       status: TaskStatus.DONE,
       completed_by: { not: null },
     },
@@ -360,10 +395,12 @@ export async function getWorkloadDistribution(client: PrismaClient = prisma) {
 /**
  * Get recurring template statistics
  */
-export async function getRecurringStats(client: PrismaClient = prisma) {
+export async function getRecurringStats(orgId: string | null = null, client: PrismaClient = prisma) {
   const now = new Date();
   const nextWeekKey = addDaysToKey(appDateKey(now), 7);
   const nextWeek = new Date(nextWeekKey);
+  const tmplFilter = templateOrgFilter(orgId);
+  const taskFilter = taskOrgFilter(orgId);
 
   const [
     activeTemplates,
@@ -373,12 +410,13 @@ export async function getRecurringStats(client: PrismaClient = prisma) {
   ] = await Promise.all([
     // Active templates count
     client.recurringTaskTemplate.count({
-      where: { is_active: true },
+      where: { ...tmplFilter, is_active: true },
     }),
 
     // Upcoming instances (next 7 days)
     client.task.count({
       where: {
+        ...taskFilter,
         recurring_template_id: { not: null },
         occurrence_date: {
           gte: now,
@@ -391,6 +429,7 @@ export async function getRecurringStats(client: PrismaClient = prisma) {
     // Total recurring instances
     client.task.count({
       where: {
+        ...taskFilter,
         recurring_template_id: { not: null },
       },
     }),
@@ -398,6 +437,7 @@ export async function getRecurringStats(client: PrismaClient = prisma) {
     // Completed recurring instances
     client.task.count({
       where: {
+        ...taskFilter,
         recurring_template_id: { not: null },
         status: TaskStatus.DONE,
       },
@@ -421,12 +461,14 @@ export async function getRecurringStats(client: PrismaClient = prisma) {
  */
 export async function getTaskTrends(
   days: number = 7,
+  orgId: string | null = null,
   client: PrismaClient = prisma,
 ) {
   const todayKey = appDateKey();
   const dateKeys = Array.from({ length: days }, (_, i) =>
     subDaysFromKey(todayKey, days - 1 - i),
   );
+  const orgFilter = taskOrgFilter(orgId);
 
   const trends = await Promise.all(
     dateKeys.map(async (dateKey) => {
@@ -435,11 +477,13 @@ export async function getTaskTrends(
       const [created, completed] = await Promise.all([
         client.task.count({
           where: {
+            ...orgFilter,
             created_at: { gte: start, lt: end },
           },
         }),
         client.task.count({
           where: {
+            ...orgFilter,
             status: TaskStatus.DONE,
             completed_at: { gte: start, lt: end },
           },
@@ -455,6 +499,7 @@ export async function getTaskTrends(
 
 export async function getProjectStatsForWindow(
   days: number = 30,
+  orgId: string | null = null,
   client: PrismaClient = prisma,
 ) {
   const now = new Date();
@@ -465,10 +510,13 @@ export async function getProjectStatsForWindow(
     TaskStatus.ARCHIVED,
     TaskStatus.REJECTED,
   ];
+  const taskFilter = taskOrgFilter(orgId);
+  const projFilter = projectOrgFilter(orgId);
 
   const [projects, activeTasks, overdueActiveTasks, completedTasks] =
     await Promise.all([
       client.project.findMany({
+        where: { ...projFilter },
         select: {
           project_id: true,
           name: true,
@@ -479,6 +527,7 @@ export async function getProjectStatsForWindow(
       client.task.groupBy({
         by: ["project_id"],
         where: {
+          ...taskFilter,
           status: { notIn: inactiveStatuses },
         },
         _count: { task_id: true },
@@ -486,6 +535,7 @@ export async function getProjectStatsForWindow(
       client.task.groupBy({
         by: ["project_id"],
         where: {
+          ...taskFilter,
           deadline: { lt: appDayBounds(now).start },
           status: { notIn: inactiveStatuses },
         },
@@ -493,6 +543,7 @@ export async function getProjectStatsForWindow(
       }),
       client.task.findMany({
         where: {
+          ...taskFilter,
           status: TaskStatus.DONE,
           completed_at: { gte: windowStart },
         },
@@ -645,12 +696,13 @@ export async function getUserWeeklyStats(
 /**
  * Get all dashboard stats in a single call (optimized)
  */
-export async function getAllStats(client: PrismaClient = prisma) {
-  return getStatsForWindow(30, client);
+export async function getAllStats(orgId: string | null = null, client: PrismaClient = prisma) {
+  return getStatsForWindow(30, orgId, client);
 }
 
 export async function getStatsForWindow(
   days: number = 30,
+  orgId: string | null = null,
   client: PrismaClient = prisma,
 ) {
   const [
@@ -664,15 +716,15 @@ export async function getStatsForWindow(
     trends,
     projects,
   ] = await Promise.all([
-    getOverviewStats(client),
-    getCompletionRatesForWindow(days, client),
-    getPriorityStats(client),
-    getStatusStats(client),
-    getTopPerformersForWindow(days, 5, client),
-    getWorkloadDistribution(client),
-    getRecurringStats(client),
-    getTaskTrends(Math.min(days, 90), client),
-    getProjectStatsForWindow(days, client),
+    getOverviewStats(orgId, client),
+    getCompletionRatesForWindow(days, orgId, client),
+    getPriorityStats(orgId, client),
+    getStatusStats(orgId, client),
+    getTopPerformersForWindow(days, 5, orgId, client),
+    getWorkloadDistribution(orgId, client),
+    getRecurringStats(orgId, client),
+    getTaskTrends(Math.min(days, 90), orgId, client),
+    getProjectStatsForWindow(days, orgId, client),
   ]);
 
   return {
