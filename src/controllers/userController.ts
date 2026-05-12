@@ -8,9 +8,10 @@ function getAuthUser(req: Request) {
   return req.user as { user_id: string; role: UserRole } | undefined;
 }
 
-export async function listUsers(_req: Request, res: Response) {
+export async function listUsers(req: Request, res: Response) {
   try {
-    const users = await userRepo.getAllUsers();
+    const orgId = req.user?.organization_id ?? null;
+    const users = await userRepo.getAllUsers(orgId);
     res.json({ success: true, data: users });
   } catch (error) {
     console.error("Error in listUsers:", error);
@@ -20,7 +21,8 @@ export async function listUsers(_req: Request, res: Response) {
 
 export async function getUser(req: Request, res: Response) {
   try {
-    const user = await userRepo.getUserById(req.params.id as string);
+    const orgId = req.user?.organization_id ?? null;
+    const user = await userRepo.getUserById(req.params.id as string, orgId);
     if (!user) {
       return res.status(404).json({ success: false, error: "User not found" });
     }
@@ -33,13 +35,17 @@ export async function getUser(req: Request, res: Response) {
 
 export async function createUser(req: Request, res: Response) {
   const actor = getAuthUser(req);
-  if (actor?.role !== UserRole.ADMIN) {
+  if (actor?.role !== UserRole.ADMIN && actor?.role !== UserRole.SUPER_ADMIN) {
     return res.status(403).json({ success: false, error: "Forbidden" });
   }
 
   try {
     const body = req.body as CreateUserInput;
-    const user = await userRepo.createUser(body);
+    // ADMIN creates users in their own org; SUPER_ADMIN must supply organization_id in the body
+    const organization_id = actor.role === UserRole.SUPER_ADMIN
+      ? body.organization_id
+      : actor.organization_id!;
+    const user = await userRepo.createUser({ ...body, organization_id });
     res.status(201).json({ success: true, data: user });
   } catch (error) {
     console.error("Error in createUser:", error);
@@ -93,7 +99,7 @@ export async function registerPushToken(req: Request, res: Response) {
 
 export async function deleteUser(req: Request, res: Response) {
   const actor = getAuthUser(req);
-  if (actor?.role !== UserRole.ADMIN) {
+  if (actor?.role !== UserRole.ADMIN && actor?.role !== UserRole.SUPER_ADMIN) {
     return res.status(403).json({ success: false, error: "Forbidden" });
   }
 
