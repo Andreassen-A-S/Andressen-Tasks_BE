@@ -41,7 +41,7 @@ export async function assignTask(req: Request, res: Response) {
   try {
     const body = req.body as CreateTaskAssignmentInput;
 
-    const task = await taskRepo.getTaskById(body.task_id);
+    const task = await taskRepo.getTaskById(body.task_id, req.user?.organization_id ?? null);
     if (!task) {
       return res.status(404).json({ success: false, error: "Task not found" });
     }

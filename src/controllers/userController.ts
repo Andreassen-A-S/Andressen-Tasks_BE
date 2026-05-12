@@ -5,7 +5,7 @@ import { UserRole } from "../generated/prisma/client";
 import Expo from "expo-server-sdk";
 
 function getAuthUser(req: Request) {
-  return req.user as { user_id: string; role: UserRole } | undefined;
+  return req.user as { user_id: string; role: UserRole; organization_id: string | null } | undefined;
 }
 
 export async function listUsers(req: Request, res: Response) {

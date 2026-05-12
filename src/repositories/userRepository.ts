@@ -9,7 +9,7 @@ import {
   type UpdateUserInput,
 } from "../types/user";
 
-const systemRoles = [UserRole.SYSTEM, UserRole.SUPER_ADMIN];
+const systemRoles: UserRole[] = [UserRole.SYSTEM, UserRole.SUPER_ADMIN];
 
 export async function getAllUsers(orgId: string | null): Promise<SafeUser[]> {
   return prisma.user.findMany({

@@ -13,7 +13,7 @@ export async function createSubtask(req: Request, res: Response) {
         .json({ success: false, error: "parent_task_id is required" });
     }
 
-    const parentTask = await taskRepo.getTaskById(parent_task_id);
+    const parentTask = await taskRepo.getTaskById(parent_task_id, req.user?.organization_id ?? null);
     if (!parentTask) {
       return res
         .status(404)

@@ -18,6 +18,7 @@ export async function getUserById(userId: string): Promise<SafeUser | null> {
       email: true,
       role: true,
       position: true,
+      organization_id: true,
       created_at: true,
       updated_at: true,
       password: false,
