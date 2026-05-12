@@ -38,6 +38,7 @@ export async function authenticateUser(credentials: LoginRequest) {
     role: user.role,
     email: user.email,
     name: user.name,
+    organization_id: user.organization_id,
   };
 
   const token = jwt.sign(payload, secret, {
@@ -53,6 +54,7 @@ export async function authenticateUser(credentials: LoginRequest) {
       email: user.email,
       role: user.role,
       position: user.position,
+      organization_id: user.organization_id,
     },
   };
 }

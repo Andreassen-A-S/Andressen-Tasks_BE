@@ -13,6 +13,7 @@ export interface LoginResponse {
       email: string;
       role: string;
       position: string | null;
+      organization_id: string | null;
     };
   };
   error?: string;
@@ -23,4 +24,5 @@ export interface JWTPayload {
   role: string;
   email: string;
   name: string | null;
+  organization_id: string | null;
 }

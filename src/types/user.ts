@@ -6,6 +6,7 @@ export interface SafeUser {
   email: string;
   position: string | null;
   role: UserRole;
+  organization_id: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -24,6 +25,7 @@ export interface CreateUserInput {
   password: string;
   role?: UserRole;
   position: string;
+  organization_id: string;
 }
 
 export const userSelect = {
@@ -32,6 +34,7 @@ export const userSelect = {
   email: true,
   role: true,
   position: true,
+  organization_id: true,
   created_at: true,
   updated_at: true,
 };

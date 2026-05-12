@@ -7,6 +7,7 @@ declare module "express" {
       email: string;
       role: UserRole;
       name: string | null;
+      organization_id: string | null;
     };
   }
 }

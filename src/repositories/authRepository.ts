@@ -5,7 +5,7 @@ import type { SafeUser } from "../types/user";
 
 export async function getUserByEmail(email: string): Promise<User | null> {
   return prisma.user.findFirst({
-    where: { email, role: { not: UserRole.SYSTEM } },
+    where: { email, role: { notIn: [UserRole.SYSTEM] } },
   });
 }
 
