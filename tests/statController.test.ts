@@ -30,6 +30,7 @@ function createRequest(overrides: Record<string, any> = {}): Request {
     params: {},
     query: {},
     body: {},
+    effectiveOrgId: null,
     ...overrides,
   } as Request;
 }
@@ -75,7 +76,7 @@ describe("statController.getMyStats", () => {
 
     await statController.getMyStats(req, res);
 
-    expect(getUserStatsSpy).toHaveBeenCalledWith("u1");
+    expect(getUserStatsSpy).toHaveBeenCalledWith("u1", null);
     expect(res.body).toEqual({ success: true, data: stats });
   });
 });
@@ -127,7 +128,7 @@ describe("statController.getUserStats", () => {
 
     await statController.getUserStats(req, res);
 
-    expect(getUserStatsSpy).toHaveBeenCalledWith("u2");
+    expect(getUserStatsSpy).toHaveBeenCalledWith("u2", null);
     expect(res.body).toEqual({ success: true, data: stats });
   });
 });
@@ -163,7 +164,7 @@ describe("statController.getDashboardStats", () => {
 
     await statController.getDashboardStats(req, res);
 
-    expect(getStatsForWindowSpy).toHaveBeenCalledWith(30);
+    expect(getStatsForWindowSpy).toHaveBeenCalledWith(30, null);
     expect(res.body).toEqual({ success: true, data: {} });
   });
 
@@ -178,7 +179,7 @@ describe("statController.getDashboardStats", () => {
 
     await statController.getDashboardStats(req, res);
 
-    expect(getStatsForWindowSpy).toHaveBeenCalledWith(30);
+    expect(getStatsForWindowSpy).toHaveBeenCalledWith(30, null);
     expect(res.body).toEqual({ success: true, data: {} });
   });
 

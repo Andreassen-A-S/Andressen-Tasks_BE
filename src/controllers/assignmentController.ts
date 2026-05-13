@@ -8,23 +8,19 @@ import * as taskRepo from "../repositories/taskRepository";
 import * as userRepo from "../repositories/userRepository";
 import { sendPushNotification } from "../services/notificationService";
 
-// interface AssignmentParams {
-//   id: string;
-// }
-
 // List all assignments (with optional filters)
 export async function listAssignments(req: Request, res: Response) {
   try {
     const { userId, taskId } = req.query;
+    const orgId = req.effectiveOrgId;
     let assignments: TaskAssignment[];
 
     if (userId && typeof userId === "string") {
-      assignments = await assignmentRepo.getUserAssignments(userId);
+      assignments = await assignmentRepo.getUserAssignments(userId, orgId);
     } else if (taskId && typeof taskId === "string") {
-      assignments = await assignmentRepo.getTaskAssignments(taskId);
+      assignments = await assignmentRepo.getTaskAssignments(taskId, orgId);
     } else {
-      // Get all assignments when no filters are provided
-      assignments = await assignmentRepo.getAllAssignments();
+      assignments = await assignmentRepo.getAllAssignments(orgId);
     }
 
     res.json({ success: true, data: assignments });
@@ -41,7 +37,7 @@ export async function assignTask(req: Request, res: Response) {
   try {
     const body = req.body as CreateTaskAssignmentInput;
 
-    const task = await taskRepo.getTaskById(body.task_id, req.user?.organization_id ?? null);
+    const task = await taskRepo.getTaskById(body.task_id, req.effectiveOrgId);
     if (!task) {
       return res.status(404).json({ success: false, error: "Task not found" });
     }
@@ -92,7 +88,7 @@ export async function getAssignment(req: Request, res: Response) {
       return res.status(400).json({ error: "Missing or invalid id" });
     }
 
-    const assignment = await assignmentRepo.getAssignmentById(id);
+    const assignment = await assignmentRepo.getAssignmentById(id, req.effectiveOrgId);
 
     if (!assignment) {
       return res
@@ -119,7 +115,7 @@ export async function updateAssignment(req: Request, res: Response) {
       return res.status(400).json({ error: "Missing or invalid id" });
     }
 
-    const existingAssignment = await assignmentRepo.getAssignmentById(id);
+    const existingAssignment = await assignmentRepo.getAssignmentById(id, req.effectiveOrgId);
 
     if (!existingAssignment) {
       return res
@@ -172,7 +168,7 @@ export async function deleteAssignment(req: Request, res: Response) {
       return res.status(400).json({ error: "Missing or invalid id" });
     }
 
-    const existingAssignment = await assignmentRepo.getAssignmentById(id);
+    const existingAssignment = await assignmentRepo.getAssignmentById(id, req.effectiveOrgId);
     if (!existingAssignment) {
       return res
         .status(404)

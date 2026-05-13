@@ -26,6 +26,13 @@ export function authenticateToken(
       role: payload.role as UserRole,
     };
 
+    if (req.user.role === UserRole.SUPER_ADMIN) {
+      const orgContext = req.headers["x-org-context"];
+      req.effectiveOrgId = typeof orgContext === "string" ? orgContext : null;
+    } else {
+      req.effectiveOrgId = req.user.organization_id;
+    }
+
     next();
   } catch (error) {
     console.error("Token verification failed:", {
@@ -50,4 +57,15 @@ export function requireSuperAdmin(
     return res.status(403).json({ success: false, error: "Forbidden" });
   }
   next();
+}
+
+export function requireAdminOrSuperAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  const { role, organization_id } = req.user ?? {};
+  if (role === UserRole.SUPER_ADMIN) return next();
+  if (role === UserRole.ADMIN && organization_id && organization_id === req.params.id) return next();
+  return res.status(403).json({ success: false, error: "Forbidden" });
 }

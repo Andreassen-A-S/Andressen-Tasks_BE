@@ -15,7 +15,7 @@ const statsService = new StatsService();
  */
 export async function getOverview(req: Request, res: Response) {
   try {
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     const stats = await statsService.getOverview(orgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
@@ -32,7 +32,7 @@ export async function getOverview(req: Request, res: Response) {
  */
 export async function getCompletionRates(req: Request, res: Response) {
   try {
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     const stats = await statsService.getCompletionRates(orgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
@@ -49,7 +49,7 @@ export async function getCompletionRates(req: Request, res: Response) {
  */
 export async function getPriorityStats(req: Request, res: Response) {
   try {
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     const stats = await statsService.getPriorityStats(orgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
@@ -66,7 +66,7 @@ export async function getPriorityStats(req: Request, res: Response) {
  */
 export async function getStatusStats(req: Request, res: Response) {
   try {
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     const stats = await statsService.getStatusStats(orgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
@@ -83,7 +83,7 @@ export async function getStatusStats(req: Request, res: Response) {
  */
 export async function getTopPerformers(req: Request, res: Response) {
   try {
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     const limit = parseInt(req.query.limit as string) || 5;
     const stats = await statsService.getTopPerformers(limit, orgId);
     return res.json({ success: true, data: stats });
@@ -106,7 +106,7 @@ export async function getTopPerformers(req: Request, res: Response) {
  */
 export async function getWorkloadDistribution(req: Request, res: Response) {
   try {
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     const stats = await statsService.getWorkloadDistribution(orgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
@@ -123,7 +123,7 @@ export async function getWorkloadDistribution(req: Request, res: Response) {
  */
 export async function getRecurringStats(req: Request, res: Response) {
   try {
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     const stats = await statsService.getRecurringStats(orgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
@@ -140,7 +140,7 @@ export async function getRecurringStats(req: Request, res: Response) {
  */
 export async function getTaskTrends(req: Request, res: Response) {
   try {
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     const days = parseInt(req.query.days as string) || 7;
     const stats = await statsService.getTaskTrends(days, orgId);
     return res.json({ success: true, data: stats });
@@ -164,7 +164,7 @@ export async function getTaskTrends(req: Request, res: Response) {
  */
 export async function getDashboardStats(req: Request, res: Response) {
   try {
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     const raw = parseInt(req.query.days as string, 10);
     const days = Number.isNaN(raw) ? 30 : raw;
     const stats = await statsService.getStatsForWindow(days, orgId);
@@ -192,7 +192,7 @@ export async function getUserStats(req: Request, res: Response) {
 
   try {
     const targetUserId = getParamId(req, "userId") || authUserId;
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
 
     const isPrivileged = req.user && (req.user.role === UserRole.ADMIN || req.user.role === UserRole.SUPER_ADMIN);
 
@@ -223,7 +223,7 @@ export async function getMyStats(req: Request, res: Response) {
   if (!userId) return;
 
   try {
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     const stats = await statsService.getUserStats(userId, orgId);
     return res.json({ success: true, data: stats });
   } catch (error) {

@@ -55,7 +55,7 @@ export async function prepareAttachments(req: Request, res: Response) {
       }
     }
 
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     const isAdmin = isPrivileged(req.user?.role);
     const task = await prisma.task.findFirst({
       where: {
@@ -112,7 +112,7 @@ export async function getTaskAttachments(req: Request, res: Response) {
     const userId = requireUserId(req, res);
     if (!userId) return;
 
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     const isAdmin = isPrivileged(req.user?.role);
 
     const task = await prisma.task.findFirst({

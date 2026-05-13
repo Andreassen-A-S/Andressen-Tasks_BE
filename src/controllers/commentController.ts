@@ -23,7 +23,7 @@ export async function listTaskComments(req: Request, res: Response) {
     const userId = requireUserId(req, res);
     if (!userId) return;
 
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
 
     // Verify task exists and user has access
     const task = await prisma.task.findFirst({
@@ -105,7 +105,7 @@ export async function createComment(req: Request, res: Response) {
       return res.status(400).json({ success: false, error: "Duplicate upload tokens" });
     }
 
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
 
     // Verify task exists and user has access (include all assignments for notification)
     const task = await prisma.task.findFirst({

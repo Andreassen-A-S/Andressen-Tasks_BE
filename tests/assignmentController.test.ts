@@ -35,6 +35,7 @@ function createRequest(overrides: Record<string, any> = {}): Request {
     params: {},
     body: {},
     query: {},
+    effectiveOrgId: null,
     ...overrides,
   } as Request;
 }
@@ -55,7 +56,7 @@ describe("assignmentController.listAssignments", () => {
 
     await assignmentController.listAssignments(req, res);
 
-    expect(repoSpy).toHaveBeenCalledWith("u1");
+    expect(repoSpy).toHaveBeenCalledWith("u1", null);
     expect(res.body).toEqual({ success: true, data });
   });
 });

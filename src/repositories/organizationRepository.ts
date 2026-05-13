@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma";
 import type { Organization } from "../generated/prisma/client";
+import { generateSignedReadUrl } from "../services/storageService";
 
 export class OrganizationNotFoundError extends Error {
   constructor(id: string) {
@@ -20,12 +21,23 @@ export interface UpdateOrganizationInput {
   logo_url?: string | null;
 }
 
-export async function getAllOrganizations(): Promise<Organization[]> {
-  return prisma.organization.findMany({ orderBy: { created_at: "asc" } });
+async function withSignedLogo<T extends { logo_url: string | null }>(org: T): Promise<T> {
+  if (!org.logo_url) return org;
+  return { ...org, logo_url: await generateSignedReadUrl(org.logo_url) };
+}
+
+export async function getAllOrganizations() {
+  const orgs = await prisma.organization.findMany({
+    orderBy: { created_at: "asc" },
+    include: { _count: { select: { users: true } } },
+  });
+  return Promise.all(orgs.map(withSignedLogo));
 }
 
 export async function getOrganizationById(id: string): Promise<Organization | null> {
-  return prisma.organization.findUnique({ where: { org_id: id } });
+  const org = await prisma.organization.findUnique({ where: { org_id: id } });
+  if (!org) return null;
+  return withSignedLogo(org);
 }
 
 export async function getOrganizationBySlug(slug: string): Promise<Organization | null> {

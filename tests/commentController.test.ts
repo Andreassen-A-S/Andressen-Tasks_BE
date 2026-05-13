@@ -7,13 +7,13 @@ import * as taskEventRepo from "../src/repositories/taskEventRepository";
 import * as userRepo from "../src/repositories/userRepository";
 import * as storageService from "../src/services/storageService";
 
-const findUniqueMock = mock<(...args: any[]) => Promise<Task | null>>();
+const findFirstMock = mock<(...args: any[]) => Promise<Task | null>>();
 const sendPushNotificationMock = mock<(...args: any[]) => Promise<void>>();
 
 mock.module("../src/db/prisma", () => ({
   prisma: {
     task: {
-      findUnique: findUniqueMock,
+      findFirst: findFirstMock,
     },
   },
 }));
@@ -49,6 +49,7 @@ function createRequest(overrides: Record<string, any> = {}): Request {
   return {
     params: {},
     body: {},
+    effectiveOrgId: null,
     ...overrides,
   } as Request;
 }
@@ -60,7 +61,7 @@ afterEach(() => {
 
 describe("commentController.listTaskComments", () => {
   test("returns 404 when task is missing", async () => {
-    findUniqueMock.mockResolvedValueOnce(null);
+    findFirstMock.mockResolvedValueOnce(null);
     const req = createRequest({
       params: { taskId: "t1" } as Request["params"],
       user: { user_id: "u1", role: UserRole.USER },
@@ -74,7 +75,7 @@ describe("commentController.listTaskComments", () => {
   });
 
   test("returns 403 when user has no access", async () => {
-    findUniqueMock.mockResolvedValueOnce({
+    findFirstMock.mockResolvedValueOnce({
       created_by: "another-user",
       assignments: [],
     } as any);
@@ -136,7 +137,7 @@ describe("commentController.createComment", () => {
   });
 
   test("returns 400 when createComment throws invalid token error", async () => {
-    findUniqueMock.mockResolvedValueOnce({
+    findFirstMock.mockResolvedValueOnce({
       task_id: "t1",
       title: "Test Task",
       created_by: "u1",
@@ -160,7 +161,7 @@ describe("commentController.createComment", () => {
   });
 
   test("creates comment and logs event", async () => {
-    findUniqueMock.mockResolvedValueOnce({
+    findFirstMock.mockResolvedValueOnce({
       task_id: "t1",
       title: "Test Task",
       created_by: "u1",
@@ -199,7 +200,7 @@ describe("commentController.createComment", () => {
   });
 
   test("creates comment with upload tokens", async () => {
-    findUniqueMock.mockResolvedValueOnce({
+    findFirstMock.mockResolvedValueOnce({
       task_id: "t1",
       title: "Test Task",
       created_by: "u1",
@@ -238,7 +239,7 @@ describe("commentController.createComment", () => {
   });
 
   test("returns signed read URL for attachment in response", async () => {
-    findUniqueMock.mockResolvedValueOnce({
+    findFirstMock.mockResolvedValueOnce({
       task_id: "t1",
       title: "Test Task",
       created_by: "u1",
@@ -288,7 +289,7 @@ describe("commentController.createComment — notification routing", () => {
 
   test("notifies non-commenter, non-admin assignee", async () => {
     stubCommentInfra();
-    findUniqueMock.mockResolvedValueOnce({
+    findFirstMock.mockResolvedValueOnce({
       task_id: "t1",
       title: "Test Task",
       created_by: "u1",
@@ -315,7 +316,7 @@ describe("commentController.createComment — notification routing", () => {
 
   test("skips commenter from assignee notifications", async () => {
     stubCommentInfra();
-    findUniqueMock.mockResolvedValueOnce({
+    findFirstMock.mockResolvedValueOnce({
       task_id: "t1",
       title: "Test Task",
       created_by: "u1",
@@ -334,7 +335,7 @@ describe("commentController.createComment — notification routing", () => {
 
   test("skips admin-role assignees from the assignee loop (they get a separate admin notification instead)", async () => {
     stubCommentInfra();
-    findUniqueMock.mockResolvedValueOnce({
+    findFirstMock.mockResolvedValueOnce({
       task_id: "t1",
       title: "Test Task",
       created_by: "u1",
@@ -362,7 +363,7 @@ describe("commentController.createComment — notification routing", () => {
 
   test("notifies admins separately from assignees", async () => {
     stubCommentInfra();
-    findUniqueMock.mockResolvedValueOnce({
+    findFirstMock.mockResolvedValueOnce({
       task_id: "t1",
       title: "Test Task",
       created_by: "u1",
@@ -388,7 +389,7 @@ describe("commentController.createComment — notification routing", () => {
 
   test("skips commenter from admin notifications when commenter is an admin", async () => {
     stubCommentInfra();
-    findUniqueMock.mockResolvedValueOnce({
+    findFirstMock.mockResolvedValueOnce({
       task_id: "t1",
       title: "Test Task",
       created_by: "a1",

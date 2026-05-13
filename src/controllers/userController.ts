@@ -10,7 +10,7 @@ function getAuthUser(req: Request) {
 
 export async function listUsers(req: Request, res: Response) {
   try {
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     const users = await userRepo.getAllUsers(orgId);
     res.json({ success: true, data: users });
   } catch (error) {
@@ -21,7 +21,7 @@ export async function listUsers(req: Request, res: Response) {
 
 export async function getUser(req: Request, res: Response) {
   try {
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     const user = await userRepo.getUserById(req.params.id as string, orgId);
     if (!user) {
       return res.status(404).json({ success: false, error: "User not found" });
@@ -57,7 +57,11 @@ export async function updateUser(req: Request, res: Response) {
   const actor = getAuthUser(req);
   const targetId = req.params.id as string;
 
-  if (actor?.user_id !== targetId && actor?.role !== UserRole.ADMIN) {
+  if (
+    actor?.user_id !== targetId &&
+    actor?.role !== UserRole.ADMIN &&
+    actor?.role !== UserRole.SUPER_ADMIN
+  ) {
     return res.status(403).json({ success: false, error: "Forbidden" });
   }
 

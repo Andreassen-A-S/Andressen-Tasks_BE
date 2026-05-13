@@ -12,7 +12,7 @@ function handleDomainError(error: unknown, res: Response, fallbackMessage: strin
 
 export async function listProjects(req: Request, res: Response) {
   try {
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     const projects = await projectRepo.getAllProjects(orgId);
     return res.json({ success: true, data: projects });
   } catch (error) {
@@ -26,7 +26,7 @@ export async function getProject(req: Request, res: Response) {
   if (!id) return res.status(400).json({ success: false, error: "Missing or invalid id" });
 
   try {
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     const project = await projectRepo.getProjectWithTasks(id, orgId);
     if (!project) return res.status(404).json({ success: false, error: "Project not found" });
     return res.json({ success: true, data: project });
@@ -39,7 +39,7 @@ export async function createProject(req: Request, res: Response) {
   const userId = requireUserId(req, res);
   if (!userId) return;
 
-  const orgId = req.user?.organization_id;
+  const orgId = req.effectiveOrgId;
   if (!orgId) {
     return res.status(403).json({ success: false, error: "No organization assigned" });
   }
@@ -69,7 +69,7 @@ export async function updateProject(req: Request, res: Response) {
   }
 
   try {
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     const project = await projectRepo.updateProject(id, { name: name?.trim(), description, color }, orgId);
     return res.json({ success: true, data: project });
   } catch (error) {
@@ -82,9 +82,9 @@ export async function deleteProject(req: Request, res: Response) {
   if (!id) return res.status(400).json({ success: false, error: "Missing or invalid id" });
 
   try {
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     await projectRepo.deleteProject(id, orgId);
-    return res.json({ success: true });
+    return res.status(204).send();
   } catch (error) {
     return handleDomainError(error, res, "Failed to delete project");
   }

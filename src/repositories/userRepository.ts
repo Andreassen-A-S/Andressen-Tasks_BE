@@ -9,12 +9,10 @@ import {
   type UpdateUserInput,
 } from "../types/user";
 
-const systemRoles: UserRole[] = [UserRole.SYSTEM, UserRole.SUPER_ADMIN];
-
 export async function getAllUsers(orgId: string | null): Promise<SafeUser[]> {
   return prisma.user.findMany({
     where: {
-      role: { notIn: systemRoles },
+      role: { not: UserRole.SYSTEM },
       ...(orgId ? { organization_id: orgId } : {}),
     },
     select: userSelect,
@@ -26,7 +24,7 @@ export async function getUserById(id: string, orgId: string | null): Promise<Saf
   return prisma.user.findFirst({
     where: {
       user_id: id,
-      role: { notIn: systemRoles },
+      role: { not: UserRole.SYSTEM },
       ...(orgId ? { organization_id: orgId } : {}),
     },
     select: userSelect,
@@ -53,7 +51,7 @@ export async function updateUser(
     where: { user_id: id },
     select: { role: true },
   });
-  if (!existing || systemRoles.includes(existing.role)) {
+  if (!existing || existing.role === UserRole.SYSTEM) {
     throw new Error("User not found");
   }
   if (data.password) {
@@ -68,7 +66,7 @@ export async function updateUser(
 
 export async function deleteUser(id: string): Promise<void> {
   const result = await prisma.user.deleteMany({
-    where: { user_id: id, role: { notIn: systemRoles } },
+    where: { user_id: id, role: { not: UserRole.SYSTEM } },
   });
   if (result.count === 0) {
     throw new Error("User not found");

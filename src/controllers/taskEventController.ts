@@ -12,7 +12,7 @@ export async function listTaskEvents(req: Request, res: Response) {
     if (!userId) return;
 
     const isAdmin = req.user?.role === UserRole.ADMIN || req.user?.role === UserRole.SUPER_ADMIN;
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     const task = await prisma.task.findFirst({
       where: {
         task_id: taskId,

@@ -20,7 +20,7 @@ const recurringService = new RecurringTaskService();
  */
 export async function listTemplates(req: Request, res: Response) {
   try {
-    const orgId = req.user?.organization_id ?? null;
+    const orgId = req.effectiveOrgId;
     const templates = await recurringService.getAllTemplates(orgId);
     return res.json({ success: true, data: templates });
   } catch (error) {
@@ -37,8 +37,8 @@ export async function listTemplates(req: Request, res: Response) {
  */
 export async function listActiveTemplates(req: Request, res: Response) {
   try {
-    const orgId = req.user?.organization_id ?? null;
-    const templates = await recurringService.getAllTemplates(orgId);
+    const orgId = req.effectiveOrgId;
+    const templates = await recurringService.getActiveTemplates(orgId);
     return res.json({ success: true, data: templates });
   } catch (error) {
     console.error("Error in listActiveTemplates:", error);

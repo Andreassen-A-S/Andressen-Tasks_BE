@@ -6,8 +6,9 @@ import type {
 
 import type { TaskAssignment } from "../generated/prisma/client";
 
-export async function getAllAssignments(): Promise<TaskAssignment[]> {
+export async function getAllAssignments(orgId: string | null): Promise<TaskAssignment[]> {
   return prisma.taskAssignment.findMany({
+    where: orgId ? { task: { project: { organization_id: orgId } } } : undefined,
     include: {
       user: {
         select: {
@@ -58,9 +59,13 @@ export async function assignTaskToUser(
 
 export async function getTaskAssignments(
   taskId: string,
+  orgId: string | null,
 ): Promise<TaskAssignment[]> {
   return prisma.taskAssignment.findMany({
-    where: { task_id: taskId },
+    where: {
+      task_id: taskId,
+      ...(orgId ? { task: { project: { organization_id: orgId } } } : {}),
+    },
     include: {
       user: {
         select: {
@@ -76,9 +81,13 @@ export async function getTaskAssignments(
 
 export async function getAssignmentById(
   assignmentId: string,
+  orgId: string | null,
 ): Promise<TaskAssignment | null> {
-  return prisma.taskAssignment.findUnique({
-    where: { assignment_id: assignmentId },
+  return prisma.taskAssignment.findFirst({
+    where: {
+      assignment_id: assignmentId,
+      ...(orgId ? { task: { project: { organization_id: orgId } } } : {}),
+    },
     include: {
       user: {
         select: {
@@ -104,9 +113,13 @@ export async function getAssignmentById(
 
 export async function getUserAssignments(
   userId: string,
+  orgId: string | null,
 ): Promise<TaskAssignment[]> {
   return prisma.taskAssignment.findMany({
-    where: { user_id: userId },
+    where: {
+      user_id: userId,
+      ...(orgId ? { task: { project: { organization_id: orgId } } } : {}),
+    },
     include: {
       task: true,
     },

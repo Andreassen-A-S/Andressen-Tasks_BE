@@ -53,7 +53,7 @@ app.use(
     },
     credentials: false, // Bearer tokens in Authorization header
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Org-Context"],
   }),
 );
 
