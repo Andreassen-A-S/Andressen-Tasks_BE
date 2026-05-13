@@ -49,6 +49,49 @@ export class TaskNotProgressableError extends Error {
   }
 }
 
+export class CrossOrganizationReferenceError extends Error {
+  constructor(message = "Referenced records must belong to the same organization.") {
+    super(message);
+    this.name = "CrossOrganizationReferenceError";
+  }
+}
+
+async function resolveProjectOrgId(
+  client: Prisma.TransactionClient,
+  projectId: string,
+  effectiveOrgId: string | null,
+): Promise<string> {
+  const project = await client.project.findFirst({
+    where: {
+      project_id: projectId,
+      ...(effectiveOrgId ? { organization_id: effectiveOrgId } : {}),
+    },
+    select: { organization_id: true },
+  });
+  if (!project) throw new CrossOrganizationReferenceError("Project not found in organization.");
+  return project.organization_id;
+}
+
+async function assertUsersInOrg(
+  client: Prisma.TransactionClient,
+  userIds: string[] | undefined,
+  organizationId: string,
+): Promise<void> {
+  if (!userIds || userIds.length === 0) return;
+  const uniqueUserIds = Array.from(new Set(userIds));
+  const users = await client.user.findMany({
+    where: {
+      user_id: { in: uniqueUserIds },
+      organization_id: organizationId,
+      role: { not: UserRole.SYSTEM },
+    },
+    select: { user_id: true },
+  });
+  if (users.length !== uniqueUserIds.length) {
+    throw new CrossOrganizationReferenceError("Assigned users must belong to the task organization.");
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Reads
 // ---------------------------------------------------------------------------
@@ -90,8 +133,25 @@ export async function createTask(data: CreateTaskInput) {
   return prisma.task.create({ data });
 }
 
-export async function createTaskWithAssignments(data: CreateTaskInput) {
+export async function createTaskWithAssignments(
+  data: CreateTaskInput,
+  effectiveOrgId: string | null,
+) {
   return prisma.$transaction(async (tx) => {
+    const projectOrgId = await resolveProjectOrgId(tx, data.project_id, effectiveOrgId);
+    await assertUsersInOrg(tx, data.assigned_users, projectOrgId);
+
+    if (data.parent_task_id) {
+      const parent = await tx.task.findFirst({
+        where: {
+          task_id: data.parent_task_id,
+          project: { organization_id: projectOrgId },
+        },
+        select: { task_id: true },
+      });
+      if (!parent) throw new CrossOrganizationReferenceError("Parent task not found in organization.");
+    }
+
     const task = await tx.task.create({
       data: {
         title: data.title,
@@ -149,11 +209,15 @@ export async function updateTask(
   id: string,
   data: UpdateTaskInput,
   userId?: string,
+  effectiveOrgId: string | null = null,
 ) {
   return prisma.$transaction(async (tx) => {
-    const existingTask = await tx.task.findUnique({
-      where: { task_id: id },
-      select: { status: true },
+    const existingTask = await tx.task.findFirst({
+      where: {
+        task_id: id,
+        ...(effectiveOrgId ? { project: { organization_id: effectiveOrgId } } : {}),
+      },
+      select: { status: true, project_id: true, project: { select: { organization_id: true } } },
     });
     if (!existingTask) throw new TaskNotFoundError(id);
 
@@ -166,6 +230,16 @@ export async function updateTask(
     }
 
     const { assigned_users, ...taskUpdateData } = data;
+    const targetProjectOrgId = data.project_id
+      ? await resolveProjectOrgId(tx, data.project_id, effectiveOrgId)
+      : existingTask.project.organization_id;
+
+    if (targetProjectOrgId !== existingTask.project.organization_id) {
+      throw new CrossOrganizationReferenceError("Task cannot be moved to a project in another organization.");
+    }
+
+    await assertUsersInOrg(tx, assigned_users, targetProjectOrgId);
+
     const finalStatus = data.status ?? existingTask.status;
     const completionTimestamp = new Date();
 
@@ -244,10 +318,14 @@ export async function updateTask(
 // Delete
 // ---------------------------------------------------------------------------
 
-export async function deleteTask(id: string): Promise<void> {
-  await prisma.task.delete({
-    where: { task_id: id },
+export async function deleteTask(id: string, effectiveOrgId: string | null): Promise<void> {
+  const result = await prisma.task.deleteMany({
+    where: {
+      task_id: id,
+      ...(effectiveOrgId ? { project: { organization_id: effectiveOrgId } } : {}),
+    },
   });
+  if (result.count === 0) throw new TaskNotFoundError(id);
 }
 
 // ---------------------------------------------------------------------------
@@ -343,9 +421,15 @@ export async function upsertProgressLog(
   quantity_done: number,
   unit?: TaskUnit,
   note?: string,
+  effectiveOrgId: string | null = null,
 ) {
   return prisma.$transaction(async (tx) => {
-    const task = await tx.task.findUnique({ where: { task_id: taskId } });
+    const task = await tx.task.findFirst({
+      where: {
+        task_id: taskId,
+        ...(effectiveOrgId ? { project: { organization_id: effectiveOrgId } } : {}),
+      },
+    });
     if (!task) throw new TaskNotFoundError(taskId);
 
     const nonProgressableStatuses: TaskStatus[] = [
@@ -360,7 +444,13 @@ export async function upsertProgressLog(
     const assignment = await tx.taskAssignment.findUnique({
       where: { task_id_user_id: { task_id: taskId, user_id: userId } },
     });
-    const user = await tx.user.findUnique({ where: { user_id: userId }, select: { role: true } });
+    const user = await tx.user.findFirst({
+      where: {
+        user_id: userId,
+        ...(effectiveOrgId ? { organization_id: effectiveOrgId } : {}),
+      },
+      select: { role: true },
+    });
 
     const isAdmin = user?.role === UserRole.ADMIN || user?.role === UserRole.SUPER_ADMIN;
     if (!assignment && !isAdmin) throw new AssignmentNotFoundError();

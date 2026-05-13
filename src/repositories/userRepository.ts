@@ -46,9 +46,13 @@ export async function createUser(data: CreateUserInput) {
 export async function updateUser(
   id: string,
   data: UpdateUserInput,
+  effectiveOrgId: string | null = null,
 ): Promise<SafeUser> {
-  const existing = await prisma.user.findUnique({
-    where: { user_id: id },
+  const existing = await prisma.user.findFirst({
+    where: {
+      user_id: id,
+      ...(effectiveOrgId ? { organization_id: effectiveOrgId } : {}),
+    },
     select: { role: true },
   });
   if (!existing || existing.role === UserRole.SYSTEM) {
@@ -64,9 +68,16 @@ export async function updateUser(
   });
 }
 
-export async function deleteUser(id: string): Promise<void> {
+export async function deleteUser(
+  id: string,
+  effectiveOrgId: string | null = null,
+): Promise<void> {
   const result = await prisma.user.deleteMany({
-    where: { user_id: id, role: { not: UserRole.SYSTEM } },
+    where: {
+      user_id: id,
+      role: { not: UserRole.SYSTEM },
+      ...(effectiveOrgId ? { organization_id: effectiveOrgId } : {}),
+    },
   });
   if (result.count === 0) {
     throw new Error("User not found");

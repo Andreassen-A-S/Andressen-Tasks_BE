@@ -6,6 +6,20 @@ import type {
 
 import type { TaskAssignment } from "../generated/prisma/client";
 
+export class AssignmentNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Assignment not found: ${id}`);
+    this.name = "AssignmentNotFoundError";
+  }
+}
+
+export class AssignmentCrossOrganizationError extends Error {
+  constructor(message = "Task and user must belong to the same organization.") {
+    super(message);
+    this.name = "AssignmentCrossOrganizationError";
+  }
+}
+
 export async function getAllAssignments(orgId: string | null): Promise<TaskAssignment[]> {
   return prisma.taskAssignment.findMany({
     where: orgId ? { task: { project: { organization_id: orgId } } } : undefined,
@@ -35,7 +49,28 @@ export async function getAllAssignments(orgId: string | null): Promise<TaskAssig
 
 export async function assignTaskToUser(
   data: CreateTaskAssignmentInput,
+  effectiveOrgId: string | null,
 ): Promise<TaskAssignment> {
+  const task = await prisma.task.findFirst({
+    where: {
+      task_id: data.task_id,
+      ...(effectiveOrgId ? { project: { organization_id: effectiveOrgId } } : {}),
+    },
+    select: { project: { select: { organization_id: true } } },
+  });
+  if (!task) throw new AssignmentCrossOrganizationError("Task not found in organization.");
+
+  const user = await prisma.user.findFirst({
+    where: {
+      user_id: data.user_id,
+      organization_id: task.project.organization_id,
+    },
+    select: { user_id: true },
+  });
+  if (!user) {
+    throw new AssignmentCrossOrganizationError("Assigned user must belong to the task organization.");
+  }
+
   // Check if assignment already exists
   const existing = await prisma.taskAssignment.findFirst({
     where: {
@@ -130,9 +165,19 @@ export async function getUserAssignments(
 export async function updateAssignment(
   assignmentId: string,
   data: UpdateTaskAssignmentInput,
+  effectiveOrgId: string | null,
 ): Promise<TaskAssignment> {
+  const existing = await prisma.taskAssignment.findFirst({
+    where: {
+      assignment_id: assignmentId,
+      ...(effectiveOrgId ? { task: { project: { organization_id: effectiveOrgId } } } : {}),
+    },
+    select: { assignment_id: true },
+  });
+  if (!existing) throw new AssignmentNotFoundError(assignmentId);
+
   return prisma.taskAssignment.update({
-    where: { assignment_id: assignmentId },
+    where: { assignment_id: existing.assignment_id },
     data,
     include: {
       user: {
@@ -157,8 +202,15 @@ export async function updateAssignment(
   });
 }
 
-export async function deleteAssignment(assignmentId: string): Promise<void> {
-  await prisma.taskAssignment.delete({
-    where: { assignment_id: assignmentId },
+export async function deleteAssignment(
+  assignmentId: string,
+  effectiveOrgId: string | null,
+): Promise<void> {
+  const result = await prisma.taskAssignment.deleteMany({
+    where: {
+      assignment_id: assignmentId,
+      ...(effectiveOrgId ? { task: { project: { organization_id: effectiveOrgId } } } : {}),
+    },
   });
+  if (result.count === 0) throw new AssignmentNotFoundError(assignmentId);
 }

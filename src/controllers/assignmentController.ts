@@ -7,6 +7,21 @@ import { TaskEventType, TaskStatus } from "../generated/prisma/client";
 import * as taskRepo from "../repositories/taskRepository";
 import * as userRepo from "../repositories/userRepository";
 import { sendPushNotification } from "../services/notificationService";
+import {
+  AssignmentCrossOrganizationError,
+  AssignmentNotFoundError,
+} from "../repositories/assignmentRepository";
+
+function handleAssignmentError(error: unknown, res: Response, fallbackMessage: string): Response {
+  if (error instanceof AssignmentNotFoundError) {
+    return res.status(404).json({ success: false, error: "Assignment not found" });
+  }
+  if (error instanceof AssignmentCrossOrganizationError) {
+    return res.status(403).json({ success: false, error: error.message });
+  }
+  console.error(fallbackMessage, error);
+  return res.status(500).json({ success: false, error: fallbackMessage });
+}
 
 // List all assignments (with optional filters)
 export async function listAssignments(req: Request, res: Response) {
@@ -45,7 +60,7 @@ export async function assignTask(req: Request, res: Response) {
       return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
     }
 
-    const assignment = await assignmentRepo.assignTaskToUser(body);
+    const assignment = await assignmentRepo.assignTaskToUser(body, req.effectiveOrgId);
 
     // TaskEvent logic
     await taskEventRepo.createTaskEvent({
@@ -73,10 +88,12 @@ export async function assignTask(req: Request, res: Response) {
 
     res.status(201).json({ success: true, data: assignment });
   } catch (error) {
+    if (error instanceof AssignmentCrossOrganizationError) {
+      return res.status(403).json({ success: false, error: error.message });
+    }
     console.error("Error in assignTask:", error);
-    const message =
-      error instanceof Error ? error.message : "Failed to assign task";
-    res.status(400).json({ success: false, error: message });
+    const message = error instanceof Error ? error.message : "Failed to assign task";
+    return res.status(400).json({ success: false, error: message });
   }
 }
 
@@ -128,7 +145,7 @@ export async function updateAssignment(req: Request, res: Response) {
     }
 
     // Update the assignment
-    const assignment = await assignmentRepo.updateAssignment(id, updateData);
+    const assignment = await assignmentRepo.updateAssignment(id, updateData, req.effectiveOrgId);
 
     // TaskEvent logic
     await taskEventRepo.createTaskEvent({
@@ -143,19 +160,7 @@ export async function updateAssignment(req: Request, res: Response) {
 
     res.json({ success: true, data: assignment });
   } catch (error) {
-    console.error("Error in updateAssignment:", error);
-
-    // Better error handling
-    if (
-      error instanceof Error &&
-      error.message.includes("Record to update not found")
-    ) {
-      res.status(404).json({ success: false, error: "Assignment not found" });
-    } else {
-      res
-        .status(500)
-        .json({ success: false, error: "Failed to update assignment" });
-    }
+    return handleAssignmentError(error, res, "Failed to update assignment");
   }
 }
 
@@ -193,11 +198,10 @@ export async function deleteAssignment(req: Request, res: Response) {
     });
 
     // Delete the assignment
-    await assignmentRepo.deleteAssignment(id);
+    await assignmentRepo.deleteAssignment(id, req.effectiveOrgId);
 
     res.status(204).send();
   } catch (error) {
-    console.error("Error in deleteAssignment:", error);
-    res.status(404).json({ success: false, error: "Assignment not found" });
+    return handleAssignmentError(error, res, "Failed to delete assignment");
   }
 }

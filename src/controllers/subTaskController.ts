@@ -29,7 +29,7 @@ export async function createSubtask(req: Request, res: Response) {
       ...subtaskData,
       parent_task_id,
       project_id: parentTask.project_id,
-    });
+    }, req.effectiveOrgId);
 
     // SUBTASK_ADDED event on parent
     await taskEventRepo.createTaskEvent({

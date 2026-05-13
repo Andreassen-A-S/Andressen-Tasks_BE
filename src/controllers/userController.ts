@@ -96,7 +96,12 @@ export async function updateUser(req: Request, res: Response) {
 
   try {
     const body = req.body as UpdateUserInput;
-    const user = await userRepo.updateUser(targetId, body);
+    const scopeOrgId =
+      actor?.role === UserRole.SUPER_ADMIN ? req.effectiveOrgId : actor?.organization_id ?? null;
+    if (actor?.role === UserRole.ADMIN && !scopeOrgId) {
+      return res.status(403).json({ success: false, error: "No organization assigned" });
+    }
+    const user = await userRepo.updateUser(targetId, body, scopeOrgId);
     res.json({ success: true, data: user });
   } catch (error) {
     console.error("Error in updateUser:", error);
@@ -137,7 +142,11 @@ export async function deleteUser(req: Request, res: Response) {
   }
 
   try {
-    await userRepo.deleteUser(req.params.id as string);
+    const scopeOrgId = actor.role === UserRole.SUPER_ADMIN ? req.effectiveOrgId : actor.organization_id;
+    if (actor.role === UserRole.ADMIN && !scopeOrgId) {
+      return res.status(403).json({ success: false, error: "No organization assigned" });
+    }
+    await userRepo.deleteUser(req.params.id as string, scopeOrgId ?? null);
     res.status(204).send();
   } catch (error) {
     console.error("Error in deleteUser:", error);
