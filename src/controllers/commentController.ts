@@ -11,6 +11,10 @@ import { sendPushNotification } from "../services/notificationService";
 import { getParamId, requireUserId } from "../helper/helpers";
 import { CreateCommentRequest } from "../types/comment";
 
+function isPrivileged(role?: UserRole) {
+  return role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN;
+}
+
 export async function listTaskComments(req: Request, res: Response) {
   try {
     const taskId = getParamId(req, "taskId");
@@ -19,9 +23,14 @@ export async function listTaskComments(req: Request, res: Response) {
     const userId = requireUserId(req, res);
     if (!userId) return;
 
+    const orgId = req.effectiveOrgId;
+
     // Verify task exists and user has access
-    const task = await prisma.task.findUnique({
-      where: { task_id: taskId },
+    const task = await prisma.task.findFirst({
+      where: {
+        task_id: taskId,
+        ...(orgId ? { project: { organization_id: orgId } } : {}),
+      },
       include: {
         assignments: {
           where: { user_id: userId },
@@ -36,7 +45,7 @@ export async function listTaskComments(req: Request, res: Response) {
     // Check if user is creator, assigned to task, or admin
     const isCreator = task.created_by === userId;
     const isAssigned = task.assignments.length > 0;
-    const isAdmin = req.user?.role === UserRole.ADMIN;
+    const isAdmin = isPrivileged(req.user?.role);
 
     if (!isCreator && !isAssigned && !isAdmin) {
       return res.status(403).json({ success: false, error: "Access denied" });
@@ -96,9 +105,14 @@ export async function createComment(req: Request, res: Response) {
       return res.status(400).json({ success: false, error: "Duplicate upload tokens" });
     }
 
+    const orgId = req.effectiveOrgId;
+
     // Verify task exists and user has access (include all assignments for notification)
-    const task = await prisma.task.findUnique({
-      where: { task_id: taskId },
+    const task = await prisma.task.findFirst({
+      where: {
+        task_id: taskId,
+        ...(orgId ? { project: { organization_id: orgId } } : {}),
+      },
       include: {
         assignments: {
           include: {
@@ -119,7 +133,7 @@ export async function createComment(req: Request, res: Response) {
     // Check if user is creator, assigned to task, or admin
     const isCreator = task.created_by === userId;
     const isAssigned = task.assignments.some((a) => a.user_id === userId);
-    const isAdmin = req.user?.role === UserRole.ADMIN;
+    const isAdmin = isPrivileged(req.user?.role);
 
     if (!isCreator && !isAssigned && !isAdmin) {
       return res.status(403).json({ success: false, error: "Access denied" });
@@ -166,7 +180,7 @@ export async function createComment(req: Request, res: Response) {
     }
 
     // Notify admins (skip if the commenter is the admin)
-    const admins = await userRepo.getAdminPushTokens();
+    const admins = await userRepo.getAdminPushTokens(orgId);
     for (const { user_id: adminId, push_token } of admins) {
       if (adminId === userId) continue;
       void sendPushNotification(
@@ -204,6 +218,7 @@ export async function deleteComment(req: Request, res: Response) {
     if (!userId) return;
 
     const userRole = req.user?.role;
+    const orgId = req.effectiveOrgId;
 
     const comment = await commentRepo.getCommentById(commentId);
 
@@ -213,16 +228,22 @@ export async function deleteComment(req: Request, res: Response) {
         .json({ success: false, error: "Comment not found" });
     }
 
-    const deleteCommentTask = await prisma.task.findUnique({
-      where: { task_id: comment.task_id },
+    const deleteCommentTask = await prisma.task.findFirst({
+      where: {
+        task_id: comment.task_id,
+        ...(orgId ? { project: { organization_id: orgId } } : {}),
+      },
       select: { status: true },
     });
+    if (!deleteCommentTask) {
+      return res.status(404).json({ success: false, error: "Comment not found" });
+    }
     if (deleteCommentTask?.status === TaskStatus.ARCHIVED) {
       return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
     }
 
     // Check if user owns the comment or is admin
-    if (comment.user_id !== userId && userRole !== UserRole.ADMIN) {
+    if (comment.user_id !== userId && !isPrivileged(userRole)) {
       return res.status(403).json({
         success: false,
         error: "Not authorized to delete this comment",
@@ -321,10 +342,16 @@ export async function updateComment(req: Request, res: Response) {
         .json({ success: false, error: "Comment not found" });
     }
 
-    const commentTask = await prisma.task.findUnique({
-      where: { task_id: comment.task_id },
+    const commentTask = await prisma.task.findFirst({
+      where: {
+        task_id: comment.task_id,
+        ...(req.effectiveOrgId ? { project: { organization_id: req.effectiveOrgId } } : {}),
+      },
       select: { status: true },
     });
+    if (!commentTask) {
+      return res.status(404).json({ success: false, error: "Comment not found" });
+    }
     if (commentTask?.status === TaskStatus.ARCHIVED) {
       return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
     }

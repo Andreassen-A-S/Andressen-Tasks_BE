@@ -9,8 +9,10 @@ import type { Prisma, RecurringTaskTemplate } from "../generated/prisma/client";
 type TransactionClient = Prisma.TransactionClient;
 type PrismaClient = typeof prisma | TransactionClient;
 
-export async function getAllTemplates(client: PrismaClient = prisma) {
-  return client.recurringTaskTemplate.findMany();
+export async function getAllTemplates(orgId: string | null = null, client: PrismaClient = prisma) {
+  return client.recurringTaskTemplate.findMany({
+    where: orgId ? { project: { organization_id: orgId } } : undefined,
+  });
 }
 
 export async function createTemplate(

@@ -13,7 +13,7 @@ export async function createSubtask(req: Request, res: Response) {
         .json({ success: false, error: "parent_task_id is required" });
     }
 
-    const parentTask = await taskRepo.getTaskById(parent_task_id);
+    const parentTask = await taskRepo.getTaskById(parent_task_id, req.effectiveOrgId);
     if (!parentTask) {
       return res
         .status(404)
@@ -29,7 +29,7 @@ export async function createSubtask(req: Request, res: Response) {
       ...subtaskData,
       parent_task_id,
       project_id: parentTask.project_id,
-    });
+    }, req.effectiveOrgId);
 
     // SUBTASK_ADDED event on parent
     await taskEventRepo.createTaskEvent({

@@ -3,6 +3,12 @@ import * as authService from "../services/authService";
 // import "../types/express";
 import { UserRole } from "../generated/prisma/client";
 
+function normalizeOrgId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed !== "" ? trimmed : null;
+}
+
 export function authenticateToken(
   req: Request,
   res: Response,
@@ -26,6 +32,19 @@ export function authenticateToken(
       role: payload.role as UserRole,
     };
 
+    const organizationId = normalizeOrgId(req.user.organization_id);
+
+    if (req.user.role === UserRole.SUPER_ADMIN) {
+      req.effectiveOrgId = normalizeOrgId(req.headers["x-org-context"]);
+    } else if (organizationId) {
+      req.effectiveOrgId = organizationId;
+    } else {
+      return res.status(403).json({
+        success: false,
+        error: "No organization assigned",
+      });
+    }
+
     next();
   } catch (error) {
     console.error("Token verification failed:", {
@@ -39,4 +58,26 @@ export function authenticateToken(
       error: "Invalid token",
     });
   }
+}
+
+export function requireSuperAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  if (req.user?.role !== UserRole.SUPER_ADMIN) {
+    return res.status(403).json({ success: false, error: "Forbidden" });
+  }
+  next();
+}
+
+export function requireAdminOrSuperAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  const { role, organization_id } = req.user ?? {};
+  if (role === UserRole.SUPER_ADMIN) return next();
+  if (role === UserRole.ADMIN && organization_id && organization_id === req.params.id) return next();
+  return res.status(403).json({ success: false, error: "Forbidden" });
 }

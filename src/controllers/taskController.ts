@@ -12,6 +12,7 @@ import * as userRepo from "../repositories/userRepository";
 import { sendPushNotification } from "../services/notificationService";
 import {
   AssignmentNotFoundError,
+  CrossOrganizationReferenceError,
   TaskAlreadyDoneError,
   TaskArchivedError,
   TaskNotFoundError,
@@ -63,6 +64,9 @@ function handleDomainError(
   if (error instanceof AssignmentNotFoundError) {
     return res.status(404).json({ success: false, error: error.message });
   }
+  if (error instanceof CrossOrganizationReferenceError) {
+    return res.status(403).json({ success: false, error: error.message });
+  }
   console.error(fallbackMessage, error);
   return res.status(500).json({ success: false, error: fallbackMessage });
 }
@@ -71,9 +75,10 @@ function handleDomainError(
 // Handlers
 // ---------------------------------------------------------------------------
 
-export async function listTasks(_req: Request, res: Response) {
+export async function listTasks(req: Request, res: Response) {
   try {
-    const tasks = await taskRepo.getAllTasks();
+    const orgId = req.effectiveOrgId;
+    const tasks = await taskRepo.getAllTasks(orgId);
     return res.json({ success: true, data: tasks });
   } catch (error) {
     console.error("Error in listTasks:", error);
@@ -92,7 +97,8 @@ export async function getTask(req: Request, res: Response) {
   }
 
   try {
-    const task = await taskRepo.getTaskById(id);
+    const orgId = req.effectiveOrgId;
+    const task = await taskRepo.getTaskById(id, orgId);
     if (!task) {
       return res.status(404).json({ success: false, error: "Task not found" });
     }
@@ -134,7 +140,7 @@ export async function createTask(req: Request, res: Response) {
       created_by: userId,
       project_id: body.project_id.trim(),
     };
-    const task = await taskRepo.createTaskWithAssignments(input);
+    const task = await taskRepo.createTaskWithAssignments(input, req.effectiveOrgId);
 
     if (!task) {
       return res
@@ -185,10 +191,7 @@ export async function createTask(req: Request, res: Response) {
 
     return res.status(201).json({ success: true, data: task });
   } catch (error) {
-    console.error("Error in createTask:", error);
-    return res
-      .status(500)
-      .json({ success: false, error: "Failed to create task" });
+    return handleDomainError(error, res, "Failed to create task");
   }
 }
 
@@ -207,12 +210,13 @@ export async function updateTask(req: Request, res: Response) {
     const updateData = req.body as UpdateTaskInput;
     const actor = actorConnect(userId);
 
-    const oldTask = await taskRepo.getTaskById(id);
+    const orgId = req.effectiveOrgId;
+    const oldTask = await taskRepo.getTaskById(id, orgId);
     if (!oldTask) {
       return res.status(404).json({ success: false, error: "Task not found" });
     }
 
-    const updatedTask = await taskRepo.updateTask(id, updateData, userId);
+    const updatedTask = await taskRepo.updateTask(id, updateData, userId, orgId);
     if (!updatedTask) {
       return res
         .status(404)
@@ -289,7 +293,7 @@ export async function updateTask(req: Request, res: Response) {
       });
 
       if (updatedTask.status === TaskStatus.DONE) {
-        const admins = await userRepo.getAdminPushTokens();
+        const admins = await userRepo.getAdminPushTokens(orgId);
         for (const { user_id, push_token } of admins) {
           void sendPushNotification(
             push_token,
@@ -357,7 +361,8 @@ export async function deleteTask(req: Request, res: Response) {
   }
 
   try {
-    const task = await taskRepo.getTaskById(id);
+    const orgId = req.effectiveOrgId;
+    const task = await taskRepo.getTaskById(id, orgId);
     if (!task) {
       return res.status(404).json({ success: false, error: "Task not found" });
     }
@@ -371,13 +376,10 @@ export async function deleteTask(req: Request, res: Response) {
       after_json: emptyObj(),
     });
 
-    await taskRepo.deleteTask(id);
+    await taskRepo.deleteTask(id, orgId);
     return res.status(204).send();
   } catch (error) {
-    console.error("Error in deleteTask:", error);
-    return res
-      .status(500)
-      .json({ success: false, error: "Failed to delete task" });
+    return handleDomainError(error, res, "Failed to delete task");
   }
 }
 
@@ -400,12 +402,14 @@ export async function upsertProgressLog(req: Request, res: Response) {
   }
 
   try {
+    const orgId = req.effectiveOrgId;
     const { progressLog, updatedTask } = await taskRepo.upsertProgressLog(
       taskId,
       userId,
       quantity_done,
       unit,
       note,
+      orgId,
     );
 
     await taskEventRepo.createTaskEvent({
@@ -420,7 +424,7 @@ export async function upsertProgressLog(req: Request, res: Response) {
 
     void (async () => {
       try {
-        const admins = await userRepo.getAdminPushTokens();
+        const admins = await userRepo.getAdminPushTokens(orgId);
         for (const { user_id: adminId, push_token } of admins) {
           if (adminId === userId) continue;
           void sendPushNotification(

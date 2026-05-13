@@ -12,6 +12,7 @@ import * as taskRepo from "../src/repositories/taskRepository";
 import * as userRepo from "../src/repositories/userRepository";
 import {
   AssignmentNotFoundError,
+  CrossOrganizationReferenceError,
   TaskAlreadyDoneError,
   TaskNotFoundError,
   TaskNotProgressableError,
@@ -140,6 +141,7 @@ describe("taskController.createTask", () => {
 
     expect(repoSpy).toHaveBeenCalledWith(
       expect.objectContaining({ created_by: "u1", title: "Task" }),
+      undefined,
     );
     expect(res.statusCode).toBe(201);
   });
@@ -229,6 +231,49 @@ describe("taskController.createTask", () => {
     expect(res.statusCode).toBe(201);
     expect(res.body).toEqual({ success: true, data: task });
   });
+
+  test("passes effective org to create repository", async () => {
+    const repoSpy = spyOn(taskRepo, "createTaskWithAssignments").mockResolvedValue({
+      task_id: "t1",
+      assignments: [],
+    } as any);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as any);
+
+    const req = createRequest({
+      user: { user_id: "u1" },
+      effectiveOrgId: "org-a",
+      body: { title: "Task", project_id: "p1" },
+    });
+    const res = createMockResponse();
+
+    await taskController.createTask(req, res);
+
+    expect(repoSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ project_id: "p1", created_by: "u1" }),
+      "org-a",
+    );
+  });
+
+  test("rejects cross-org project or assignee references on create", async () => {
+    spyOn(taskRepo, "createTaskWithAssignments").mockRejectedValue(
+      new CrossOrganizationReferenceError("Assigned users must belong to the task organization."),
+    );
+
+    const req = createRequest({
+      user: { user_id: "u1" },
+      effectiveOrgId: "org-a",
+      body: { title: "Task", project_id: "project-a", assigned_users: ["user-b"] },
+    });
+    const res = createMockResponse();
+
+    await taskController.createTask(req, res);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toEqual({
+      success: false,
+      error: "Assigned users must belong to the task organization.",
+    });
+  });
 });
 
 describe("taskController.updateTask", () => {
@@ -248,6 +293,7 @@ describe("taskController.updateTask", () => {
 
     await taskController.updateTask(req, res);
 
+    expect(taskRepo.updateTask).toHaveBeenCalledWith("t1", { title: "new" }, "u1", undefined);
     expect(eventSpy).toHaveBeenCalledTimes(1);
     expect(eventSpy.mock.calls[0]?.[0]?.type).toBe(TaskEventType.TASK_UPDATED);
     expect(res.body).toEqual({ success: true, data: { task_id: "t1", title: "new", project: { name: "P1", color: null }, assigned_users: ["u1"] } });
@@ -268,6 +314,71 @@ describe("taskController.updateTask", () => {
 
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({ success: false, error: "Task not found: t1" });
+  });
+
+  test("rejects task update when task is outside effective org", async () => {
+    spyOn(taskRepo, "getTaskById").mockResolvedValue(null);
+    const updateSpy = spyOn(taskRepo, "updateTask");
+
+    const req = createRequest({
+      user: { user_id: "u-org-a" },
+      effectiveOrgId: "org-a",
+      params: { id: "task-org-b" } as Request["params"],
+      body: { title: "nope" },
+    });
+    const res = createMockResponse();
+
+    await taskController.updateTask(req, res);
+
+    expect(updateSpy).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toEqual({ success: false, error: "Task not found" });
+  });
+
+  test("rejects moving task to a project from another org", async () => {
+    spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1", assigned_users: [] } as never);
+    spyOn(taskRepo, "updateTask").mockRejectedValue(
+      new CrossOrganizationReferenceError("Task cannot be moved to a project in another organization."),
+    );
+
+    const req = createRequest({
+      user: { user_id: "u1" },
+      effectiveOrgId: "org-a",
+      params: { id: "t1" } as Request["params"],
+      body: { project_id: "project-org-b" },
+    });
+    const res = createMockResponse();
+
+    await taskController.updateTask(req, res);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toEqual({
+      success: false,
+      error: "Task cannot be moved to a project in another organization.",
+    });
+  });
+
+  test("rejects assigning task to users from another org on update", async () => {
+    spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1", assigned_users: [] } as never);
+    spyOn(taskRepo, "updateTask").mockRejectedValue(
+      new CrossOrganizationReferenceError("Assigned users must belong to the task organization."),
+    );
+
+    const req = createRequest({
+      user: { user_id: "u1" },
+      effectiveOrgId: "org-a",
+      params: { id: "t1" } as Request["params"],
+      body: { assigned_users: ["user-org-b"] },
+    });
+    const res = createMockResponse();
+
+    await taskController.updateTask(req, res);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toEqual({
+      success: false,
+      error: "Assigned users must belong to the task organization.",
+    });
   });
 
   test("returns 400 when updateTask throws TaskAlreadyDoneError", async () => {
@@ -595,8 +706,44 @@ describe("taskController.deleteTask", () => {
 
     expect(eventSpy).toHaveBeenCalledTimes(1);
     expect(eventSpy.mock.calls[0]?.[0]?.type).toBe(TaskEventType.TASK_DELETED);
-    expect(deleteSpy).toHaveBeenCalledWith("t1");
+    expect(deleteSpy).toHaveBeenCalledWith("t1", undefined);
     expect(res.statusCode).toBe(204);
+  });
+
+  test("rejects deleting task outside effective org", async () => {
+    spyOn(taskRepo, "getTaskById").mockResolvedValue(null);
+    const deleteSpy = spyOn(taskRepo, "deleteTask");
+
+    const req = createRequest({
+      user: { user_id: "u-org-a" },
+      effectiveOrgId: "org-a",
+      params: { id: "task-org-b" } as Request["params"],
+    });
+    const res = createMockResponse();
+
+    await taskController.deleteTask(req, res);
+
+    expect(deleteSpy).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toEqual({ success: false, error: "Task not found" });
+  });
+
+  test("maps repository task delete org miss to 404", async () => {
+    spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1" } as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    spyOn(taskRepo, "deleteTask").mockRejectedValue(new TaskNotFoundError("t1"));
+
+    const req = createRequest({
+      user: { user_id: "u1" },
+      effectiveOrgId: "org-a",
+      params: { id: "t1" } as Request["params"],
+    });
+    const res = createMockResponse();
+
+    await taskController.deleteTask(req, res);
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toEqual({ success: false, error: "Task not found: t1" });
   });
 });
 
@@ -692,6 +839,7 @@ describe("taskController.upsertProgressLog", () => {
 
     await taskController.upsertProgressLog(req, res);
 
+    expect(taskRepo.upsertProgressLog).toHaveBeenCalledWith("t1", "u1", 5, TaskUnit.METERS, "good", undefined);
     expect(eventSpy).toHaveBeenCalledTimes(1);
     expect(eventSpy.mock.calls[0]?.[0]?.type).toBe(TaskEventType.PROGRESS_LOGGED);
     expect(res.body).toEqual({
@@ -756,5 +904,30 @@ describe("taskController.upsertProgressLog", () => {
     );
 
     expect(sendPushNotificationMock).not.toHaveBeenCalled();
+  });
+
+  test("rejects progress on task outside effective org", async () => {
+    spyOn(taskRepo, "upsertProgressLog").mockRejectedValue(new TaskNotFoundError("task-org-b"));
+
+    const req = createRequest({
+      user: { user_id: "u-org-a" },
+      effectiveOrgId: "org-a",
+      params: { id: "task-org-b" } as Request["params"],
+      body: { quantity_done: 1, unit: TaskUnit.METERS },
+    });
+    const res = createMockResponse();
+
+    await taskController.upsertProgressLog(req, res);
+
+    expect(taskRepo.upsertProgressLog).toHaveBeenCalledWith(
+      "task-org-b",
+      "u-org-a",
+      1,
+      TaskUnit.METERS,
+      undefined,
+      "org-a",
+    );
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toEqual({ success: false, error: "Task not found: task-org-b" });
   });
 });

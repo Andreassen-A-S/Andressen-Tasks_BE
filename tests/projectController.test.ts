@@ -19,11 +19,12 @@ function createMockResponse(): MockResponse {
     res.body = payload;
     return res;
   }) as unknown as Response["json"];
+  res.send = mock(() => res) as unknown as Response["send"];
   return res;
 }
 
 function createRequest(overrides: Record<string, any> = {}): Request {
-  return { params: {}, body: {}, ...overrides } as Request;
+  return { params: {}, body: {}, effectiveOrgId: null, ...overrides } as Request;
 }
 
 afterEach(() => {
@@ -94,6 +95,7 @@ describe("projectController.createProject", () => {
     spyOn(projectRepo, "createProject").mockResolvedValue(project as never);
     const req = createRequest({
       user: { user_id: "u1" },
+      effectiveOrgId: "org1",
       body: { name: "New Project" },
     });
     const res = createMockResponse();
@@ -105,7 +107,7 @@ describe("projectController.createProject", () => {
   });
 
   test("returns 400 when name is missing", async () => {
-    const req = createRequest({ user: { user_id: "u1" }, body: {} });
+    const req = createRequest({ user: { user_id: "u1" }, effectiveOrgId: "org1", body: {} });
     const res = createMockResponse();
 
     await projectController.createProject(req, res);
@@ -114,7 +116,7 @@ describe("projectController.createProject", () => {
   });
 
   test("returns 400 when name is empty string", async () => {
-    const req = createRequest({ user: { user_id: "u1" }, body: { name: "  " } });
+    const req = createRequest({ user: { user_id: "u1" }, effectiveOrgId: "org1", body: { name: "  " } });
     const res = createMockResponse();
 
     await projectController.createProject(req, res);
@@ -135,6 +137,7 @@ describe("projectController.createProject", () => {
     spyOn(projectRepo, "createProject").mockRejectedValue(new Error("db fail"));
     const req = createRequest({
       user: { user_id: "u1" },
+      effectiveOrgId: "org1",
       body: { name: "New Project" },
     });
     const res = createMockResponse();
@@ -191,7 +194,7 @@ describe("projectController.deleteProject", () => {
 
     await projectController.deleteProject(req, res);
 
-    expect(res.body).toEqual({ success: true });
+    expect(res.statusCode).toBe(204);
   });
 
   test("returns 404 when project not found", async () => {

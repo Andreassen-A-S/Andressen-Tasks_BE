@@ -13,9 +13,10 @@ const statsService = new StatsService();
  * GET /api/stats/overview
  * Get overview statistics (total tasks, completed today, pending, overdue)
  */
-export async function getOverview(_req: Request, res: Response) {
+export async function getOverview(req: Request, res: Response) {
   try {
-    const stats = await statsService.getOverview();
+    const orgId = req.effectiveOrgId;
+    const stats = await statsService.getOverview(orgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
     console.error("Error in getOverview:", error);
@@ -29,9 +30,10 @@ export async function getOverview(_req: Request, res: Response) {
  * GET /api/stats/completion
  * Get completion rate statistics (today, week, month, avg days)
  */
-export async function getCompletionRates(_req: Request, res: Response) {
+export async function getCompletionRates(req: Request, res: Response) {
   try {
-    const stats = await statsService.getCompletionRates();
+    const orgId = req.effectiveOrgId;
+    const stats = await statsService.getCompletionRates(orgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
     console.error("Error in getCompletionRates:", error);
@@ -45,9 +47,10 @@ export async function getCompletionRates(_req: Request, res: Response) {
  * GET /api/stats/priority
  * Get priority breakdown statistics
  */
-export async function getPriorityStats(_req: Request, res: Response) {
+export async function getPriorityStats(req: Request, res: Response) {
   try {
-    const stats = await statsService.getPriorityStats();
+    const orgId = req.effectiveOrgId;
+    const stats = await statsService.getPriorityStats(orgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
     console.error("Error in getPriorityStats:", error);
@@ -61,9 +64,10 @@ export async function getPriorityStats(_req: Request, res: Response) {
  * GET /api/stats/status
  * Get status distribution statistics
  */
-export async function getStatusStats(_req: Request, res: Response) {
+export async function getStatusStats(req: Request, res: Response) {
   try {
-    const stats = await statsService.getStatusStats();
+    const orgId = req.effectiveOrgId;
+    const stats = await statsService.getStatusStats(orgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
     console.error("Error in getStatusStats:", error);
@@ -79,8 +83,9 @@ export async function getStatusStats(_req: Request, res: Response) {
  */
 export async function getTopPerformers(req: Request, res: Response) {
   try {
+    const orgId = req.effectiveOrgId;
     const limit = parseInt(req.query.limit as string) || 5;
-    const stats = await statsService.getTopPerformers(limit);
+    const stats = await statsService.getTopPerformers(limit, orgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
     console.error("Error in getTopPerformers:", error);
@@ -99,9 +104,10 @@ export async function getTopPerformers(req: Request, res: Response) {
  * GET /api/stats/workload
  * Get workload distribution across users
  */
-export async function getWorkloadDistribution(_req: Request, res: Response) {
+export async function getWorkloadDistribution(req: Request, res: Response) {
   try {
-    const stats = await statsService.getWorkloadDistribution();
+    const orgId = req.effectiveOrgId;
+    const stats = await statsService.getWorkloadDistribution(orgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
     console.error("Error in getWorkloadDistribution:", error);
@@ -115,9 +121,10 @@ export async function getWorkloadDistribution(_req: Request, res: Response) {
  * GET /api/stats/recurring
  * Get recurring template statistics
  */
-export async function getRecurringStats(_req: Request, res: Response) {
+export async function getRecurringStats(req: Request, res: Response) {
   try {
-    const stats = await statsService.getRecurringStats();
+    const orgId = req.effectiveOrgId;
+    const stats = await statsService.getRecurringStats(orgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
     console.error("Error in getRecurringStats:", error);
@@ -133,8 +140,9 @@ export async function getRecurringStats(_req: Request, res: Response) {
  */
 export async function getTaskTrends(req: Request, res: Response) {
   try {
+    const orgId = req.effectiveOrgId;
     const days = parseInt(req.query.days as string) || 7;
-    const stats = await statsService.getTaskTrends(days);
+    const stats = await statsService.getTaskTrends(days, orgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
     console.error("Error in getTaskTrends:", error);
@@ -156,9 +164,10 @@ export async function getTaskTrends(req: Request, res: Response) {
  */
 export async function getDashboardStats(req: Request, res: Response) {
   try {
+    const orgId = req.effectiveOrgId;
     const raw = parseInt(req.query.days as string, 10);
     const days = Number.isNaN(raw) ? 30 : raw;
-    const stats = await statsService.getStatsForWindow(days);
+    const stats = await statsService.getStatsForWindow(days, orgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
     console.error("Error in getDashboardStats:", error);
@@ -183,18 +192,19 @@ export async function getUserStats(req: Request, res: Response) {
 
   try {
     const targetUserId = getParamId(req, "userId") || authUserId;
+    const orgId = req.effectiveOrgId;
 
-    const isAdmin = req.user && req.user.role === UserRole.ADMIN;
+    const isPrivileged = req.user && (req.user.role === UserRole.ADMIN || req.user.role === UserRole.SUPER_ADMIN);
 
     // Users can only see their own stats unless they're admins
-    if (targetUserId !== authUserId && !isAdmin) {
+    if (targetUserId !== authUserId && !isPrivileged) {
       return res.status(403).json({
         success: false,
         error: "Not authorized to view other users' stats",
       });
     }
 
-    const stats = await statsService.getUserStats(targetUserId);
+    const stats = await statsService.getUserStats(targetUserId, orgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
     console.error("Error in getUserStats:", error);
@@ -213,7 +223,8 @@ export async function getMyStats(req: Request, res: Response) {
   if (!userId) return;
 
   try {
-    const stats = await statsService.getUserStats(userId);
+    const orgId = req.effectiveOrgId;
+    const stats = await statsService.getUserStats(userId, orgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
     console.error("Error in getMyStats:", error);

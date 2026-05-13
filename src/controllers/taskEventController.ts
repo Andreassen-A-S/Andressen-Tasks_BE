@@ -11,9 +11,13 @@ export async function listTaskEvents(req: Request, res: Response) {
     const userId = requireUserId(req, res);
     if (!userId) return;
 
-    const isAdmin = req.user?.role === UserRole.ADMIN;
-    const task = await prisma.task.findUnique({
-      where: { task_id: taskId },
+    const isAdmin = req.user?.role === UserRole.ADMIN || req.user?.role === UserRole.SUPER_ADMIN;
+    const orgId = req.effectiveOrgId;
+    const task = await prisma.task.findFirst({
+      where: {
+        task_id: taskId,
+        ...(orgId ? { project: { organization_id: orgId } } : {}),
+      },
       include: { assignments: { where: { user_id: userId } } },
     });
     if (!task) return res.status(404).json({ success: false, error: "Task not found" });

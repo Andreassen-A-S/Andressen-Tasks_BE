@@ -92,8 +92,9 @@ export class RecurringTaskService {
   /**
    * Get all templates
    */
-  async getAllTemplates(): Promise<TemplateWithRelations[]> {
+  async getAllTemplates(orgId: string | null = null): Promise<TemplateWithRelations[]> {
     return prisma.recurringTaskTemplate.findMany({
+      where: orgId ? { project: { organization_id: orgId } } : undefined,
       include: {
         creator: true,
         default_assignees: {
@@ -104,11 +105,14 @@ export class RecurringTaskService {
   }
 
   /**
-   * Get all active templates
+   * Get all active templates (unscoped — used by the scheduler across all orgs)
    */
-  async getActiveTemplates(): Promise<TemplateWithRelations[]> {
+  async getActiveTemplates(orgId: string | null = null): Promise<TemplateWithRelations[]> {
     return prisma.recurringTaskTemplate.findMany({
-      where: { is_active: true },
+      where: {
+        is_active: true,
+        ...(orgId ? { project: { organization_id: orgId } } : {}),
+      },
       include: {
         creator: true,
         default_assignees: {

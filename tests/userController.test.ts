@@ -68,17 +68,83 @@ describe("userController.getUser", () => {
 describe("userController.createUser", () => {
   test("creates user when admin", async () => {
     const user = { user_id: "u1", email: "a@a.com" };
-    spyOn(userRepo, "createUser").mockResolvedValue(user as never);
+    const createSpy = spyOn(userRepo, "createUser").mockResolvedValue(user as never);
     const req = createRequest({
-      user: { user_id: "admin1", role: UserRole.ADMIN },
+      user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
       body: { email: "a@a.com", password: "x" },
     });
     const res = createMockResponse();
 
     await userController.createUser(req, res);
 
+    expect(createSpy).toHaveBeenCalledWith({
+      name: undefined,
+      email: "a@a.com",
+      password: "x",
+      position: undefined,
+      role: UserRole.USER,
+      organization_id: "org1",
+    });
     expect(res.statusCode).toBe(201);
     expect(res.body).toEqual({ success: true, data: user });
+  });
+
+  test("trims organization_id when superadmin creates user", async () => {
+    const user = { user_id: "u1", email: "a@a.com" };
+    const createSpy = spyOn(userRepo, "createUser").mockResolvedValue(user as never);
+    const req = createRequest({
+      user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
+      body: { email: "a@a.com", password: "x", organization_id: " org1 " },
+    });
+    const res = createMockResponse();
+
+    await userController.createUser(req, res);
+
+    expect(createSpy).toHaveBeenCalledWith({
+      name: undefined,
+      email: "a@a.com",
+      password: "x",
+      position: undefined,
+      role: UserRole.USER,
+      organization_id: "org1",
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  test("does not allow admin to create superadmin", async () => {
+    const createSpy = spyOn(userRepo, "createUser");
+    const req = createRequest({
+      user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
+      body: { email: "a@a.com", password: "x", role: UserRole.SUPER_ADMIN },
+    });
+    const res = createMockResponse();
+
+    await userController.createUser(req, res);
+
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
+  });
+
+  test("allows superadmin to create superadmin", async () => {
+    const user = { user_id: "u1", email: "a@a.com", role: UserRole.SUPER_ADMIN };
+    const createSpy = spyOn(userRepo, "createUser").mockResolvedValue(user as never);
+    const req = createRequest({
+      user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
+      body: { email: "a@a.com", password: "x", role: UserRole.SUPER_ADMIN, organization_id: "org1" },
+    });
+    const res = createMockResponse();
+
+    await userController.createUser(req, res);
+
+    expect(createSpy).toHaveBeenCalledWith({
+      name: undefined,
+      email: "a@a.com",
+      password: "x",
+      position: undefined,
+      role: UserRole.SUPER_ADMIN,
+      organization_id: "org1",
+    });
+    expect(res.statusCode).toBe(201);
   });
 
   test("returns 403 when not admin", async () => {
@@ -100,9 +166,9 @@ describe("userController.createUser", () => {
 describe("userController.updateUser", () => {
   test("allows user to update themselves", async () => {
     const user = { user_id: "u1", name: "Updated" };
-    spyOn(userRepo, "updateUser").mockResolvedValue(user as never);
+    const updateSpy = spyOn(userRepo, "updateUser").mockResolvedValue(user as never);
     const req = createRequest({
-      user: { user_id: "u1", role: UserRole.USER },
+      user: { user_id: "u1", role: UserRole.USER, organization_id: "org1" },
       params: { id: "u1" } as Request["params"],
       body: { name: "Updated" },
     });
@@ -110,14 +176,16 @@ describe("userController.updateUser", () => {
 
     await userController.updateUser(req, res);
 
+    expect(updateSpy).toHaveBeenCalledWith("u1", { name: "Updated" }, "org1");
     expect(res.body).toEqual({ success: true, data: user });
   });
 
-  test("allows admin to update any user", async () => {
+  test("allows admin to update user in own organization", async () => {
     const user = { user_id: "u2", name: "Updated" };
-    spyOn(userRepo, "updateUser").mockResolvedValue(user as never);
+    const updateSpy = spyOn(userRepo, "updateUser").mockResolvedValue(user as never);
     const req = createRequest({
-      user: { user_id: "admin1", role: UserRole.ADMIN },
+      user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
+      effectiveOrgId: "org1",
       params: { id: "u2" } as Request["params"],
       body: { name: "Updated" },
     });
@@ -125,6 +193,58 @@ describe("userController.updateUser", () => {
 
     await userController.updateUser(req, res);
 
+    expect(updateSpy).toHaveBeenCalledWith("u2", { name: "Updated" }, "org1");
+    expect(res.body).toEqual({ success: true, data: user });
+  });
+
+  test("admin from org A cannot update user from org B", async () => {
+    const updateSpy = spyOn(userRepo, "updateUser").mockRejectedValue(new Error("User not found"));
+    const req = createRequest({
+      user: { user_id: "admin-a", role: UserRole.ADMIN, organization_id: "org-a" },
+      effectiveOrgId: "org-a",
+      params: { id: "user-org-b" } as Request["params"],
+      body: { name: "Hacked" },
+    });
+    const res = createMockResponse();
+
+    await userController.updateUser(req, res);
+
+    expect(updateSpy).toHaveBeenCalledWith("user-org-b", { name: "Hacked" }, "org-a");
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toEqual({ success: false, error: "User not found or update failed" });
+  });
+
+  test("superadmin with org context is scoped to that organization on update", async () => {
+    const user = { user_id: "u2", name: "Updated" };
+    const updateSpy = spyOn(userRepo, "updateUser").mockResolvedValue(user as never);
+    const req = createRequest({
+      user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
+      effectiveOrgId: "org-a",
+      params: { id: "u2" } as Request["params"],
+      body: { name: "Updated" },
+    });
+    const res = createMockResponse();
+
+    await userController.updateUser(req, res);
+
+    expect(updateSpy).toHaveBeenCalledWith("u2", { name: "Updated" }, "org-a");
+    expect(res.body).toEqual({ success: true, data: user });
+  });
+
+  test("superadmin without org context can update globally", async () => {
+    const user = { user_id: "u2", name: "Updated" };
+    const updateSpy = spyOn(userRepo, "updateUser").mockResolvedValue(user as never);
+    const req = createRequest({
+      user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
+      effectiveOrgId: null,
+      params: { id: "u2" } as Request["params"],
+      body: { name: "Updated" },
+    });
+    const res = createMockResponse();
+
+    await userController.updateUser(req, res);
+
+    expect(updateSpy).toHaveBeenCalledWith("u2", { name: "Updated" }, null);
     expect(res.body).toEqual({ success: true, data: user });
   });
 
@@ -147,15 +267,17 @@ describe("userController.updateUser", () => {
 
 describe("userController.deleteUser", () => {
   test("deletes user when admin", async () => {
-    spyOn(userRepo, "deleteUser").mockResolvedValue(undefined as never);
+    const deleteSpy = spyOn(userRepo, "deleteUser").mockResolvedValue(undefined as never);
     const req = createRequest({
-      user: { user_id: "admin1", role: UserRole.ADMIN },
+      user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
+      effectiveOrgId: "org1",
       params: { id: "u1" } as Request["params"],
     });
     const res = createMockResponse();
 
     await userController.deleteUser(req, res);
 
+    expect(deleteSpy).toHaveBeenCalledWith("u1", "org1");
     expect(res.statusCode).toBe(204);
   });
 
@@ -177,7 +299,7 @@ describe("userController.deleteUser", () => {
   test("returns 404 when delete fails", async () => {
     spyOn(userRepo, "deleteUser").mockRejectedValue(new Error("missing"));
     const req = createRequest({
-      user: { user_id: "admin1", role: UserRole.ADMIN },
+      user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
       params: { id: "u1" } as Request["params"],
     });
     const res = createMockResponse();
@@ -186,5 +308,36 @@ describe("userController.deleteUser", () => {
 
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({ success: false, error: "User not found" });
+  });
+
+  test("admin from org A cannot delete user from org B", async () => {
+    const deleteSpy = spyOn(userRepo, "deleteUser").mockRejectedValue(new Error("User not found"));
+    const req = createRequest({
+      user: { user_id: "admin-a", role: UserRole.ADMIN, organization_id: "org-a" },
+      effectiveOrgId: "org-a",
+      params: { id: "user-org-b" } as Request["params"],
+    });
+    const res = createMockResponse();
+
+    await userController.deleteUser(req, res);
+
+    expect(deleteSpy).toHaveBeenCalledWith("user-org-b", "org-a");
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toEqual({ success: false, error: "User not found" });
+  });
+
+  test("superadmin without org context can delete globally", async () => {
+    const deleteSpy = spyOn(userRepo, "deleteUser").mockResolvedValue(undefined as never);
+    const req = createRequest({
+      user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
+      effectiveOrgId: null,
+      params: { id: "u1" } as Request["params"],
+    });
+    const res = createMockResponse();
+
+    await userController.deleteUser(req, res);
+
+    expect(deleteSpy).toHaveBeenCalledWith("u1", null);
+    expect(res.statusCode).toBe(204);
   });
 });

@@ -10,9 +10,10 @@ function handleDomainError(error: unknown, res: Response, fallbackMessage: strin
   return res.status(500).json({ success: false, error: fallbackMessage });
 }
 
-export async function listProjects(_req: Request, res: Response) {
+export async function listProjects(req: Request, res: Response) {
   try {
-    const projects = await projectRepo.getAllProjects();
+    const orgId = req.effectiveOrgId;
+    const projects = await projectRepo.getAllProjects(orgId);
     return res.json({ success: true, data: projects });
   } catch (error) {
     console.error("Error in listProjects:", error);
@@ -25,7 +26,8 @@ export async function getProject(req: Request, res: Response) {
   if (!id) return res.status(400).json({ success: false, error: "Missing or invalid id" });
 
   try {
-    const project = await projectRepo.getProjectWithTasks(id);
+    const orgId = req.effectiveOrgId;
+    const project = await projectRepo.getProjectWithTasks(id, orgId);
     if (!project) return res.status(404).json({ success: false, error: "Project not found" });
     return res.json({ success: true, data: project });
   } catch (error) {
@@ -37,13 +39,18 @@ export async function createProject(req: Request, res: Response) {
   const userId = requireUserId(req, res);
   if (!userId) return;
 
+  const orgId = req.effectiveOrgId;
+  if (!orgId) {
+    return res.status(403).json({ success: false, error: "No organization assigned" });
+  }
+
   const { name, description, color } = req.body;
   if (!name || typeof name !== "string" || name.trim() === "") {
     return res.status(400).json({ success: false, error: "name is required" });
   }
 
   try {
-    const project = await projectRepo.createProject({ name: name.trim(), description, color }, userId);
+    const project = await projectRepo.createProject({ name: name.trim(), description, color }, userId, orgId);
     return res.status(201).json({ success: true, data: project });
   } catch (error) {
     console.error("Error in createProject:", error);
@@ -62,7 +69,8 @@ export async function updateProject(req: Request, res: Response) {
   }
 
   try {
-    const project = await projectRepo.updateProject(id, { name: name?.trim(), description, color });
+    const orgId = req.effectiveOrgId;
+    const project = await projectRepo.updateProject(id, { name: name?.trim(), description, color }, orgId);
     return res.json({ success: true, data: project });
   } catch (error) {
     return handleDomainError(error, res, "Failed to update project");
@@ -74,8 +82,9 @@ export async function deleteProject(req: Request, res: Response) {
   if (!id) return res.status(400).json({ success: false, error: "Missing or invalid id" });
 
   try {
-    await projectRepo.deleteProject(id);
-    return res.json({ success: true });
+    const orgId = req.effectiveOrgId;
+    await projectRepo.deleteProject(id, orgId);
+    return res.status(204).send();
   } catch (error) {
     return handleDomainError(error, res, "Failed to delete project");
   }

@@ -65,6 +65,7 @@ enum UserRole {
   USER
   ADMIN
   SYSTEM
+  SUPER_ADMIN
 }
 
 enum TaskEventType {
@@ -90,28 +91,45 @@ enum TaskEventType {
   PHOTO_DELETED
 }
 
+model Organization {
+  org_id     String   @id @default(uuid())
+  name       String
+  slug       String   @unique
+  logo_url   String?  @db.Text
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  users    User[]
+  projects Project[]
+
+  @@map("organizations")
+}
+
 model User {
-  user_id         String           @id @default(uuid())
+  user_id         String        @id @default(uuid())
   name            String?
-  email           String           @unique
+  email           String        @unique
   password        String
-  role            UserRole         @default(USER)
+  role            UserRole      @default(USER)
   position        String?
-  push_token      String?          @unique
-  created_at      DateTime         @default(now())
-  updated_at      DateTime         @updatedAt
+  push_token      String?       @unique
+  organization_id String?
+  created_at      DateTime      @default(now())
+  updated_at      DateTime      @updatedAt
 
   // Relations
+  organization    Organization? @relation(fields: [organization_id], references: [org_id], onDelete: SetNull)
   taskComments    TaskComment[]
-  createdProjects Project[]        @relation("ProjectCreator")
-  createdTasks    Task[]           @relation("TaskCreator")
-  completedTasks  Task[]           @relation("TaskCompleter")
-  taskEvents      TaskEvent[]      @relation("TaskEventActor")
+  createdProjects Project[]     @relation("ProjectCreator")
+  createdTasks    Task[]        @relation("TaskCreator")
+  completedTasks  Task[]        @relation("TaskCompleter")
+  taskEvents      TaskEvent[]   @relation("TaskEventActor")
   taskAssignments TaskAssignment[]
   createdRecurringTemplates RecurringTaskTemplate[] @relation("RecurringTaskCreator")
   recurringTemplateAssignees RecurringTaskTemplateAssignee[]
   uploadedAttachments TaskAttachment[]
 
+  @@index([organization_id])
   @@map("users")
 }
 
@@ -188,19 +206,22 @@ model RecurringTaskTemplateAssignee {
 }
 
 model Project {
-  project_id  String   @id @default(uuid())
-  name        String
-  description String?  @db.Text
-  color       String?
-  created_by  String
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
+  project_id      String   @id @default(uuid())
+  name            String
+  description     String?  @db.Text
+  color           String?
+  created_by      String
+  organization_id String
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
 
   creator            User                    @relation("ProjectCreator", fields: [created_by], references: [user_id])
+  organization       Organization            @relation(fields: [organization_id], references: [org_id])
   tasks              Task[]
   recurringTemplates RecurringTaskTemplate[]
 
   @@index([created_by])
+  @@index([organization_id])
   @@map("projects")
 }
 

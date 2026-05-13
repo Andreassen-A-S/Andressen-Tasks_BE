@@ -17,21 +17,22 @@ export class ProjectNotFoundError extends Error {
 // Reads
 // ---------------------------------------------------------------------------
 
-export async function getAllProjects(): Promise<Project[]> {
+export async function getAllProjects(orgId: string | null): Promise<Project[]> {
   return prisma.project.findMany({
+    where: orgId ? { organization_id: orgId } : undefined,
     orderBy: { created_at: "asc" },
   });
 }
 
-export async function getProjectById(id: string): Promise<Project | null> {
-  return prisma.project.findUnique({
-    where: { project_id: id },
+export async function getProjectById(id: string, orgId: string | null): Promise<Project | null> {
+  return prisma.project.findFirst({
+    where: { project_id: id, ...(orgId ? { organization_id: orgId } : {}) },
   });
 }
 
-export async function getProjectWithTasks(id: string) {
-  return prisma.project.findUnique({
-    where: { project_id: id },
+export async function getProjectWithTasks(id: string, orgId: string | null) {
+  return prisma.project.findFirst({
+    where: { project_id: id, ...(orgId ? { organization_id: orgId } : {}) },
     include: { tasks: { orderBy: { created_at: "desc" } } },
   });
 }
@@ -43,6 +44,7 @@ export async function getProjectWithTasks(id: string) {
 export async function createProject(
   input: CreateProjectInput,
   createdBy: string,
+  orgId: string,
 ): Promise<Project> {
   return prisma.project.create({
     data: {
@@ -50,6 +52,7 @@ export async function createProject(
       description: input.description,
       color: input.color,
       created_by: createdBy,
+      organization_id: orgId,
     },
   });
 }
@@ -61,8 +64,11 @@ export async function createProject(
 export async function updateProject(
   id: string,
   input: UpdateProjectInput,
+  orgId: string | null,
 ): Promise<Project> {
-  const existing = await prisma.project.findUnique({ where: { project_id: id } });
+  const existing = await prisma.project.findFirst({
+    where: { project_id: id, ...(orgId ? { organization_id: orgId } : {}) },
+  });
   if (!existing) throw new ProjectNotFoundError(id);
 
   return prisma.project.update({
@@ -75,8 +81,10 @@ export async function updateProject(
 // Deletes
 // ---------------------------------------------------------------------------
 
-export async function deleteProject(id: string): Promise<void> {
-  const existing = await prisma.project.findUnique({ where: { project_id: id } });
+export async function deleteProject(id: string, orgId: string | null): Promise<void> {
+  const existing = await prisma.project.findFirst({
+    where: { project_id: id, ...(orgId ? { organization_id: orgId } : {}) },
+  });
   if (!existing) throw new ProjectNotFoundError(id);
 
   await prisma.project.delete({ where: { project_id: id } });

@@ -9,17 +9,24 @@ import {
   type UpdateUserInput,
 } from "../types/user";
 
-export async function getAllUsers(): Promise<SafeUser[]> {
+export async function getAllUsers(orgId: string | null): Promise<SafeUser[]> {
   return prisma.user.findMany({
-    where: { role: { not: UserRole.SYSTEM } },
+    where: {
+      role: { not: UserRole.SYSTEM },
+      ...(orgId ? { organization_id: orgId } : {}),
+    },
     select: userSelect,
     orderBy: { created_at: "desc" },
   });
 }
 
-export async function getUserById(id: string): Promise<SafeUser | null> {
+export async function getUserById(id: string, orgId: string | null): Promise<SafeUser | null> {
   return prisma.user.findFirst({
-    where: { user_id: id, role: { not: UserRole.SYSTEM } },
+    where: {
+      user_id: id,
+      role: { not: UserRole.SYSTEM },
+      ...(orgId ? { organization_id: orgId } : {}),
+    },
     select: userSelect,
   });
 }
@@ -39,9 +46,13 @@ export async function createUser(data: CreateUserInput) {
 export async function updateUser(
   id: string,
   data: UpdateUserInput,
+  effectiveOrgId: string | null = null,
 ): Promise<SafeUser> {
-  const existing = await prisma.user.findUnique({
-    where: { user_id: id },
+  const existing = await prisma.user.findFirst({
+    where: {
+      user_id: id,
+      ...(effectiveOrgId ? { organization_id: effectiveOrgId } : {}),
+    },
     select: { role: true },
   });
   if (!existing || existing.role === UserRole.SYSTEM) {
@@ -57,9 +68,16 @@ export async function updateUser(
   });
 }
 
-export async function deleteUser(id: string): Promise<void> {
+export async function deleteUser(
+  id: string,
+  effectiveOrgId: string | null = null,
+): Promise<void> {
   const result = await prisma.user.deleteMany({
-    where: { user_id: id, role: { not: UserRole.SYSTEM } },
+    where: {
+      user_id: id,
+      role: { not: UserRole.SYSTEM },
+      ...(effectiveOrgId ? { organization_id: effectiveOrgId } : {}),
+    },
   });
   if (result.count === 0) {
     throw new Error("User not found");
@@ -124,11 +142,15 @@ export async function getPushTokensForUsers(
   return new Map(users.map((u) => [u.user_id, u.push_token!]));
 }
 
-export async function getAdminPushTokens(): Promise<
+export async function getAdminPushTokens(orgId: string | null = null): Promise<
   { user_id: string; push_token: string }[]
 > {
   const admins = await prisma.user.findMany({
-    where: { role: "ADMIN", push_token: { not: null } },
+    where: {
+      role: UserRole.ADMIN,
+      push_token: { not: null },
+      ...(orgId ? { organization_id: orgId } : {}),
+    },
     select: { user_id: true, push_token: true },
   });
   return admins.map((a) => ({ user_id: a.user_id, push_token: a.push_token! }));

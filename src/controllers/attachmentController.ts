@@ -7,6 +7,10 @@ import { getParamId, requireUserId } from "../helper/helpers";
 
 const MAX_FILES_PER_REQUEST = 20;
 
+function isPrivileged(role?: UserRole) {
+  return role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN;
+}
+
 export async function prepareAttachments(req: Request, res: Response) {
   try {
     const userId = requireUserId(req, res);
@@ -51,9 +55,13 @@ export async function prepareAttachments(req: Request, res: Response) {
       }
     }
 
-    const isAdmin = req.user?.role === UserRole.ADMIN;
-    const task = await prisma.task.findUnique({
-      where: { task_id: task_id },
+    const orgId = req.effectiveOrgId;
+    const isAdmin = isPrivileged(req.user?.role);
+    const task = await prisma.task.findFirst({
+      where: {
+        task_id,
+        ...(orgId ? { project: { organization_id: orgId } } : {}),
+      },
       include: { assignments: { where: { user_id: userId } } },
     });
     if (!task) {
@@ -104,10 +112,14 @@ export async function getTaskAttachments(req: Request, res: Response) {
     const userId = requireUserId(req, res);
     if (!userId) return;
 
-    const isAdmin = req.user?.role === UserRole.ADMIN;
+    const orgId = req.effectiveOrgId;
+    const isAdmin = isPrivileged(req.user?.role);
 
-    const task = await prisma.task.findUnique({
-      where: { task_id: taskId },
+    const task = await prisma.task.findFirst({
+      where: {
+        task_id: taskId,
+        ...(orgId ? { project: { organization_id: orgId } } : {}),
+      },
       include: { assignments: { where: { user_id: userId } } },
     });
 
@@ -141,17 +153,24 @@ export async function deleteAttachment(req: Request, res: Response) {
     const userId = requireUserId(req, res);
     if (!userId) return;
 
-    const isAdmin = req.user?.role === UserRole.ADMIN;
+    const isAdmin = isPrivileged(req.user?.role);
+    const orgId = req.effectiveOrgId;
 
     const attachment = await attachmentRepo.getAttachmentById(attachmentId);
     if (!attachment) {
       return res.status(404).json({ success: false, error: "Attachment not found" });
     }
 
-    const attachmentTask = await prisma.task.findUnique({
-      where: { task_id: attachment.task_id },
+    const attachmentTask = await prisma.task.findFirst({
+      where: {
+        task_id: attachment.task_id,
+        ...(orgId ? { project: { organization_id: orgId } } : {}),
+      },
       select: { status: true },
     });
+    if (!attachmentTask) {
+      return res.status(404).json({ success: false, error: "Attachment not found" });
+    }
     if (attachmentTask?.status === TaskStatus.ARCHIVED) {
       return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
     }

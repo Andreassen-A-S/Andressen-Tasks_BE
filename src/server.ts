@@ -14,6 +14,7 @@ import templateRoutes from "./routes/template.routes";
 import statRoutes from "./routes/stat.routes";
 import projectRoutes from "./routes/project.routes";
 import attachmentRoutes from "./routes/attachment.routes";
+import organizationRoutes from "./routes/organization.routes";
 import { initScheduler } from "./services/schedulerService";
 
 if (!process.env.JWT_SECRET) {
@@ -52,7 +53,7 @@ app.use(
     },
     credentials: false, // Bearer tokens in Authorization header
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Org-Context"],
   }),
 );
 
@@ -98,6 +99,7 @@ app.use("/api/task-events", taskEventRoutes);
 app.use("/api/recurring-templates", templateRoutes);
 app.use("/api/stats", statRoutes);
 app.use("/api/projects", projectRoutes);
+app.use("/api/organizations", organizationRoutes);
 app.use("/api/attachments", attachmentRoutes);
 
 // 404
