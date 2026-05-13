@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { Request, Response } from "express";
 import { TaskEventType, TaskStatus } from "../src/generated/prisma/client";
+
+const transactionMock = mock<(fn: (tx: any) => Promise<any>) => Promise<any>>();
+mock.module("../src/db/prisma", () => ({
+  prisma: { $transaction: transactionMock },
+}));
+
 import * as assignmentController from "../src/controllers/assignmentController";
 import * as assignmentRepo from "../src/repositories/assignmentRepository";
 import * as taskRepo from "../src/repositories/taskRepository";
@@ -37,6 +43,7 @@ function createRequest(overrides: Record<string, any> = {}): Request {
     body: {},
     query: {},
     effectiveOrgId: null,
+    user: { user_id: "u1", role: "ADMIN" },
     ...overrides,
   } as Request;
 }
@@ -85,7 +92,8 @@ describe("assignmentController.assignTask", () => {
 
     expect(assignSpy).toHaveBeenCalledWith({ task_id: "t1", user_id: "u2" }, null);
     expect(eventSpy).toHaveBeenCalledTimes(1);
-    expect(eventSpy.mock.calls[0]?.[0]?.type).toBe(
+    // createTaskEvent(db, data) — check second arg (index 1) for the event type
+    expect(eventSpy.mock.calls[0]?.[1]?.type).toBe(
       TaskEventType.ASSIGNMENT_CREATED,
     );
     expect(res.statusCode).toBe(201);
@@ -143,6 +151,7 @@ describe("assignmentController.updateAssignment", () => {
   });
 
   test("passes effective org to assignment update repository", async () => {
+    transactionMock.mockImplementation((fn) => fn({}));
     const existing = {
       assignment_id: "a1",
       task_id: "t1",
@@ -163,7 +172,7 @@ describe("assignmentController.updateAssignment", () => {
 
     await assignmentController.updateAssignment(req, res);
 
-    expect(updateSpy).toHaveBeenCalledWith("a1", req.body, "org-a");
+    expect(updateSpy).toHaveBeenCalledWith(expect.anything(), "a1", req.body, "org-a");
     expect(res.body).toEqual({ success: true, data: updated });
   });
 });
@@ -191,7 +200,8 @@ describe("assignmentController.deleteAssignment", () => {
     await assignmentController.deleteAssignment(req, res);
 
     expect(eventSpy).toHaveBeenCalledTimes(1);
-    expect(eventSpy.mock.calls[0]?.[0]?.type).toBe(
+    // createTaskEvent(db, data) — check second arg (index 1) for the event type
+    expect(eventSpy.mock.calls[0]?.[1]?.type).toBe(
       TaskEventType.ASSIGNMENT_DELETED,
     );
     expect(deleteSpy).toHaveBeenCalledWith("a1", null);

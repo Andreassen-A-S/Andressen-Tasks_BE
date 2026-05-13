@@ -1,13 +1,23 @@
 import type { Request, Response } from "express";
-import * as orgRepo from "../repositories/organizationRepository";
-import { OrganizationNotFoundError } from "../repositories/organizationRepository";
+import * as organizationService from "../services/organizationService";
 import * as storageService from "../services/storageService";
-import { MESTERPLAN_ORG_ID } from "../constants";
-import { UserRole } from "../generated/prisma/client";
+import * as orgRepo from "../repositories/organizationRepository";
+import { getRequestContext } from "../types/requestContext";
+import {
+  OrganizationNotFoundError,
+  ProtectedOrganizationError,
+  ForbiddenUserOperationError,
+} from "../errors/domainErrors";
 
 function handleDomainError(error: unknown, res: Response, fallbackMessage: string): Response {
   if (error instanceof OrganizationNotFoundError) {
     return res.status(404).json({ success: false, error: error.message });
+  }
+  if (error instanceof ProtectedOrganizationError) {
+    return res.status(403).json({ success: false, error: "MesterPlan organization cannot be deleted" });
+  }
+  if (error instanceof ForbiddenUserOperationError) {
+    return res.status(403).json({ success: false, error: error.message });
   }
   console.error(fallbackMessage, error);
   return res.status(500).json({ success: false, error: fallbackMessage });
@@ -15,7 +25,7 @@ function handleDomainError(error: unknown, res: Response, fallbackMessage: strin
 
 export async function listOrganizations(_req: Request, res: Response) {
   try {
-    const orgs = await orgRepo.getAllOrganizations();
+    const orgs = await organizationService.listOrganizations();
     return res.json({ success: true, data: orgs });
   } catch (error) {
     console.error("Error in listOrganizations:", error);
@@ -25,7 +35,7 @@ export async function listOrganizations(_req: Request, res: Response) {
 
 export async function getOrganization(req: Request, res: Response) {
   try {
-    const org = await orgRepo.getOrganizationById(req.params.id as string);
+    const org = await organizationService.getOrganization(req.params.id as string);
     if (!org) return res.status(404).json({ success: false, error: "Organization not found" });
     return res.json({ success: true, data: org });
   } catch (error) {
@@ -51,7 +61,7 @@ export async function createOrganization(req: Request, res: Response) {
   }
 
   try {
-    const org = await orgRepo.createOrganization({ name: name.trim(), slug: slug.trim(), logo_url });
+    const org = await organizationService.createOrganization({ name: name.trim(), slug: slug.trim(), logo_url });
     return res.status(201).json({ success: true, data: org });
   } catch (error) {
     console.error("Error in createOrganization:", error);
@@ -74,12 +84,12 @@ export async function updateOrganization(req: Request, res: Response) {
   if (typeof logo_url === "string" && !orgRepo.isOrgLogoPath(logo_url)) {
     return res.status(400).json({ success: false, error: "logo_url must be a valid organization logo path" });
   }
-  if (slug !== undefined && req.user?.role !== UserRole.SUPER_ADMIN) {
-    return res.status(403).json({ success: false, error: "Only super admins can update organization slug" });
-  }
 
   try {
-    const org = await orgRepo.updateOrganization(req.params.id as string, {
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
+
+    const org = await organizationService.updateOrganization(ctx, req.params.id as string, {
       name: name?.trim(),
       slug: slug?.trim(),
       logo_url,
@@ -103,25 +113,20 @@ export async function prepareOrgLogo(req: Request, res: Response) {
     if (!id || typeof id !== "string") {
       return res.status(400).json({ success: false, error: "Missing org id" });
     }
-    const org = await orgRepo.getOrganizationById(id);
-    if (!org) {
-      return res.status(404).json({ success: false, error: "Organization not found" });
-    }
-    const result = await storageService.generateOrgLogoUploadUrl(id, mime_type);
+    const result = await organizationService.prepareLogoUpload(id, mime_type);
     return res.json({ success: true, data: result });
   } catch (error) {
+    if (error instanceof OrganizationNotFoundError) {
+      return res.status(404).json({ success: false, error: "Organization not found" });
+    }
     console.error("Error in prepareOrgLogo:", error);
     return res.status(400).json({ success: false, error: "Failed to prepare logo upload" });
   }
 }
 
-
 export async function deleteOrganization(req: Request, res: Response) {
-  if (req.params.id === MESTERPLAN_ORG_ID) {
-    return res.status(403).json({ success: false, error: "MesterPlan organization cannot be deleted" });
-  }
   try {
-    await orgRepo.deleteOrganization(req.params.id as string);
+    await organizationService.deleteOrganization(req.params.id as string);
     return res.status(204).send();
   } catch (error) {
     return handleDomainError(error, res, "Failed to delete organization");

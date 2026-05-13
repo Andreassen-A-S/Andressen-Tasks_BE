@@ -8,6 +8,7 @@ import {
   type SafeUser,
   type UpdateUserInput,
 } from "../types/user";
+import { UserNotFoundError } from "../errors/domainErrors";
 
 export async function getAllUsers(orgId: string | null): Promise<SafeUser[]> {
   return prisma.user.findMany({
@@ -31,6 +32,8 @@ export async function getUserById(id: string, orgId: string | null): Promise<Saf
   });
 }
 
+// Creates a new user in the organization. Password is hashed before persisting.
+// organization_id is always set by the service layer, never trusted from client input.
 export async function createUser(data: CreateUserInput) {
   const hashedPassword = await hashPassword(data.password);
 
@@ -43,20 +46,20 @@ export async function createUser(data: CreateUserInput) {
   });
 }
 
-export async function updateUser(
+async function updateUserScoped(
   id: string,
   data: UpdateUserInput,
-  effectiveOrgId: string | null = null,
+  orgId?: string,
 ): Promise<SafeUser> {
   const existing = await prisma.user.findFirst({
     where: {
       user_id: id,
-      ...(effectiveOrgId ? { organization_id: effectiveOrgId } : {}),
+      ...(orgId ? { organization_id: orgId } : {}),
     },
     select: { role: true },
   });
   if (!existing || existing.role === UserRole.SYSTEM) {
-    throw new Error("User not found");
+    throw new UserNotFoundError(id);
   }
   if (data.password) {
     data.password = await hashPassword(data.password);
@@ -68,20 +71,46 @@ export async function updateUser(
   });
 }
 
-export async function deleteUser(
+// Org-scoped user update. Validates that the user belongs to the specified org
+// before mutating, preventing cross-org edits.
+export async function updateUserInOrg(
   id: string,
-  effectiveOrgId: string | null = null,
+  orgId: string,
+  data: UpdateUserInput,
+): Promise<SafeUser> {
+  return updateUserScoped(id, data, orgId);
+}
+
+export async function updateUserPlatform(
+  id: string,
+  data: UpdateUserInput,
+): Promise<SafeUser> {
+  return updateUserScoped(id, data);
+}
+
+async function deleteUserScoped(
+  id: string,
+  orgId?: string,
 ): Promise<void> {
   const result = await prisma.user.deleteMany({
     where: {
       user_id: id,
       role: { not: UserRole.SYSTEM },
-      ...(effectiveOrgId ? { organization_id: effectiveOrgId } : {}),
+      ...(orgId ? { organization_id: orgId } : {}),
     },
   });
   if (result.count === 0) {
-    throw new Error("User not found");
+    throw new UserNotFoundError(id);
   }
+}
+
+// Org-scoped user delete. Scopes by org to prevent cross-org deletions.
+export async function deleteUserInOrg(id: string, orgId: string): Promise<void> {
+  return deleteUserScoped(id, orgId);
+}
+
+export async function deleteUserPlatform(id: string): Promise<void> {
+  return deleteUserScoped(id);
 }
 
 export async function updatePushToken(

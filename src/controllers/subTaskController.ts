@@ -1,7 +1,7 @@
-import * as taskRepo from "../repositories/taskRepository";
-import * as taskEventRepo from "../repositories/taskEventRepository";
-import { TaskEventType, TaskStatus } from "../generated/prisma/client";
 import type { Request, Response } from "express";
+import * as subTaskService from "../services/subTaskService";
+import { getRequestContext } from "../types/requestContext";
+import { TaskArchivedError, TaskNotFoundError } from "../errors/domainErrors";
 
 export async function createSubtask(req: Request, res: Response) {
   try {
@@ -13,46 +13,19 @@ export async function createSubtask(req: Request, res: Response) {
         .json({ success: false, error: "parent_task_id is required" });
     }
 
-    const parentTask = await taskRepo.getTaskById(parent_task_id, req.effectiveOrgId);
-    if (!parentTask) {
-      return res
-        .status(404)
-        .json({ success: false, error: "Parent task not found" });
-    }
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
-    if (parentTask.status === TaskStatus.ARCHIVED) {
-      return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
-    }
-
-    // Create subtask + assignments (safe)
-    const subtask = await taskRepo.createTaskWithAssignments({
-      ...subtaskData,
-      parent_task_id,
-      project_id: parentTask.project_id,
-    }, req.effectiveOrgId);
-
-    // SUBTASK_ADDED event on parent
-    await taskEventRepo.createTaskEvent({
-      task: { connect: { task_id: parent_task_id } },
-      actor: { connect: { user_id: req.user?.user_id } },
-      type: TaskEventType.SUBTASK_ADDED,
-      message: "Subtask created",
-      before_json: {},
-      after_json: subtask ?? {},
-    });
-
-    // TASK_CREATED event on subtask
-    await taskEventRepo.createTaskEvent({
-      task: { connect: { task_id: subtask!.task_id } },
-      actor: { connect: { user_id: req.user!.user_id } },
-      type: TaskEventType.TASK_CREATED,
-      message: "Task created",
-      before_json: {},
-      after_json: subtask ?? {},
-    });
+    const subtask = await subTaskService.createSubtask(ctx, parent_task_id, subtaskData);
 
     res.status(201).json({ success: true, data: subtask });
   } catch (error) {
+    if (error instanceof TaskNotFoundError) {
+      return res.status(404).json({ success: false, error: "Parent task not found" });
+    }
+    if (error instanceof TaskArchivedError) {
+      return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
+    }
     console.error("Error in createSubtask:", error);
     res.status(400).json({ success: false, error: "Failed to create subtask" });
   }

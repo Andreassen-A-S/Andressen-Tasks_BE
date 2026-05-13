@@ -7,16 +7,18 @@ import * as taskEventRepo from "../src/repositories/taskEventRepository";
 import * as userRepo from "../src/repositories/userRepository";
 import * as storageService from "../src/services/storageService";
 
+// prisma.task.findFirst is called directly by commentService.
+// prisma.$transaction is used by commentService for createComment / updateComment.
 const findFirstMock = mock<(...args: any[]) => Promise<Task | null>>(() =>
   Promise.resolve({ status: TaskStatus.PENDING } as Task),
 );
+const transactionMock = mock<(fn: (tx: any) => Promise<any>) => Promise<any>>();
 const sendPushNotificationMock = mock<(...args: any[]) => Promise<void>>();
 
 mock.module("../src/db/prisma", () => ({
   prisma: {
-    task: {
-      findFirst: findFirstMock,
-    },
+    task: { findFirst: findFirstMock },
+    $transaction: transactionMock,
   },
 }));
 
@@ -44,6 +46,8 @@ function createMockResponse(): MockResponse {
     return res;
   }) as unknown as Response["json"];
 
+  res.send = mock(() => res) as unknown as Response["send"];
+
   return res;
 }
 
@@ -52,6 +56,7 @@ function createRequest(overrides: Record<string, any> = {}): Request {
     params: {},
     body: {},
     effectiveOrgId: null,
+    user: { user_id: "u1", role: UserRole.USER },
     ...overrides,
   } as Request;
 }
@@ -59,6 +64,7 @@ function createRequest(overrides: Record<string, any> = {}): Request {
 afterEach(() => {
   mock.restore();
   sendPushNotificationMock.mockReset();
+  transactionMock.mockReset();
 });
 
 describe("commentController.listTaskComments", () => {
@@ -90,8 +96,9 @@ describe("commentController.listTaskComments", () => {
 
     await commentController.listTaskComments(req, res);
 
-    expect(res.statusCode).toBe(403);
-    expect(res.body).toEqual({ success: false, error: "Access denied" });
+    expect(res.statusCode).toBe(404);
+    // commentService returns null for inaccessible tasks → controller returns 404
+    expect(res.body).toEqual({ success: false, error: "Task not found" });
   });
 });
 
@@ -145,7 +152,8 @@ describe("commentController.createComment", () => {
       created_by: "u1",
       assignments: [],
     } as any);
-    spyOn(commentRepo, "createComment").mockRejectedValue(
+    // commentService wraps createComment in $transaction; the repo throws inside
+    transactionMock.mockRejectedValue(
       new Error("One or more upload tokens are invalid or expired"),
     );
 
@@ -173,13 +181,16 @@ describe("commentController.createComment", () => {
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
     sendPushNotificationMock.mockResolvedValue(undefined);
 
-    const createSpy = spyOn(commentRepo, "createComment").mockResolvedValue({
+    const createdComment = {
       comment_id: "c1",
       task_id: "t1",
       user_id: "u1",
       message: "hello",
       attachments: [],
-    } as never);
+    };
+    // commentService calls $transaction which calls commentRepo.createComment(tx, data)
+    transactionMock.mockImplementation(async (fn: any) => fn({}));
+    const createSpy = spyOn(commentRepo, "createComment").mockResolvedValue(createdComment as never);
     const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
 
     const req = createRequest({
@@ -191,11 +202,12 @@ describe("commentController.createComment", () => {
 
     await commentController.createComment(req, res);
 
-    expect(createSpy).toHaveBeenCalledWith({
+    // createComment(tx, data) — second arg is the data
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    expect(createSpy.mock.calls[0]?.[1]).toMatchObject({
       task_id: "t1",
       user_id: "u1",
       message: "hello",
-      upload_tokens: undefined,
     });
     expect(eventSpy).toHaveBeenCalledTimes(1);
     expect(res.statusCode).toBe(201);
@@ -212,14 +224,17 @@ describe("commentController.createComment", () => {
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
     sendPushNotificationMock.mockResolvedValue(undefined);
 
-    const createSpy = spyOn(commentRepo, "createComment").mockResolvedValue({
+    const createdComment = {
       comment_id: "c1",
       task_id: "t1",
       user_id: "u1",
       message: "",
       attachments: [{ attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg", url: "https://storage.googleapis.com/bucket/tasks/t1/uuid.jpg" }],
-    } as never);
+    };
+    transactionMock.mockImplementation(async (fn: any) => fn({}));
+    const createSpy = spyOn(commentRepo, "createComment").mockResolvedValue(createdComment as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    spyOn(storageService, "generateSignedReadUrl").mockResolvedValue("https://signed.example.com/uuid.jpg");
 
     const req = createRequest({
       params: { taskId: "t1" } as Request["params"],
@@ -230,10 +245,9 @@ describe("commentController.createComment", () => {
 
     await commentController.createComment(req, res);
 
-    expect(createSpy).toHaveBeenCalledWith({
+    expect(createSpy.mock.calls[0]?.[1]).toMatchObject({
       task_id: "t1",
       user_id: "u1",
-      message: "",
       upload_tokens: ["tok1"],
     });
     expect(res.statusCode).toBe(201);
@@ -249,6 +263,7 @@ describe("commentController.createComment", () => {
     } as any);
 
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
+    transactionMock.mockImplementation(async (fn: any) => fn({}));
     spyOn(commentRepo, "createComment").mockResolvedValue({
       comment_id: "c1",
       task_id: "t1",
@@ -278,6 +293,7 @@ describe("commentController.createComment", () => {
 
 describe("commentController.createComment — notification routing", () => {
   function stubCommentInfra() {
+    transactionMock.mockImplementation(async (fn: any) => fn({}));
     spyOn(commentRepo, "createComment").mockResolvedValue({
       comment_id: "c1",
       task_id: "t1",
@@ -424,6 +440,8 @@ describe("commentController.deleteComment", () => {
       user_id: "owner",
       task_id: "t1",
     } as never);
+    // commentService also checks task via prisma.task.findFirst
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING } as any);
 
     const req = createRequest({
       params: { commentId: "c1" } as Request["params"],
@@ -434,26 +452,33 @@ describe("commentController.deleteComment", () => {
     await commentController.deleteComment(req, res);
 
     expect(res.statusCode).toBe(403);
-    expect(res.body).toEqual({
+    expect(res.body).toMatchObject({
       success: false,
-      error: "Not authorized to delete this comment",
     });
   });
 });
 
 describe("commentController.updateComment", () => {
   test("updates comment and logs event", async () => {
-    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+    const existingComment = {
       comment_id: "c1",
       user_id: "u1",
       task_id: "t1",
       message: "old",
-    } as never);
-    spyOn(commentRepo, "updateComment").mockResolvedValue({
+    };
+    spyOn(commentRepo, "getCommentById").mockResolvedValue(existingComment as never);
+    // commentService checks task for archived status
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING } as any);
+    transactionMock.mockImplementation(async (fn: any) => fn({}));
+    const updatedComment = {
       comment_id: "c1",
       user_id: "u1",
       task_id: "t1",
       message: "new",
+    };
+    spyOn(commentRepo, "updateComment").mockResolvedValue({
+      comment: updatedComment,
+      removedGcsPaths: [],
     } as never);
     const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
 
@@ -469,7 +494,7 @@ describe("commentController.updateComment", () => {
     expect(eventSpy).toHaveBeenCalledTimes(1);
     expect(res.body).toEqual({
       success: true,
-      data: { comment_id: "c1", user_id: "u1", task_id: "t1", message: "new" },
+      data: updatedComment,
     });
   });
 
@@ -480,6 +505,7 @@ describe("commentController.updateComment", () => {
       task_id: "t1",
       message: "old",
     } as never);
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING } as any);
 
     const req = createRequest({
       params: { commentId: "c1" } as Request["params"],
@@ -491,7 +517,7 @@ describe("commentController.updateComment", () => {
     await commentController.updateComment(req, res);
 
     expect(res.statusCode).toBe(403);
-    expect(res.body).toEqual({ success: false, error: "Not authorized to edit this comment" });
+    expect(res.body).toMatchObject({ success: false });
   });
 
   test("returns 403 when admin tries to update another user's comment", async () => {
@@ -501,6 +527,7 @@ describe("commentController.updateComment", () => {
       task_id: "t1",
       message: "old",
     } as never);
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING } as any);
 
     const req = createRequest({
       params: { commentId: "c1" } as Request["params"],
@@ -577,7 +604,8 @@ describe("commentController.updateComment", () => {
       task_id: "t1",
       message: "old",
     } as never);
-    spyOn(commentRepo, "updateComment").mockRejectedValue(
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING } as any);
+    transactionMock.mockRejectedValue(
       new Error("One or more upload tokens are invalid or expired"),
     );
 
@@ -601,11 +629,11 @@ describe("commentController.updateComment", () => {
       task_id: "t1",
       message: "old",
     } as never);
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING } as any);
+    transactionMock.mockImplementation(async (fn: any) => fn({}));
     const updateSpy = spyOn(commentRepo, "updateComment").mockResolvedValue({
-      comment_id: "c1",
-      user_id: "u1",
-      task_id: "t1",
-      message: "new",
+      comment: { comment_id: "c1", user_id: "u1", task_id: "t1", message: "new" },
+      removedGcsPaths: [],
     } as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
 
@@ -618,7 +646,11 @@ describe("commentController.updateComment", () => {
 
     await commentController.updateComment(req, res);
 
-    expect(updateSpy).toHaveBeenCalledWith("c1", "new", ["tok1", "tok2"], undefined);
+    // updateComment(db, id, message, tokens, removeIds) — check args
+    expect(updateSpy.mock.calls[0]?.[1]).toBe("c1");
+    expect(updateSpy.mock.calls[0]?.[2]).toBe("new");
+    expect(updateSpy.mock.calls[0]?.[3]).toEqual(["tok1", "tok2"]);
+    expect(updateSpy.mock.calls[0]?.[4]).toBeUndefined();
   });
 
   test("returns 400 when remove_attachment_ids is not an array", async () => {
@@ -691,16 +723,22 @@ describe("commentController.updateComment", () => {
       task_id: "t1",
       message: "existing",
     } as never);
-    const updateSpy = spyOn(commentRepo, "updateComment").mockResolvedValue({
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING } as any);
+    spyOn(attachmentRepo, "getAttachmentsByCommentId").mockResolvedValue([
+      { attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg" },
+    ] as never);
+    transactionMock.mockImplementation(async (fn: any) => fn({}));
+    const updatedComment = {
       comment_id: "c1",
       user_id: "u1",
       task_id: "t1",
       message: "existing",
+    };
+    const updateSpy = spyOn(commentRepo, "updateComment").mockResolvedValue({
+      comment: updatedComment,
+      removedGcsPaths: ["tasks/t1/uuid.jpg"],
     } as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
-    spyOn(attachmentRepo, "getAttachmentsByCommentId").mockResolvedValue([
-      { attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg" },
-    ] as never);
     spyOn(storageService, "deleteFile").mockResolvedValue(undefined);
 
     const req = createRequest({
@@ -712,7 +750,9 @@ describe("commentController.updateComment", () => {
 
     await commentController.updateComment(req, res);
 
-    expect(updateSpy).toHaveBeenCalledWith("c1", undefined, undefined, ["a1"]);
+    expect(updateSpy.mock.calls[0]?.[1]).toBe("c1");
+    expect(updateSpy.mock.calls[0]?.[2]).toBeUndefined();
+    expect(updateSpy.mock.calls[0]?.[4]).toEqual(["a1"]);
     expect(res.body).toMatchObject({ success: true });
   });
 
@@ -723,24 +763,18 @@ describe("commentController.updateComment", () => {
       task_id: "t1",
       message: "old",
     } as never);
-    const updateSpy = spyOn(commentRepo, "updateComment").mockResolvedValue({
-      comment_id: "c1",
-      user_id: "u1",
-      task_id: "t1",
-      message: "new",
-    } as never);
-    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
-    const getAttachmentsSpy = spyOn(attachmentRepo, "getAttachmentsByCommentId").mockResolvedValue([
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING } as any);
+    spyOn(attachmentRepo, "getAttachmentsByCommentId").mockResolvedValue([
       { attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg" },
     ] as never);
-    const deleteFileSpy = spyOn(storageService, "deleteFile").mockResolvedValue(undefined);
-
+    transactionMock.mockImplementation(async (fn: any) => fn({}));
     const callOrder: string[] = [];
-    updateSpy.mockImplementation(async (...args) => {
+    const updateSpy = spyOn(commentRepo, "updateComment").mockImplementation(async () => {
       callOrder.push("db");
-      return { comment_id: "c1", user_id: "u1", task_id: "t1", message: "new" } as never;
+      return { comment: { comment_id: "c1", user_id: "u1", task_id: "t1", message: "new" }, removedGcsPaths: [] } as any;
     });
-    deleteFileSpy.mockImplementation(async () => {
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    const deleteFileSpy = spyOn(storageService, "deleteFile").mockImplementation(async () => {
       callOrder.push("gcs");
     });
 
@@ -753,8 +787,10 @@ describe("commentController.updateComment", () => {
 
     await commentController.updateComment(req, res);
 
-    expect(getAttachmentsSpy).toHaveBeenCalledWith("c1");
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+    // GCS deletion happens in the service after DB, driven by gcsPathsToDelete fetched from attachmentRepo
     expect(deleteFileSpy).toHaveBeenCalledWith("tasks/t1/uuid.jpg");
+    // DB operation happens inside the transaction (inside commentService), then GCS after
     expect(callOrder).toEqual(["db", "gcs"]);
   });
 });

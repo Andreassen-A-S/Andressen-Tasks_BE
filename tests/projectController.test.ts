@@ -24,7 +24,13 @@ function createMockResponse(): MockResponse {
 }
 
 function createRequest(overrides: Record<string, any> = {}): Request {
-  return { params: {}, body: {}, effectiveOrgId: null, ...overrides } as Request;
+  return {
+    params: {},
+    body: {},
+    effectiveOrgId: null,
+    user: { user_id: "u1", role: "ADMIN" },
+    ...overrides,
+  } as Request;
 }
 
 afterEach(() => {
@@ -125,7 +131,7 @@ describe("projectController.createProject", () => {
   });
 
   test("returns 401 when unauthenticated", async () => {
-    const req = createRequest({ body: { name: "New Project" } });
+    const req = createRequest({ body: { name: "New Project" }, user: undefined });
     const res = createMockResponse();
 
     await projectController.createProject(req, res);

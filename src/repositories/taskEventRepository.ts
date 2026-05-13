@@ -1,9 +1,10 @@
 import { prisma } from "../db/prisma";
-import type { Prisma, TaskEvent } from "../generated/prisma/client";
+import type { Prisma } from "../generated/prisma/client";
 import { AttachmentStatus } from "../generated/prisma/client";
+import type { DbClient } from "../types/db";
 
-export async function createTaskEvent(data: Prisma.TaskEventCreateInput) {
-  return prisma.taskEvent.create({ data });
+export async function createTaskEvent(db: DbClient, data: Prisma.TaskEventCreateInput) {
+  return (db as any).taskEvent.create({ data });
 }
 
 export async function getTaskEventsByTaskId(taskId: string) {

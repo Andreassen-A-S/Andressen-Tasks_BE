@@ -139,7 +139,10 @@ describe("statController.getTopPerformers", () => {
       new Error("Limit must be between 1 and 20"),
     );
 
-    const req = createRequest({ query: { limit: "200" } as Request["query"] });
+    const req = createRequest({
+      user: { user_id: "u1", role: UserRole.ADMIN },
+      query: { limit: "200" } as Request["query"],
+    });
     const res = createMockResponse();
 
     await statController.getTopPerformers(req, res);
@@ -159,7 +162,10 @@ describe("statController.getDashboardStats", () => {
       "getStatsForWindow",
     ).mockResolvedValue({} as never);
 
-    const req = createRequest({ query: {} as Request["query"] });
+    const req = createRequest({
+      user: { user_id: "u1", role: UserRole.ADMIN },
+      query: {} as Request["query"],
+    });
     const res = createMockResponse();
 
     await statController.getDashboardStats(req, res);
@@ -174,7 +180,10 @@ describe("statController.getDashboardStats", () => {
       "getStatsForWindow",
     ).mockResolvedValue({} as never);
 
-    const req = createRequest({ query: { days: "abc" } as Request["query"] });
+    const req = createRequest({
+      user: { user_id: "u1", role: UserRole.ADMIN },
+      query: { days: "abc" } as Request["query"],
+    });
     const res = createMockResponse();
 
     await statController.getDashboardStats(req, res);
@@ -188,7 +197,10 @@ describe("statController.getDashboardStats", () => {
       new Error("Days must be between 1 and 365"),
     );
 
-    const req = createRequest({ query: { days: "366" } as Request["query"] });
+    const req = createRequest({
+      user: { user_id: "u1", role: UserRole.ADMIN },
+      query: { days: "366" } as Request["query"],
+    });
     const res = createMockResponse();
 
     await statController.getDashboardStats(req, res);

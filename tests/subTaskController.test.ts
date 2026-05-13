@@ -5,6 +5,13 @@ import * as subTaskController from "../src/controllers/subTaskController";
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
 import * as taskRepo from "../src/repositories/taskRepository";
 
+// subTaskService uses prisma.$transaction — mock it so tests don't need a real DB.
+const transactionMock = mock<(fn: (tx: any) => Promise<any>) => Promise<any>>();
+
+mock.module("../src/db/prisma", () => ({
+  prisma: { $transaction: transactionMock },
+}));
+
 type MockResponse = Response & {
   statusCode?: number;
   body?: unknown;
@@ -30,6 +37,8 @@ function createRequest(overrides: Record<string, any> = {}): Request {
   return {
     params: {},
     body: {},
+    user: { user_id: "u1", role: "ADMIN" },
+    effectiveOrgId: null,
     ...overrides,
   } as Request;
 }
@@ -77,6 +86,8 @@ describe("subTaskController.createSubtask", () => {
     const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue(
       {} as never,
     );
+    // The service wraps in a transaction — provide a pass-through mock.
+    transactionMock.mockImplementation((fn: any) => fn({}));
 
     const req = createRequest({
       user: { user_id: "u1" },
@@ -87,8 +98,9 @@ describe("subTaskController.createSubtask", () => {
     await subTaskController.createSubtask(req, res);
 
     expect(eventSpy).toHaveBeenCalledTimes(2);
-    expect(eventSpy.mock.calls[0]?.[0]?.type).toBe(TaskEventType.SUBTASK_ADDED);
-    expect(eventSpy.mock.calls[1]?.[0]?.type).toBe(TaskEventType.TASK_CREATED);
+    // createTaskEvent(db, data) — second arg (index 1) carries the event type
+    expect(eventSpy.mock.calls[0]?.[1]?.type).toBe(TaskEventType.SUBTASK_ADDED);
+    expect(eventSpy.mock.calls[1]?.[1]?.type).toBe(TaskEventType.TASK_CREATED);
     expect(res.statusCode).toBe(201);
     expect(res.body).toEqual({ success: true, data: subtask });
   });

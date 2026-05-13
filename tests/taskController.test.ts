@@ -24,6 +24,11 @@ mock.module("../src/services/notificationService", () => ({
   sendPushNotification: sendPushNotificationMock,
 }));
 
+const transactionMock = mock<(fn: (tx: any) => Promise<any>) => Promise<any>>();
+mock.module("../src/db/prisma", () => ({
+  prisma: { $transaction: transactionMock },
+}));
+
 type MockResponse = Response & {
   statusCode?: number;
   body?: unknown;
@@ -58,13 +63,14 @@ function createRequest(overrides: Record<string, any> = {}): Request {
 afterEach(() => {
   mock.restore();
   sendPushNotificationMock.mockReset();
+  transactionMock.mockReset();
 });
 
 describe("taskController.listTasks", () => {
   test("returns tasks", async () => {
     const tasks = [{ task_id: "t1" }];
     spyOn(taskRepo, "getAllTasks").mockResolvedValue(tasks as never);
-    const req = createRequest();
+    const req = createRequest({ user: { user_id: "u1", role: "USER", organization_id: null } });
     const res = createMockResponse();
 
     await taskController.listTasks(req, res);
@@ -72,9 +78,21 @@ describe("taskController.listTasks", () => {
     expect(res.body).toEqual({ success: true, data: tasks });
   });
 
+  test("returns 401 when user is missing", async () => {
+    const repoSpy = spyOn(taskRepo, "getAllTasks");
+    const req = createRequest({ user: undefined });
+    const res = createMockResponse();
+
+    await taskController.listTasks(req, res);
+
+    expect(repoSpy).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(401);
+    expect(res.body).toEqual({ success: false, error: "Unauthorized" });
+  });
+
   test("returns 500 when repository fails", async () => {
     spyOn(taskRepo, "getAllTasks").mockRejectedValue(new Error("db fail"));
-    const req = createRequest();
+    const req = createRequest({ user: { user_id: "u1", role: "USER", organization_id: null } });
     const res = createMockResponse();
 
     await taskController.listTasks(req, res);
@@ -118,6 +136,7 @@ describe("taskController.createTask", () => {
   });
 
   test("sets created_by to authenticated user when missing", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     const repoSpy = spyOn(
       taskRepo,
       "createTaskWithAssignments",
@@ -140,11 +159,44 @@ describe("taskController.createTask", () => {
     await taskController.createTask(req, res);
 
     expect(repoSpy).toHaveBeenCalledWith(
+      expect.anything(),
       expect.objectContaining({ created_by: "u1", title: "Task" }),
       undefined,
     );
     expect(res.statusCode).toBe(201);
   });
+
+  test("normalizes created_by to authenticated user when a different value is supplied", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
+    const repoSpy = spyOn(
+      taskRepo,
+      "createTaskWithAssignments",
+    ).mockResolvedValue({
+      task_id: "t1",
+      title: "Task",
+      created_by: "u1",
+      assignments: [],
+    } as any);
+
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as any);
+
+    const req = createRequest({
+      user: { user_id: "u1" },
+      body: { title: "Task", project_id: "p1", created_by: "u2" },
+    });
+    const res = createMockResponse();
+
+    await taskController.createTask(req, res);
+
+    // Service normalizes created_by to the authenticated actor (u1), ignoring the supplied value (u2).
+    expect(repoSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ created_by: "u1" }),
+      undefined,
+    );
+    expect(res.statusCode).toBe(201);
+  });
+
   test("returns 400 when project_id is missing", async () => {
     const repoSpy = spyOn(taskRepo, "createTaskWithAssignments");
 
@@ -177,26 +229,8 @@ describe("taskController.createTask", () => {
     expect(res.body).toEqual({ success: false, error: "project_id is required" });
   });
 
-  test("returns 400 when created_by does not match authenticated user", async () => {
-    const repoSpy = spyOn(taskRepo, "createTaskWithAssignments");
-
-    const req = createRequest({
-      user: { user_id: "u1" },
-      body: { title: "Task", created_by: "u2" },
-    });
-    const res = createMockResponse();
-
-    await taskController.createTask(req, res);
-
-    expect(repoSpy).not.toHaveBeenCalled();
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({
-      success: false,
-      error: "created_by must match the authenticated user",
-    });
-  });
-
   test("creates task and logs task + assignment events", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     const task = {
       task_id: "t1",
       assignments: [
@@ -221,11 +255,11 @@ describe("taskController.createTask", () => {
     await taskController.createTask(req, res);
 
     expect(eventSpy).toHaveBeenCalledTimes(3);
-    expect(eventSpy.mock.calls[0]?.[0]?.type).toBe(TaskEventType.TASK_CREATED);
-    expect(eventSpy.mock.calls[1]?.[0]?.type).toBe(
+    expect(eventSpy.mock.calls[0]?.[1]?.type).toBe(TaskEventType.TASK_CREATED);
+    expect(eventSpy.mock.calls[1]?.[1]?.type).toBe(
       TaskEventType.ASSIGNMENT_CREATED,
     );
-    expect(eventSpy.mock.calls[2]?.[0]?.type).toBe(
+    expect(eventSpy.mock.calls[2]?.[1]?.type).toBe(
       TaskEventType.ASSIGNMENT_CREATED,
     );
     expect(res.statusCode).toBe(201);
@@ -233,6 +267,7 @@ describe("taskController.createTask", () => {
   });
 
   test("passes effective org to create repository", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     const repoSpy = spyOn(taskRepo, "createTaskWithAssignments").mockResolvedValue({
       task_id: "t1",
       assignments: [],
@@ -249,12 +284,14 @@ describe("taskController.createTask", () => {
     await taskController.createTask(req, res);
 
     expect(repoSpy).toHaveBeenCalledWith(
+      expect.anything(),
       expect.objectContaining({ project_id: "p1", created_by: "u1" }),
       "org-a",
     );
   });
 
   test("rejects cross-org project or assignee references on create", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     spyOn(taskRepo, "createTaskWithAssignments").mockRejectedValue(
       new CrossOrganizationReferenceError("Assigned users must belong to the task organization."),
     );
@@ -278,10 +315,11 @@ describe("taskController.createTask", () => {
 
 describe("taskController.updateTask", () => {
   test("updates task and logs TASK_UPDATED", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     const oldTask = { task_id: "t1", title: "old", assigned_users: ["u1"], project: { name: "P1", color: null } };
     const updatedTask = { task_id: "t1", title: "new", project: { name: "P1", color: null }, assignments: [{ assignment_id: "a1", user_id: "u1" }] };
     spyOn(taskRepo, "getTaskById").mockResolvedValue(oldTask as never);
-    spyOn(taskRepo, "updateTask").mockResolvedValue(updatedTask as never);
+    spyOn(taskRepo, "updateTaskPlatform").mockResolvedValue(updatedTask as never);
     const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
 
     const req = createRequest({
@@ -293,15 +331,16 @@ describe("taskController.updateTask", () => {
 
     await taskController.updateTask(req, res);
 
-    expect(taskRepo.updateTask).toHaveBeenCalledWith("t1", { title: "new" }, "u1", undefined);
+    expect(taskRepo.updateTaskPlatform).toHaveBeenCalledWith(expect.anything(), "t1", { title: "new" }, "u1");
     expect(eventSpy).toHaveBeenCalledTimes(1);
-    expect(eventSpy.mock.calls[0]?.[0]?.type).toBe(TaskEventType.TASK_UPDATED);
+    expect(eventSpy.mock.calls[0]?.[1]?.type).toBe(TaskEventType.TASK_UPDATED);
     expect(res.body).toEqual({ success: true, data: { task_id: "t1", title: "new", project: { name: "P1", color: null }, assigned_users: ["u1"] } });
   });
 
   test("returns 404 when updateTask throws TaskNotFoundError", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1" } as never);
-    spyOn(taskRepo, "updateTask").mockRejectedValue(new TaskNotFoundError("t1"));
+    spyOn(taskRepo, "updateTaskPlatform").mockRejectedValue(new TaskNotFoundError("t1"));
 
     const req = createRequest({
       user: { user_id: "u1" },
@@ -318,7 +357,7 @@ describe("taskController.updateTask", () => {
 
   test("rejects task update when task is outside effective org", async () => {
     spyOn(taskRepo, "getTaskById").mockResolvedValue(null);
-    const updateSpy = spyOn(taskRepo, "updateTask");
+    const updateSpy = spyOn(taskRepo, "updateTaskInOrg");
 
     const req = createRequest({
       user: { user_id: "u-org-a" },
@@ -336,8 +375,9 @@ describe("taskController.updateTask", () => {
   });
 
   test("rejects moving task to a project from another org", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1", assigned_users: [] } as never);
-    spyOn(taskRepo, "updateTask").mockRejectedValue(
+    spyOn(taskRepo, "updateTaskInOrg").mockRejectedValue(
       new CrossOrganizationReferenceError("Task cannot be moved to a project in another organization."),
     );
 
@@ -359,8 +399,9 @@ describe("taskController.updateTask", () => {
   });
 
   test("rejects assigning task to users from another org on update", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1", assigned_users: [] } as never);
-    spyOn(taskRepo, "updateTask").mockRejectedValue(
+    spyOn(taskRepo, "updateTaskInOrg").mockRejectedValue(
       new CrossOrganizationReferenceError("Assigned users must belong to the task organization."),
     );
 
@@ -382,8 +423,9 @@ describe("taskController.updateTask", () => {
   });
 
   test("returns 400 when updateTask throws TaskAlreadyDoneError", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1" } as never);
-    spyOn(taskRepo, "updateTask").mockRejectedValue(new TaskAlreadyDoneError());
+    spyOn(taskRepo, "updateTaskPlatform").mockRejectedValue(new TaskAlreadyDoneError());
 
     const req = createRequest({
       user: { user_id: "u1" },
@@ -402,6 +444,7 @@ describe("taskController.updateTask", () => {
   });
 
   test("updates assignments and logs assignment diffs + TASK_UPDATED", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     const oldTask = { task_id: "t1", assigned_users: ["u1", "u2"] };
     const updatedTask = {
       task_id: "t1",
@@ -413,7 +456,7 @@ describe("taskController.updateTask", () => {
     };
 
     spyOn(taskRepo, "getTaskById").mockResolvedValue(oldTask as never);
-    spyOn(taskRepo, "updateTask").mockResolvedValue(updatedTask as never);
+    spyOn(taskRepo, "updateTaskPlatform").mockResolvedValue(updatedTask as never);
     spyOn(userRepo, "getPushTokensForUsers").mockResolvedValue(new Map());
     const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
 
@@ -427,9 +470,9 @@ describe("taskController.updateTask", () => {
     await taskController.updateTask(req, res);
 
     expect(eventSpy).toHaveBeenCalledTimes(3);
-    expect(eventSpy.mock.calls[0]?.[0]?.type).toBe(TaskEventType.ASSIGNMENT_CREATED);
-    expect(eventSpy.mock.calls[1]?.[0]?.type).toBe(TaskEventType.ASSIGNMENT_DELETED);
-    expect(eventSpy.mock.calls[2]?.[0]?.type).toBe(TaskEventType.TASK_UPDATED);
+    expect(eventSpy.mock.calls[0]?.[1]?.type).toBe(TaskEventType.ASSIGNMENT_CREATED);
+    expect(eventSpy.mock.calls[1]?.[1]?.type).toBe(TaskEventType.ASSIGNMENT_DELETED);
+    expect(eventSpy.mock.calls[2]?.[1]?.type).toBe(TaskEventType.TASK_UPDATED);
     expect(res.body).toEqual({
       success: true,
       data: { task_id: "t1", project: { name: "P1", color: null }, assigned_users: ["u1", "u3"] },
@@ -437,8 +480,9 @@ describe("taskController.updateTask", () => {
   });
 
   test("returns 404 when updateTask throws TaskNotFoundError (with assignments)", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1", assigned_users: [] } as never);
-    spyOn(taskRepo, "updateTask").mockRejectedValue(new TaskNotFoundError("t1"));
+    spyOn(taskRepo, "updateTaskPlatform").mockRejectedValue(new TaskNotFoundError("t1"));
 
     const req = createRequest({
       user: { user_id: "u1" },
@@ -454,8 +498,9 @@ describe("taskController.updateTask", () => {
   });
 
   test("returns 400 when updateTask throws TaskAlreadyDoneError (with assignments)", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1", assigned_users: [] } as never);
-    spyOn(taskRepo, "updateTask").mockRejectedValue(new TaskAlreadyDoneError());
+    spyOn(taskRepo, "updateTaskPlatform").mockRejectedValue(new TaskAlreadyDoneError());
 
     const req = createRequest({
       user: { user_id: "u1" },
@@ -474,10 +519,11 @@ describe("taskController.updateTask", () => {
   });
 
   test("notifies admins when status transitions to DONE", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     const oldTask = { task_id: "t1", title: "My Task", status: TaskStatus.IN_PROGRESS, assigned_users: [] };
     const updatedTask = { task_id: "t1", title: "My Task", status: TaskStatus.DONE, assignments: [] };
     spyOn(taskRepo, "getTaskById").mockResolvedValue(oldTask as never);
-    spyOn(taskRepo, "updateTask").mockResolvedValue(updatedTask as never);
+    spyOn(taskRepo, "updateTaskPlatform").mockResolvedValue(updatedTask as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
       { user_id: "a1", push_token: "token-a1" },
@@ -504,10 +550,11 @@ describe("taskController.updateTask", () => {
   });
 
   test("does not notify admins when status does not change to DONE", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     const oldTask = { task_id: "t1", title: "My Task", status: TaskStatus.PENDING, assigned_users: [] };
     const updatedTask = { task_id: "t1", title: "My Task", status: TaskStatus.IN_PROGRESS, assignments: [] };
     spyOn(taskRepo, "getTaskById").mockResolvedValue(oldTask as never);
-    spyOn(taskRepo, "updateTask").mockResolvedValue(updatedTask as never);
+    spyOn(taskRepo, "updateTaskPlatform").mockResolvedValue(updatedTask as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
     const adminSpy = spyOn(userRepo, "getAdminPushTokens");
 
@@ -525,6 +572,7 @@ describe("taskController.updateTask", () => {
   });
 
   test("notifies assignees when priority changes to HIGH on an active task", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     const pastDate = new Date("2020-06-15T12:00:00Z");
     const oldTask = { task_id: "t1", title: "My Task", priority: TaskPriority.MEDIUM, assigned_users: ["u2"] };
     const updatedTask = {
@@ -537,7 +585,7 @@ describe("taskController.updateTask", () => {
       project: { name: "P1", color: null },
     };
     spyOn(taskRepo, "getTaskById").mockResolvedValue(oldTask as never);
-    spyOn(taskRepo, "updateTask").mockResolvedValue(updatedTask as never);
+    spyOn(taskRepo, "updateTaskPlatform").mockResolvedValue(updatedTask as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
     spyOn(userRepo, "getPushTokensForUsers").mockResolvedValue(
       new Map([["u2", "token-u2"]]),
@@ -564,6 +612,7 @@ describe("taskController.updateTask", () => {
   });
 
   test("does not notify when priority changes to HIGH but task has not started yet", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     const futureDate = new Date("2099-01-01T12:00:00Z");
     const oldTask = { task_id: "t1", priority: TaskPriority.LOW, assigned_users: ["u2"] };
     const updatedTask = {
@@ -576,7 +625,7 @@ describe("taskController.updateTask", () => {
       project: { name: "P1", color: null },
     };
     spyOn(taskRepo, "getTaskById").mockResolvedValue(oldTask as never);
-    spyOn(taskRepo, "updateTask").mockResolvedValue(updatedTask as never);
+    spyOn(taskRepo, "updateTaskPlatform").mockResolvedValue(updatedTask as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
 
     await taskController.updateTask(
@@ -592,6 +641,7 @@ describe("taskController.updateTask", () => {
   });
 
   test("does not notify when priority changes to HIGH but task is in a terminal status", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     const pastDate = new Date("2020-06-15T12:00:00Z");
     const oldTask = { task_id: "t1", priority: TaskPriority.LOW, assigned_users: ["u2"] };
     const updatedTask = {
@@ -604,7 +654,7 @@ describe("taskController.updateTask", () => {
       project: { name: "P1", color: null },
     };
     spyOn(taskRepo, "getTaskById").mockResolvedValue(oldTask as never);
-    spyOn(taskRepo, "updateTask").mockResolvedValue(updatedTask as never);
+    spyOn(taskRepo, "updateTaskPlatform").mockResolvedValue(updatedTask as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
 
@@ -621,6 +671,7 @@ describe("taskController.updateTask", () => {
   });
 
   test("does not notify when priority was already HIGH", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     const pastDate = new Date("2020-06-15T12:00:00Z");
     const oldTask = { task_id: "t1", priority: TaskPriority.HIGH, assigned_users: ["u2"] };
     const updatedTask = {
@@ -633,7 +684,7 @@ describe("taskController.updateTask", () => {
       project: { name: "P1", color: null },
     };
     spyOn(taskRepo, "getTaskById").mockResolvedValue(oldTask as never);
-    spyOn(taskRepo, "updateTask").mockResolvedValue(updatedTask as never);
+    spyOn(taskRepo, "updateTaskPlatform").mockResolvedValue(updatedTask as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
 
     await taskController.updateTask(
@@ -649,6 +700,7 @@ describe("taskController.updateTask", () => {
   });
 
   test("notifies admins when status transitions to DONE with assignment update", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     const oldTask = { task_id: "t1", title: "My Task", status: TaskStatus.IN_PROGRESS, assigned_users: ["u1"] };
     const updatedTask = {
       task_id: "t1",
@@ -657,7 +709,7 @@ describe("taskController.updateTask", () => {
       assignments: [{ assignment_id: "a1", user_id: "u1" }],
     };
     spyOn(taskRepo, "getTaskById").mockResolvedValue(oldTask as never);
-    spyOn(taskRepo, "updateTask").mockResolvedValue(updatedTask as never);
+    spyOn(taskRepo, "updateTaskPlatform").mockResolvedValue(updatedTask as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
     spyOn(userRepo, "getPushTokensForUsers").mockResolvedValue(new Map());
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
@@ -689,7 +741,7 @@ describe("taskController.deleteTask", () => {
   test("deletes task and logs TASK_DELETED", async () => {
     const task = { task_id: "t1" };
     spyOn(taskRepo, "getTaskById").mockResolvedValue(task as never);
-    const deleteSpy = spyOn(taskRepo, "deleteTask").mockResolvedValue(
+    const deleteSpy = spyOn(taskRepo, "deleteTaskPlatform").mockResolvedValue(
       undefined,
     );
     const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue(
@@ -705,14 +757,14 @@ describe("taskController.deleteTask", () => {
     await taskController.deleteTask(req, res);
 
     expect(eventSpy).toHaveBeenCalledTimes(1);
-    expect(eventSpy.mock.calls[0]?.[0]?.type).toBe(TaskEventType.TASK_DELETED);
-    expect(deleteSpy).toHaveBeenCalledWith("t1", undefined);
+    expect(eventSpy.mock.calls[0]?.[1]?.type).toBe(TaskEventType.TASK_DELETED);
+    expect(deleteSpy).toHaveBeenCalledWith(expect.anything(), "t1");
     expect(res.statusCode).toBe(204);
   });
 
   test("rejects deleting task outside effective org", async () => {
     spyOn(taskRepo, "getTaskById").mockResolvedValue(null);
-    const deleteSpy = spyOn(taskRepo, "deleteTask");
+    const deleteSpy = spyOn(taskRepo, "deleteTaskInOrg");
 
     const req = createRequest({
       user: { user_id: "u-org-a" },
@@ -731,7 +783,7 @@ describe("taskController.deleteTask", () => {
   test("maps repository task delete org miss to 404", async () => {
     spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1" } as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
-    spyOn(taskRepo, "deleteTask").mockRejectedValue(new TaskNotFoundError("t1"));
+    spyOn(taskRepo, "deleteTaskInOrg").mockRejectedValue(new TaskNotFoundError("t1"));
 
     const req = createRequest({
       user: { user_id: "u1" },
@@ -749,7 +801,8 @@ describe("taskController.deleteTask", () => {
 
 describe("taskController.upsertProgressLog", () => {
   test("returns 404 when task does not exist", async () => {
-    spyOn(taskRepo, "upsertProgressLog").mockRejectedValue(
+    transactionMock.mockImplementation((fn: any) => fn({}));
+    spyOn(taskRepo, "upsertProgressLogPlatform").mockRejectedValue(
       new TaskNotFoundError("t1"),
     );
 
@@ -767,7 +820,8 @@ describe("taskController.upsertProgressLog", () => {
   });
 
   test("returns 400 when task is not progressable", async () => {
-    spyOn(taskRepo, "upsertProgressLog").mockRejectedValue(
+    transactionMock.mockImplementation((fn: any) => fn({}));
+    spyOn(taskRepo, "upsertProgressLogPlatform").mockRejectedValue(
       new TaskNotProgressableError(TaskStatus.DONE),
     );
 
@@ -788,7 +842,8 @@ describe("taskController.upsertProgressLog", () => {
   });
 
   test("returns 404 when assignment does not exist", async () => {
-    spyOn(taskRepo, "upsertProgressLog").mockRejectedValue(
+    transactionMock.mockImplementation((fn: any) => fn({}));
+    spyOn(taskRepo, "upsertProgressLogPlatform").mockRejectedValue(
       new AssignmentNotFoundError(),
     );
 
@@ -804,11 +859,12 @@ describe("taskController.upsertProgressLog", () => {
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({
       success: false,
-      error: "Assignment not found for this task and user.",
+      error: "Assignment not found.",
     });
   });
 
   test("upserts progress and logs PROGRESS_LOGGED", async () => {
+    transactionMock.mockImplementation((fn: any) => fn({}));
     const progressLog = {
       progress_id: "p1",
       quantity_done: 5,
@@ -822,7 +878,7 @@ describe("taskController.upsertProgressLog", () => {
       status: TaskStatus.IN_PROGRESS,
     };
 
-    spyOn(taskRepo, "upsertProgressLog").mockResolvedValue({
+    spyOn(taskRepo, "upsertProgressLogPlatform").mockResolvedValue({
       progressLog,
       updatedTask,
     } as never);
@@ -839,9 +895,9 @@ describe("taskController.upsertProgressLog", () => {
 
     await taskController.upsertProgressLog(req, res);
 
-    expect(taskRepo.upsertProgressLog).toHaveBeenCalledWith("t1", "u1", 5, TaskUnit.METERS, "good", undefined);
+    expect(taskRepo.upsertProgressLogPlatform).toHaveBeenCalledWith(expect.anything(), "t1", "u1", 5, TaskUnit.METERS, "good");
     expect(eventSpy).toHaveBeenCalledTimes(1);
-    expect(eventSpy.mock.calls[0]?.[0]?.type).toBe(TaskEventType.PROGRESS_LOGGED);
+    expect(eventSpy.mock.calls[0]?.[1]?.type).toBe(TaskEventType.PROGRESS_LOGGED);
     expect(res.body).toEqual({
       success: true,
       data: {
@@ -855,7 +911,8 @@ describe("taskController.upsertProgressLog", () => {
   });
 
   test("notifies admins when progress is logged", async () => {
-    spyOn(taskRepo, "upsertProgressLog").mockResolvedValue({
+    transactionMock.mockImplementation((fn: any) => fn({}));
+    spyOn(taskRepo, "upsertProgressLogPlatform").mockResolvedValue({
       progressLog: { progress_id: "p1", quantity_done: 5 },
       updatedTask: { task_id: "t1", title: "My Task", current_quantity: 5, status: TaskStatus.IN_PROGRESS },
     } as never);
@@ -885,7 +942,8 @@ describe("taskController.upsertProgressLog", () => {
   });
 
   test("skips admin notification when the logger is the admin", async () => {
-    spyOn(taskRepo, "upsertProgressLog").mockResolvedValue({
+    transactionMock.mockImplementation((fn: any) => fn({}));
+    spyOn(taskRepo, "upsertProgressLogPlatform").mockResolvedValue({
       progressLog: { progress_id: "p1", quantity_done: 5 },
       updatedTask: { task_id: "t1", title: "My Task", current_quantity: 5, status: TaskStatus.IN_PROGRESS },
     } as never);
@@ -907,7 +965,8 @@ describe("taskController.upsertProgressLog", () => {
   });
 
   test("rejects progress on task outside effective org", async () => {
-    spyOn(taskRepo, "upsertProgressLog").mockRejectedValue(new TaskNotFoundError("task-org-b"));
+    transactionMock.mockImplementation((fn: any) => fn({}));
+    spyOn(taskRepo, "upsertProgressLogInOrg").mockRejectedValue(new TaskNotFoundError("task-org-b"));
 
     const req = createRequest({
       user: { user_id: "u-org-a" },
@@ -919,13 +978,14 @@ describe("taskController.upsertProgressLog", () => {
 
     await taskController.upsertProgressLog(req, res);
 
-    expect(taskRepo.upsertProgressLog).toHaveBeenCalledWith(
+    expect(taskRepo.upsertProgressLogInOrg).toHaveBeenCalledWith(
+      expect.anything(),
       "task-org-b",
+      "org-a",
       "u-org-a",
       1,
       TaskUnit.METERS,
       undefined,
-      "org-a",
     );
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({ success: false, error: "Task not found: task-org-b" });

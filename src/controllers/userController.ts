@@ -1,24 +1,32 @@
-import * as userRepo from "../repositories/userRepository";
 import type { Request, Response } from "express";
-import type { CreateUserInput, UpdateUserInput } from "../types/user";
-import { UserRole } from "../generated/prisma/client";
 import Expo from "expo-server-sdk";
+import type { CreateUserInput, UpdateUserInput } from "../types/user";
+import { getRequestContext } from "../types/requestContext";
+import * as userService from "../services/userService";
+import { RequiredOrganizationIdError } from "../services/userService";
 
-function getAuthUser(req: Request) {
-  return req.user as { user_id: string; role: UserRole; organization_id: string | null } | undefined;
-}
-
-function resolveCreateUserRole(actorRole: UserRole, requestedRole: unknown): UserRole | null {
-  if (requestedRole === undefined) return UserRole.USER;
-  if (requestedRole === UserRole.USER || requestedRole === UserRole.ADMIN) return requestedRole;
-  if (requestedRole === UserRole.SUPER_ADMIN && actorRole === UserRole.SUPER_ADMIN) return UserRole.SUPER_ADMIN;
-  return null;
+function handleUserServiceError(error: unknown, res: Response, notFoundMessage: string) {
+  if (error instanceof userService.ForbiddenUserOperationError) {
+    return res.status(403).json({ success: false, error: error.message });
+  }
+  if (error instanceof userService.InvalidUserRoleError) {
+    return res.status(400).json({ success: false, error: error.message });
+  }
+  if (error instanceof RequiredOrganizationIdError) {
+    return res.status(400).json({ success: false, error: error.message });
+  }
+  if (error instanceof userService.MissingOrganizationError) {
+    return res.status(403).json({ success: false, error: error.message });
+  }
+  console.error(notFoundMessage, error);
+  return res.status(404).json({ success: false, error: notFoundMessage });
 }
 
 export async function listUsers(req: Request, res: Response) {
   try {
-    const orgId = req.effectiveOrgId;
-    const users = await userRepo.getAllUsers(orgId);
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
+    const users = await userService.listUsers(ctx);
     res.json({ success: true, data: users });
   } catch (error) {
     console.error("Error in listUsers:", error);
@@ -28,8 +36,9 @@ export async function listUsers(req: Request, res: Response) {
 
 export async function getUser(req: Request, res: Response) {
   try {
-    const orgId = req.effectiveOrgId;
-    const user = await userRepo.getUserById(req.params.id as string, orgId);
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
+    const user = await userService.getUser(ctx, req.params.id as string);
     if (!user) {
       return res.status(404).json({ success: false, error: "User not found" });
     }
@@ -41,85 +50,47 @@ export async function getUser(req: Request, res: Response) {
 }
 
 export async function createUser(req: Request, res: Response) {
-  const actor = getAuthUser(req);
-  if (actor?.role !== UserRole.ADMIN && actor?.role !== UserRole.SUPER_ADMIN) {
-    return res.status(403).json({ success: false, error: "Forbidden" });
-  }
-
   try {
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
     const body = req.body as CreateUserInput;
-    const role = resolveCreateUserRole(actor.role, body.role);
-    if (!role) {
-      return res.status(400).json({ success: false, error: "Invalid role" });
-    }
-    // ADMIN creates users in their own org; SUPER_ADMIN must supply organization_id in the body
-    let organization_id: string | null | undefined;
-    if (actor.role === UserRole.SUPER_ADMIN) {
-      organization_id = typeof body.organization_id === "string" && body.organization_id.trim() !== ""
-        ? body.organization_id.trim()
-        : null;
-      if (!organization_id) {
-        return res.status(400).json({ success: false, error: "organization_id is required" });
-      }
-    } else {
-      organization_id = actor.organization_id;
-      if (!organization_id) {
-        return res.status(403).json({ success: false, error: "No organization assigned" });
-      }
-    }
-    const user = await userRepo.createUser({
-      name: body.name,
-      email: body.email,
-      password: body.password,
-      position: body.position,
-      role,
-      organization_id,
-    });
+    const user = await userService.createUser(ctx, body);
     res.status(201).json({ success: true, data: user });
   } catch (error) {
+    if (
+      error instanceof userService.ForbiddenUserOperationError ||
+      error instanceof userService.InvalidUserRoleError ||
+      error instanceof userService.MissingOrganizationError ||
+      error instanceof RequiredOrganizationIdError
+    ) {
+      return handleUserServiceError(error, res, "Failed to create user");
+    }
     console.error("Error in createUser:", error);
-    res.status(400).json({ success: false, error: "Failed to create user" });
+    return res.status(400).json({ success: false, error: "Failed to create user" });
   }
 }
 
 export async function updateUser(req: Request, res: Response) {
-  const actor = getAuthUser(req);
   const targetId = req.params.id as string;
 
-  if (
-    actor?.user_id !== targetId &&
-    actor?.role !== UserRole.ADMIN &&
-    actor?.role !== UserRole.SUPER_ADMIN
-  ) {
-    return res.status(403).json({ success: false, error: "Forbidden" });
-  }
-
   try {
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
     const body = req.body as UpdateUserInput;
-    const scopeOrgId =
-      actor?.role === UserRole.SUPER_ADMIN ? req.effectiveOrgId : actor?.organization_id ?? null;
-    if (actor?.role === UserRole.ADMIN && !scopeOrgId) {
-      return res.status(403).json({ success: false, error: "No organization assigned" });
-    }
-    const user = await userRepo.updateUser(targetId, body, scopeOrgId);
+    const user = await userService.updateUser(ctx, targetId, body);
     res.json({ success: true, data: user });
   } catch (error) {
-    console.error("Error in updateUser:", error);
-    res.status(404).json({
-      success: false,
-      error: "User not found or update failed",
-    });
+    return handleUserServiceError(error, res, "User not found or update failed");
   }
 }
 
 export async function registerPushToken(req: Request, res: Response) {
-  const actor = getAuthUser(req);
-  if (!actor) {
-    return res.status(401).json({ success: false, error: "Unauthorized" });
-  }
+  const ctx = getRequestContext(req);
+  if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
   const { push_token } = req.body;
 
+  // Validate token format before passing to the service.
   if (push_token !== null && push_token !== undefined) {
     if (typeof push_token !== "string" || !Expo.isExpoPushToken(push_token)) {
       return res.status(400).json({ success: false, error: "Invalid push token" });
@@ -127,7 +98,7 @@ export async function registerPushToken(req: Request, res: Response) {
   }
 
   try {
-    await userRepo.updatePushToken(actor.user_id, push_token ?? null);
+    await userService.registerPushToken(ctx.actorUserId, push_token ?? null);
     res.json({ success: true });
   } catch (error) {
     console.error("Error in registerPushToken:", error);
@@ -136,20 +107,12 @@ export async function registerPushToken(req: Request, res: Response) {
 }
 
 export async function deleteUser(req: Request, res: Response) {
-  const actor = getAuthUser(req);
-  if (actor?.role !== UserRole.ADMIN && actor?.role !== UserRole.SUPER_ADMIN) {
-    return res.status(403).json({ success: false, error: "Forbidden" });
-  }
-
   try {
-    const scopeOrgId = actor.role === UserRole.SUPER_ADMIN ? req.effectiveOrgId : actor.organization_id;
-    if (actor.role === UserRole.ADMIN && !scopeOrgId) {
-      return res.status(403).json({ success: false, error: "No organization assigned" });
-    }
-    await userRepo.deleteUser(req.params.id as string, scopeOrgId ?? null);
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
+    await userService.deleteUser(ctx, req.params.id as string);
     res.status(204).send();
   } catch (error) {
-    console.error("Error in deleteUser:", error);
-    res.status(404).json({ success: false, error: "User not found" });
+    return handleUserServiceError(error, res, "User not found");
   }
 }

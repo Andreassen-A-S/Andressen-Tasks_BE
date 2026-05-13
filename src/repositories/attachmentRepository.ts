@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma";
 import { AttachmentStatus, AttachmentType } from "../generated/prisma/client";
+import type { DbClient } from "../types/db";
 
 export async function getAttachmentsByTaskId(taskId: string) {
   return prisma.taskAttachment.findMany({
@@ -53,7 +54,7 @@ export async function prepareAttachment(input: PrepareAttachmentInput) {
 }
 
 export async function confirmAttachments(
-  tx: Omit<typeof prisma, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">,
+  tx: DbClient,
   uploadTokens: string[],
   commentId: string,
   userId: string,

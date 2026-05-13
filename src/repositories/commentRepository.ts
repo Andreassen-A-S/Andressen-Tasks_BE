@@ -1,6 +1,7 @@
 import { prisma } from "../db/prisma";
 import { AttachmentStatus } from "../generated/prisma/client";
 import { confirmAttachments } from "./attachmentRepository";
+import type { DbClient } from "../types/db";
 
 const COMMENT_INCLUDE = {
   author: { select: { user_id: true, name: true, email: true } },
@@ -18,25 +19,27 @@ export async function getCommentsByTaskId(taskId: string) {
   });
 }
 
-export async function createComment(data: {
-  task_id: string;
-  user_id: string;
-  message: string;
-  upload_tokens?: string[];
-}) {
+// Accepts a DbClient so the caller (service) can include this in its own transaction.
+export async function createComment(
+  db: DbClient,
+  data: {
+    task_id: string;
+    user_id: string;
+    message?: string;
+    upload_tokens?: string[];
+  },
+) {
   const { upload_tokens, ...commentData } = data;
 
-  return prisma.$transaction(async (tx) => {
-    const comment = await tx.taskComment.create({ data: commentData });
+  const comment = await (db as any).taskComment.create({ data: commentData });
 
-    if (upload_tokens && upload_tokens.length > 0) {
-      await confirmAttachments(tx, upload_tokens, comment.comment_id, data.user_id, data.task_id);
-    }
+  if (upload_tokens && upload_tokens.length > 0) {
+    await confirmAttachments(db, upload_tokens, comment.comment_id, data.user_id, data.task_id);
+  }
 
-    return tx.taskComment.findUniqueOrThrow({
-      where: { comment_id: comment.comment_id },
-      include: COMMENT_INCLUDE,
-    });
+  return (db as any).taskComment.findUniqueOrThrow({
+    where: { comment_id: comment.comment_id },
+    include: COMMENT_INCLUDE,
   });
 }
 
@@ -47,27 +50,45 @@ export async function getCommentById(commentId: string) {
   });
 }
 
-export async function updateComment(commentId: string, message: string | undefined, upload_tokens?: string[], remove_attachment_ids?: string[]) {
-  return prisma.$transaction(async (tx) => {
-    if (remove_attachment_ids && remove_attachment_ids.length > 0) {
-      await tx.taskAttachment.deleteMany({
-        where: { attachment_id: { in: remove_attachment_ids }, comment_id: commentId },
-      });
-    }
+// Accepts a DbClient so the caller (service) can include this in its own transaction.
+// Returns the updated comment and the GCS paths of removed attachments so the caller
+// can clean up GCS storage after the transaction commits.
+export async function updateComment(
+  db: DbClient,
+  commentId: string,
+  message: string | undefined,
+  upload_tokens?: string[],
+  remove_attachment_ids?: string[],
+): Promise<{ comment: any; removedGcsPaths: string[] }> {
+  const removedGcsPaths: string[] = [];
 
-    const comment = message !== undefined
-      ? await tx.taskComment.update({ where: { comment_id: commentId }, data: { message } })
-      : await tx.taskComment.findUniqueOrThrow({ where: { comment_id: commentId } });
-
-    if (upload_tokens && upload_tokens.length > 0) {
-      await confirmAttachments(tx, upload_tokens, comment.comment_id, comment.user_id, comment.task_id);
-    }
-
-    return tx.taskComment.findUniqueOrThrow({
-      where: { comment_id: comment.comment_id },
-      include: COMMENT_INCLUDE,
+  if (remove_attachment_ids && remove_attachment_ids.length > 0) {
+    // Fetch gcs_paths before deleting so we can return them for post-commit GCS cleanup.
+    const toRemove = await (db as any).taskAttachment.findMany({
+      where: { attachment_id: { in: remove_attachment_ids }, comment_id: commentId },
+      select: { gcs_path: true },
     });
+    removedGcsPaths.push(...toRemove.map((a: any) => a.gcs_path).filter(Boolean));
+
+    await (db as any).taskAttachment.deleteMany({
+      where: { attachment_id: { in: remove_attachment_ids }, comment_id: commentId },
+    });
+  }
+
+  const comment = message !== undefined
+    ? await (db as any).taskComment.update({ where: { comment_id: commentId }, data: { message } })
+    : await (db as any).taskComment.findUniqueOrThrow({ where: { comment_id: commentId } });
+
+  if (upload_tokens && upload_tokens.length > 0) {
+    await confirmAttachments(db, upload_tokens, comment.comment_id, comment.user_id, comment.task_id);
+  }
+
+  const updatedComment = await (db as any).taskComment.findUniqueOrThrow({
+    where: { comment_id: comment.comment_id },
+    include: COMMENT_INCLUDE,
   });
+
+  return { comment: updatedComment, removedGcsPaths };
 }
 
 export async function deleteComment(commentId: string) {

@@ -1,42 +1,39 @@
-import * as assignmentRepo from "../repositories/assignmentRepository";
 import type { Request, Response } from "express";
-import type { CreateTaskAssignmentInput } from "../types/assignment";
-import type { TaskAssignment } from "../generated/prisma/client";
-import * as taskEventRepo from "../repositories/taskEventRepository";
-import { TaskEventType, TaskStatus } from "../generated/prisma/client";
-import * as taskRepo from "../repositories/taskRepository";
-import * as userRepo from "../repositories/userRepository";
-import { sendPushNotification } from "../services/notificationService";
+import * as assignmentService from "../services/assignmentService";
+import { getRequestContext } from "../types/requestContext";
+import { getParamId } from "../helper/helpers";
 import {
-  AssignmentCrossOrganizationError,
   AssignmentNotFoundError,
-} from "../repositories/assignmentRepository";
+  AssignmentCrossOrganizationError,
+  TaskArchivedError,
+} from "../errors/domainErrors";
 
-function handleAssignmentError(error: unknown, res: Response, fallbackMessage: string): Response {
+function handleDomainError(error: unknown, res: Response, fallbackMessage: string): Response {
   if (error instanceof AssignmentNotFoundError) {
     return res.status(404).json({ success: false, error: "Assignment not found" });
   }
   if (error instanceof AssignmentCrossOrganizationError) {
     return res.status(403).json({ success: false, error: error.message });
   }
+  if (error instanceof TaskArchivedError) {
+    return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
+  }
   console.error(fallbackMessage, error);
   return res.status(500).json({ success: false, error: fallbackMessage });
 }
 
-// List all assignments (with optional filters)
+// List all assignments (with optional filters by userId or taskId).
 export async function listAssignments(req: Request, res: Response) {
   try {
-    const { userId, taskId } = req.query;
-    const orgId = req.effectiveOrgId;
-    let assignments: TaskAssignment[];
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
-    if (userId && typeof userId === "string") {
-      assignments = await assignmentRepo.getUserAssignments(userId, orgId);
-    } else if (taskId && typeof taskId === "string") {
-      assignments = await assignmentRepo.getTaskAssignments(taskId, orgId);
-    } else {
-      assignments = await assignmentRepo.getAllAssignments(orgId);
-    }
+    const { userId, taskId } = req.query;
+    const assignments = await assignmentService.listAssignments(
+      ctx,
+      typeof userId === "string" ? userId : undefined,
+      typeof taskId === "string" ? taskId : undefined,
+    );
 
     res.json({ success: true, data: assignments });
   } catch (error) {
@@ -47,43 +44,18 @@ export async function listAssignments(req: Request, res: Response) {
   }
 }
 
-// Assign user to task
+// Assign a user to a task. Requires admin or super-admin role (enforced by route middleware).
 export async function assignTask(req: Request, res: Response) {
   try {
-    const body = req.body as CreateTaskAssignmentInput;
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
-    const task = await taskRepo.getTaskById(body.task_id, req.effectiveOrgId);
-    if (!task) {
+    const { task_id, user_id } = req.body;
+
+    const assignment = await assignmentService.assignTaskToUser(ctx, task_id, user_id);
+
+    if (assignment === null) {
       return res.status(404).json({ success: false, error: "Task not found" });
-    }
-    if (task.status === TaskStatus.ARCHIVED) {
-      return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
-    }
-
-    const assignment = await assignmentRepo.assignTaskToUser(body, req.effectiveOrgId);
-
-    // TaskEvent logic
-    await taskEventRepo.createTaskEvent({
-      task: { connect: { task_id: assignment.task_id } },
-      actor: { connect: { user_id: req.user?.user_id } },
-      type: TaskEventType.ASSIGNMENT_CREATED,
-      message: "Assignment created",
-      assignment: { connect: { assignment_id: assignment.assignment_id } },
-      before_json: {},
-      after_json: assignment,
-    });
-
-    // Send push notification to assigned user
-    const pushToken = await userRepo.getPushToken(body.user_id);
-    if (pushToken) {
-      const taskTitle = (assignment as { task?: { title: string } }).task?.title ?? "En opgave";
-      void sendPushNotification(
-        pushToken,
-        "Ny opgave tildelt",
-        `Du er blevet tildelt: ${taskTitle}`,
-        { taskId: assignment.task_id },
-        body.user_id,
-      );
     }
 
     res.status(201).json({ success: true, data: assignment });
@@ -91,21 +63,25 @@ export async function assignTask(req: Request, res: Response) {
     if (error instanceof AssignmentCrossOrganizationError) {
       return res.status(403).json({ success: false, error: error.message });
     }
+    if (error instanceof TaskArchivedError) {
+      return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
+    }
     console.error("Error in assignTask:", error);
     const message = error instanceof Error ? error.message : "Failed to assign task";
     return res.status(400).json({ success: false, error: message });
   }
 }
 
-// Get specific assignment by ID
+// Get a specific assignment by ID.
 export async function getAssignment(req: Request, res: Response) {
   try {
-    const { id } = req.params;
-    if (!id || Array.isArray(id)) {
-      return res.status(400).json({ error: "Missing or invalid id" });
-    }
+    const id = getParamId(req);
+    if (!id) return res.status(400).json({ error: "Missing or invalid id" });
 
-    const assignment = await assignmentRepo.getAssignmentById(id, req.effectiveOrgId);
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
+
+    const assignment = await assignmentService.getAssignmentById(ctx, id);
 
     if (!assignment) {
       return res
@@ -121,87 +97,42 @@ export async function getAssignment(req: Request, res: Response) {
   }
 }
 
-// Update assignment (e.g., mark as complete)
+// Update an assignment (e.g., mark as complete). Validates existence and archived status.
 export async function updateAssignment(req: Request, res: Response) {
   try {
-    const updateData = req.body;
+    const id = getParamId(req);
+    if (!id) return res.status(400).json({ error: "Missing or invalid id" });
 
-    // Validate that the assignment exists first
-    const { id } = req.params;
-    if (!id || Array.isArray(id)) {
-      return res.status(400).json({ error: "Missing or invalid id" });
-    }
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
-    const existingAssignment = await assignmentRepo.getAssignmentById(id, req.effectiveOrgId);
+    const assignment = await assignmentService.updateAssignment(ctx, id, req.body);
 
-    if (!existingAssignment) {
+    if (assignment === null) {
       return res
         .status(404)
         .json({ success: false, error: "Assignment not found" });
     }
-
-    if ((existingAssignment as any).task?.status === TaskStatus.ARCHIVED) {
-      return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
-    }
-
-    // Update the assignment
-    const assignment = await assignmentRepo.updateAssignment(id, updateData, req.effectiveOrgId);
-
-    // TaskEvent logic
-    await taskEventRepo.createTaskEvent({
-      task: { connect: { task_id: assignment.task_id } },
-      actor: { connect: { user_id: req.user?.user_id } },
-      type: TaskEventType.ASSIGNMENT_UPDATED,
-      message: "Assignment updated",
-      assignment: { connect: { assignment_id: assignment.assignment_id } },
-      before_json: existingAssignment,
-      after_json: assignment,
-    });
 
     res.json({ success: true, data: assignment });
   } catch (error) {
-    return handleAssignmentError(error, res, "Failed to update assignment");
+    return handleDomainError(error, res, "Failed to update assignment");
   }
 }
 
-// Delete assignment by ID
+// Delete an assignment by ID. Validates existence and archived status, then logs event.
 export async function deleteAssignment(req: Request, res: Response) {
   try {
-    // Fetch the assignment before deleting
-    const { id } = req.params;
-    if (!id || Array.isArray(id)) {
-      return res.status(400).json({ error: "Missing or invalid id" });
-    }
+    const id = getParamId(req);
+    if (!id) return res.status(400).json({ error: "Missing or invalid id" });
 
-    const existingAssignment = await assignmentRepo.getAssignmentById(id, req.effectiveOrgId);
-    if (!existingAssignment) {
-      return res
-        .status(404)
-        .json({ success: false, error: "Assignment not found" });
-    }
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
-    if ((existingAssignment as any).task?.status === TaskStatus.ARCHIVED) {
-      return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
-    }
-
-    // TaskEvent logic
-    await taskEventRepo.createTaskEvent({
-      task: { connect: { task_id: existingAssignment.task_id } },
-      actor: { connect: { user_id: req.user?.user_id } },
-      type: TaskEventType.ASSIGNMENT_DELETED,
-      message: "Assignment deleted",
-      assignment: {
-        connect: { assignment_id: existingAssignment.assignment_id }, // Used in the future for soft deletes
-      },
-      before_json: existingAssignment,
-      after_json: {},
-    });
-
-    // Delete the assignment
-    await assignmentRepo.deleteAssignment(id, req.effectiveOrgId);
+    await assignmentService.deleteAssignment(ctx, id);
 
     res.status(204).send();
   } catch (error) {
-    return handleAssignmentError(error, res, "Failed to delete assignment");
+    return handleDomainError(error, res, "Failed to delete assignment");
   }
 }

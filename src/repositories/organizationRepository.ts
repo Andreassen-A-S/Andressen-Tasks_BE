@@ -1,13 +1,10 @@
 import { prisma } from "../db/prisma";
 import type { Organization } from "../generated/prisma/client";
 import { generateSignedReadUrl } from "../services/storageService";
+import { OrganizationNotFoundError } from "../errors/domainErrors";
 
-export class OrganizationNotFoundError extends Error {
-  constructor(id: string) {
-    super(`Organization not found: ${id}`);
-    this.name = "OrganizationNotFoundError";
-  }
-}
+// Re-export for backward compatibility with imports from this module.
+export { OrganizationNotFoundError } from "../errors/domainErrors";
 
 export interface CreateOrganizationInput {
   name: string;

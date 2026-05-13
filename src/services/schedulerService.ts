@@ -1,12 +1,10 @@
 import * as cron from "node-cron";
 import * as taskRepo from "../repositories/taskRepository";
-import * as taskEventRepo from "../repositories/taskEventRepository";
 import * as attachmentRepo from "../repositories/attachmentRepository";
+import * as taskService from "./taskService";
 import { sendPushNotification } from "./notificationService";
 import { deleteFile } from "./storageService";
 import { APP_TIMEZONE } from "../utils/dateUtils";
-import { TaskEventType, TaskStatus } from "../generated/prisma/client";
-import { TaskArchivedError } from "../repositories/taskRepository";
 
 const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -60,7 +58,8 @@ export function initScheduler(): void {
     }
   });
 
-  // Auto-archive DONE tasks older than 7 days — daily at 02:00 APP_TIMEZONE
+  // Auto-archive DONE tasks older than 7 days — daily at 02:00 APP_TIMEZONE.
+  // archiveTask handles event creation and the update atomically in one transaction.
   cron.schedule(
     "0 2 * * *",
     async () => {
@@ -69,42 +68,9 @@ export function initScheduler(): void {
         let archivedCount = 0;
         for (const task of staleTasks) {
           try {
-            const updated = await taskRepo.updateTask(
-              task.task_id,
-              { status: TaskStatus.ARCHIVED },
-              SYSTEM_USER_ID,
-            );
-            if (!updated) continue;
-
-            archivedCount++;
-            const actor = { connect: { user_id: SYSTEM_USER_ID } } as const;
-            const taskConnect = { connect: { task_id: task.task_id } } as const;
-
-            const eventResults = await Promise.allSettled([
-              taskEventRepo.createTaskEvent({
-                task: taskConnect,
-                actor,
-                type: TaskEventType.TASK_UPDATED,
-                message: "Task auto-archived by scheduler",
-                before_json: task,
-                after_json: updated,
-              }),
-              taskEventRepo.createTaskEvent({
-                task: taskConnect,
-                actor,
-                type: TaskEventType.TASK_STATUS_CHANGED,
-                message: `Status changed from ${TaskStatus.DONE} to ${TaskStatus.ARCHIVED}`,
-                before_json: { status: TaskStatus.DONE },
-                after_json: { status: TaskStatus.ARCHIVED },
-              }),
-            ]);
-            for (const result of eventResults) {
-              if (result.status === "rejected") {
-                console.error(`Failed to write task event for ${task.task_id}:`, result.reason);
-              }
-            }
+            const updated = await taskService.archiveTask(task.task_id, SYSTEM_USER_ID);
+            if (updated) archivedCount++;
           } catch (err) {
-            if (err instanceof TaskArchivedError) continue;
             console.error(`Failed to archive task ${task.task_id}:`, err);
           }
         }

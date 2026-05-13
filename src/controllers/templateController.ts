@@ -1,12 +1,9 @@
 import type { Request, Response } from "express";
 import { RecurringTaskService } from "../services/recurringTaskService";
 import type { Prisma } from "../generated/prisma/client";
-import {
-  validateRecurringTemplateData,
-  requireUserId,
-  getParamId,
-} from "../helper/helpers";
+import { validateRecurringTemplateData, getParamId } from "../helper/helpers";
 import { RecurrenceFrequency } from "../generated/prisma/client";
+import { getRequestContext } from "../types/requestContext";
 
 const recurringService = new RecurringTaskService();
 
@@ -19,9 +16,10 @@ const recurringService = new RecurringTaskService();
  * List all recurring templates
  */
 export async function listTemplates(req: Request, res: Response) {
+  const ctx = getRequestContext(req);
+  if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
   try {
-    const orgId = req.effectiveOrgId;
-    const templates = await recurringService.getAllTemplates(orgId);
+    const templates = await recurringService.getAllTemplates(ctx.effectiveOrgId);
     return res.json({ success: true, data: templates });
   } catch (error) {
     console.error("Error in listTemplates:", error);
@@ -36,9 +34,10 @@ export async function listTemplates(req: Request, res: Response) {
  * List all active recurring templates
  */
 export async function listActiveTemplates(req: Request, res: Response) {
+  const ctx = getRequestContext(req);
+  if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
   try {
-    const orgId = req.effectiveOrgId;
-    const templates = await recurringService.getActiveTemplates(orgId);
+    const templates = await recurringService.getActiveTemplates(ctx.effectiveOrgId);
     return res.json({ success: true, data: templates });
   } catch (error) {
     console.error("Error in listActiveTemplates:", error);
@@ -83,8 +82,9 @@ export async function getTemplate(req: Request, res: Response) {
  * All operations are atomic - template, assignees, and instances are created together
  */
 export async function createTemplate(req: Request, res: Response) {
-  const userId = requireUserId(req, res);
-  if (!userId) return;
+  const ctx = getRequestContext(req);
+  if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
+  const userId = ctx.actorUserId;
 
   try {
     const body = req.body;
@@ -185,8 +185,9 @@ export async function createTemplate(req: Request, res: Response) {
  * All operations are atomic - template update, assignee changes, and instance regeneration
  */
 export async function updateTemplate(req: Request, res: Response) {
-  const userId = requireUserId(req, res);
-  if (!userId) return;
+  const ctx = getRequestContext(req);
+  if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
+  const userId = ctx.actorUserId;
 
   const id = getParamId(req);
   if (!id) {
@@ -331,8 +332,9 @@ export async function updateTemplate(req: Request, res: Response) {
  * Delete a recurring template (and all its instances)
  */
 export async function deleteTemplate(req: Request, res: Response) {
-  const userId = requireUserId(req, res);
-  if (!userId) return;
+  const ctx = getRequestContext(req);
+  if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
+  const userId = ctx.actorUserId;
 
   const id = getParamId(req);
   if (!id) {
@@ -372,8 +374,9 @@ export async function deleteTemplate(req: Request, res: Response) {
  * Deactivate a template (stops generating new instances)
  */
 export async function deactivateTemplate(req: Request, res: Response) {
-  const userId = requireUserId(req, res);
-  if (!userId) return;
+  const ctx = getRequestContext(req);
+  if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
+  const userId = ctx.actorUserId;
 
   const id = getParamId(req);
   if (!id) {
@@ -412,8 +415,9 @@ export async function deactivateTemplate(req: Request, res: Response) {
  * Reactivate a template (resumes generating instances)
  */
 export async function reactivateTemplate(req: Request, res: Response) {
-  const userId = requireUserId(req, res);
-  if (!userId) return;
+  const ctx = getRequestContext(req);
+  if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
+  const userId = ctx.actorUserId;
 
   const id = getParamId(req);
   if (!id) {

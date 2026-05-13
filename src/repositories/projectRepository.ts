@@ -1,17 +1,10 @@
 import { prisma } from "../db/prisma";
 import type { Project } from "../generated/prisma/client";
 import type { CreateProjectInput, UpdateProjectInput } from "../types/project";
+import { ProjectNotFoundError } from "../errors/domainErrors";
 
-// ---------------------------------------------------------------------------
-// Domain errors
-// ---------------------------------------------------------------------------
-
-export class ProjectNotFoundError extends Error {
-  constructor(id: string) {
-    super(`Project not found: ${id}`);
-    this.name = "ProjectNotFoundError";
-  }
-}
+// Re-export for backward compatibility with imports from this module.
+export { ProjectNotFoundError } from "../errors/domainErrors";
 
 // ---------------------------------------------------------------------------
 // Reads
