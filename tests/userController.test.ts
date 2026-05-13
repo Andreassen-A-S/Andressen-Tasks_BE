@@ -70,7 +70,7 @@ describe("userController.createUser", () => {
     const user = { user_id: "u1", email: "a@a.com" };
     spyOn(userRepo, "createUser").mockResolvedValue(user as never);
     const req = createRequest({
-      user: { user_id: "admin1", role: UserRole.ADMIN },
+      user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
       body: { email: "a@a.com", password: "x" },
     });
     const res = createMockResponse();

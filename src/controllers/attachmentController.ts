@@ -154,6 +154,7 @@ export async function deleteAttachment(req: Request, res: Response) {
     if (!userId) return;
 
     const isAdmin = isPrivileged(req.user?.role);
+    const orgId = req.effectiveOrgId;
 
     const attachment = await attachmentRepo.getAttachmentById(attachmentId);
     if (!attachment) {
@@ -161,9 +162,15 @@ export async function deleteAttachment(req: Request, res: Response) {
     }
 
     const attachmentTask = await prisma.task.findFirst({
-      where: { task_id: attachment.task_id },
+      where: {
+        task_id: attachment.task_id,
+        ...(orgId ? { project: { organization_id: orgId } } : {}),
+      },
       select: { status: true },
     });
+    if (!attachmentTask) {
+      return res.status(404).json({ success: false, error: "Attachment not found" });
+    }
     if (attachmentTask?.status === TaskStatus.ARCHIVED) {
       return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
     }

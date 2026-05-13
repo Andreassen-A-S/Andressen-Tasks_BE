@@ -362,7 +362,7 @@ export async function upsertProgressLog(
     });
     const user = await tx.user.findUnique({ where: { user_id: userId }, select: { role: true } });
 
-    const isAdmin = user?.role === UserRole.ADMIN;
+    const isAdmin = user?.role === UserRole.ADMIN || user?.role === UserRole.SUPER_ADMIN;
     if (!assignment && !isAdmin) throw new AssignmentNotFoundError();
 
     const resolvedAssignment = assignment ?? await tx.taskAssignment.upsert({

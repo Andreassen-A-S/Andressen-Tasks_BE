@@ -292,7 +292,7 @@ export async function updateTask(req: Request, res: Response) {
       });
 
       if (updatedTask.status === TaskStatus.DONE) {
-        const admins = await userRepo.getAdminPushTokens();
+        const admins = await userRepo.getAdminPushTokens(orgId);
         for (const { user_id, push_token } of admins) {
           void sendPushNotification(
             push_token,
@@ -404,6 +404,7 @@ export async function upsertProgressLog(req: Request, res: Response) {
   }
 
   try {
+    const orgId = req.effectiveOrgId;
     const { progressLog, updatedTask } = await taskRepo.upsertProgressLog(
       taskId,
       userId,
@@ -424,7 +425,7 @@ export async function upsertProgressLog(req: Request, res: Response) {
 
     void (async () => {
       try {
-        const admins = await userRepo.getAdminPushTokens();
+        const admins = await userRepo.getAdminPushTokens(orgId);
         for (const { user_id: adminId, push_token } of admins) {
           if (adminId === userId) continue;
           void sendPushNotification(

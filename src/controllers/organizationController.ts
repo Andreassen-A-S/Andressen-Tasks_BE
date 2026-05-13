@@ -55,6 +55,16 @@ export async function createOrganization(req: Request, res: Response) {
 export async function updateOrganization(req: Request, res: Response) {
   const { name, slug, logo_url } = req.body;
 
+  if (name !== undefined && (typeof name !== "string" || name.trim() === "")) {
+    return res.status(400).json({ success: false, error: "name must be a non-empty string" });
+  }
+  if (slug !== undefined && (typeof slug !== "string" || slug.trim() === "")) {
+    return res.status(400).json({ success: false, error: "slug must be a non-empty string" });
+  }
+  if (logo_url !== undefined && logo_url !== null && typeof logo_url !== "string") {
+    return res.status(400).json({ success: false, error: "logo_url must be a string or null" });
+  }
+
   try {
     const org = await orgRepo.updateOrganization(req.params.id as string, {
       name: name?.trim(),
@@ -76,6 +86,10 @@ export async function prepareOrgLogo(req: Request, res: Response) {
     const id = req.params.id;
     if (!id || typeof id !== "string") {
       return res.status(400).json({ success: false, error: "Missing org id" });
+    }
+    const org = await orgRepo.getOrganizationById(id);
+    if (!org) {
+      return res.status(404).json({ success: false, error: "Organization not found" });
     }
     const result = await storageService.generateOrgLogoUploadUrl(id, mime_type);
     return res.json({ success: true, data: result });

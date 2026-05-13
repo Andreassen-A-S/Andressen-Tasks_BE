@@ -1,13 +1,15 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { Request, Response } from "express";
-import { Task, UserRole } from "../src/generated/prisma/client";
+import { Task, TaskStatus, UserRole } from "../src/generated/prisma/client";
 import * as commentRepo from "../src/repositories/commentRepository";
 import * as attachmentRepo from "../src/repositories/attachmentRepository";
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
 import * as userRepo from "../src/repositories/userRepository";
 import * as storageService from "../src/services/storageService";
 
-const findFirstMock = mock<(...args: any[]) => Promise<Task | null>>();
+const findFirstMock = mock<(...args: any[]) => Promise<Task | null>>(() =>
+  Promise.resolve({ status: TaskStatus.PENDING } as Task),
+);
 const sendPushNotificationMock = mock<(...args: any[]) => Promise<void>>();
 
 mock.module("../src/db/prisma", () => ({

@@ -4,7 +4,9 @@ import { UserRole } from "../src/generated/prisma/client";
 import * as attachmentRepo from "../src/repositories/attachmentRepository";
 import * as storageService from "../src/services/storageService";
 
-const findFirstMock = mock<(...args: any[]) => Promise<any>>();
+const findFirstMock = mock<(...args: any[]) => Promise<any>>(() =>
+  Promise.resolve({ status: "PENDING" }),
+);
 const userFindUniqueMock = mock<(...args: any[]) => Promise<any>>(() =>
   Promise.resolve({ user_id: "u1" })
 );

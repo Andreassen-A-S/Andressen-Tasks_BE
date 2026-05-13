@@ -180,7 +180,7 @@ export async function createComment(req: Request, res: Response) {
     }
 
     // Notify admins (skip if the commenter is the admin)
-    const admins = await userRepo.getAdminPushTokens();
+    const admins = await userRepo.getAdminPushTokens(orgId);
     for (const { user_id: adminId, push_token } of admins) {
       if (adminId === userId) continue;
       void sendPushNotification(
@@ -218,6 +218,7 @@ export async function deleteComment(req: Request, res: Response) {
     if (!userId) return;
 
     const userRole = req.user?.role;
+    const orgId = req.effectiveOrgId;
 
     const comment = await commentRepo.getCommentById(commentId);
 
@@ -228,9 +229,15 @@ export async function deleteComment(req: Request, res: Response) {
     }
 
     const deleteCommentTask = await prisma.task.findFirst({
-      where: { task_id: comment.task_id },
+      where: {
+        task_id: comment.task_id,
+        ...(orgId ? { project: { organization_id: orgId } } : {}),
+      },
       select: { status: true },
     });
+    if (!deleteCommentTask) {
+      return res.status(404).json({ success: false, error: "Comment not found" });
+    }
     if (deleteCommentTask?.status === TaskStatus.ARCHIVED) {
       return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
     }
@@ -336,9 +343,15 @@ export async function updateComment(req: Request, res: Response) {
     }
 
     const commentTask = await prisma.task.findFirst({
-      where: { task_id: comment.task_id },
+      where: {
+        task_id: comment.task_id,
+        ...(req.effectiveOrgId ? { project: { organization_id: req.effectiveOrgId } } : {}),
+      },
       select: { status: true },
     });
+    if (!commentTask) {
+      return res.status(404).json({ success: false, error: "Comment not found" });
+    }
     if (commentTask?.status === TaskStatus.ARCHIVED) {
       return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
     }

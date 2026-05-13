@@ -131,11 +131,15 @@ export async function getPushTokensForUsers(
   return new Map(users.map((u) => [u.user_id, u.push_token!]));
 }
 
-export async function getAdminPushTokens(): Promise<
+export async function getAdminPushTokens(orgId: string | null = null): Promise<
   { user_id: string; push_token: string }[]
 > {
   const admins = await prisma.user.findMany({
-    where: { role: UserRole.ADMIN, push_token: { not: null } },
+    where: {
+      role: UserRole.ADMIN,
+      push_token: { not: null },
+      ...(orgId ? { organization_id: orgId } : {}),
+    },
     select: { user_id: true, push_token: true },
   });
   return admins.map((a) => ({ user_id: a.user_id, push_token: a.push_token! }));

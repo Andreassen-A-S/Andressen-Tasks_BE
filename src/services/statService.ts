@@ -92,8 +92,8 @@ export class StatsService {
     // This could be extended with user-specific queries
     const [workload, overDueTasks, weeklyStats] = await Promise.all([
       statsRepository.getWorkloadDistribution(orgId),
-      statsRepository.getUserOverdueTasks(userId),
-      statsRepository.getUserWeeklyStats(userId),
+      statsRepository.getUserOverdueTasks(userId, orgId),
+      statsRepository.getUserWeeklyStats(userId, orgId),
     ]);
 
     const userWorkload = workload.find((w) => w.user_id === userId);

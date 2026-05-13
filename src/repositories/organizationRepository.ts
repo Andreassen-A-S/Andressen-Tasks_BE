@@ -41,7 +41,9 @@ export async function getOrganizationById(id: string): Promise<Organization | nu
 }
 
 export async function getOrganizationBySlug(slug: string): Promise<Organization | null> {
-  return prisma.organization.findUnique({ where: { slug } });
+  const org = await prisma.organization.findUnique({ where: { slug } });
+  if (!org) return null;
+  return withSignedLogo(org);
 }
 
 export async function createOrganization(data: CreateOrganizationInput): Promise<Organization> {

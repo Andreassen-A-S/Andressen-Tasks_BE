@@ -42,9 +42,20 @@ export async function createUser(req: Request, res: Response) {
   try {
     const body = req.body as CreateUserInput;
     // ADMIN creates users in their own org; SUPER_ADMIN must supply organization_id in the body
-    const organization_id = actor.role === UserRole.SUPER_ADMIN
-      ? body.organization_id
-      : actor.organization_id!;
+    let organization_id: string | null | undefined;
+    if (actor.role === UserRole.SUPER_ADMIN) {
+      organization_id = typeof body.organization_id === "string" && body.organization_id.trim() !== ""
+        ? body.organization_id
+        : null;
+      if (!organization_id) {
+        return res.status(400).json({ success: false, error: "organization_id is required" });
+      }
+    } else {
+      organization_id = actor.organization_id;
+      if (!organization_id) {
+        return res.status(403).json({ success: false, error: "No organization assigned" });
+      }
+    }
     const user = await userRepo.createUser({ ...body, organization_id });
     res.status(201).json({ success: true, data: user });
   } catch (error) {

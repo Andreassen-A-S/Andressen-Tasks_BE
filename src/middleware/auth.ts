@@ -3,6 +3,10 @@ import * as authService from "../services/authService";
 // import "../types/express";
 import { UserRole } from "../generated/prisma/client";
 
+function normalizeOrgId(value: unknown): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+
 export function authenticateToken(
   req: Request,
   res: Response,
@@ -26,11 +30,17 @@ export function authenticateToken(
       role: payload.role as UserRole,
     };
 
+    const organizationId = normalizeOrgId(req.user.organization_id);
+
     if (req.user.role === UserRole.SUPER_ADMIN) {
-      const orgContext = req.headers["x-org-context"];
-      req.effectiveOrgId = typeof orgContext === "string" ? orgContext : null;
+      req.effectiveOrgId = normalizeOrgId(req.headers["x-org-context"]);
+    } else if (organizationId) {
+      req.effectiveOrgId = organizationId;
     } else {
-      req.effectiveOrgId = req.user.organization_id;
+      return res.status(403).json({
+        success: false,
+        error: "No organization assigned",
+      });
     }
 
     next();

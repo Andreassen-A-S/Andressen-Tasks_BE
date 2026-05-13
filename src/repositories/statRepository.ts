@@ -631,10 +631,13 @@ export async function getProjectStatsForWindow(
  */
 export async function getUserOverdueTasks(
   userId: string,
+  orgId: string | null = null,
   client: PrismaClient = prisma,
 ) {
+  const orgFilter = taskOrgFilter(orgId);
   return client.task.count({
     where: {
+      ...orgFilter,
       deadline: { lt: new Date(appDateKey()) },
       status: {
         notIn: [TaskStatus.DONE, TaskStatus.ARCHIVED, TaskStatus.REJECTED],
@@ -651,14 +654,17 @@ export async function getUserOverdueTasks(
  */
 export async function getUserWeeklyStats(
   userId: string,
+  orgId: string | null = null,
   client: PrismaClient = prisma,
 ) {
   const { start: weekStart, end: weekEnd } = appWeekBoundsUTC();
+  const orgFilter = taskOrgFilter(orgId);
 
   // planned tasks = assignments where task is scheduled this week
   const plannedWhere = {
     user_id: userId,
     task: {
+      ...orgFilter,
       start_date: { gte: weekStart, lt: weekEnd },
     },
   } as const;
@@ -673,6 +679,7 @@ export async function getUserWeeklyStats(
       where: {
         user_id: userId,
         task: {
+          ...orgFilter,
           start_date: { gte: weekStart, lt: weekEnd },
           status: TaskStatus.DONE,
           completed_by: userId,
