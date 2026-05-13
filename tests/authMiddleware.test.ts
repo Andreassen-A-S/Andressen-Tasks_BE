@@ -49,6 +49,24 @@ describe("authenticateToken", () => {
     expect(next).toHaveBeenCalled();
   });
 
+  test("trims organization context for superadmins", () => {
+    spyOn(authService, "verifyToken").mockReturnValue({
+      user_id: "super1",
+      email: "super@test.local",
+      name: "Super",
+      role: UserRole.SUPER_ADMIN,
+      organization_id: null,
+    } as never);
+    const req = createRequest({ headers: { authorization: "Bearer token", "x-org-context": " org1 " } });
+    const res = createMockResponse();
+    const next = mock(() => undefined) as unknown as NextFunction;
+
+    authenticateToken(req, res, next);
+
+    expect(req.effectiveOrgId).toBe("org1");
+    expect(next).toHaveBeenCalled();
+  });
+
   test("rejects non-superadmin users without organization_id", () => {
     spyOn(authService, "verifyToken").mockReturnValue({
       user_id: "admin1",

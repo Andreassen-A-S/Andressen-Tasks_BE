@@ -81,6 +81,21 @@ describe("userController.createUser", () => {
     expect(res.body).toEqual({ success: true, data: user });
   });
 
+  test("trims organization_id when superadmin creates user", async () => {
+    const user = { user_id: "u1", email: "a@a.com" };
+    const createSpy = spyOn(userRepo, "createUser").mockResolvedValue(user as never);
+    const req = createRequest({
+      user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
+      body: { email: "a@a.com", password: "x", organization_id: " org1 " },
+    });
+    const res = createMockResponse();
+
+    await userController.createUser(req, res);
+
+    expect(createSpy).toHaveBeenCalledWith({ email: "a@a.com", password: "x", organization_id: "org1" });
+    expect(res.statusCode).toBe(201);
+  });
+
   test("returns 403 when not admin", async () => {
     const repoSpy = spyOn(userRepo, "createUser");
     const req = createRequest({

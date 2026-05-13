@@ -42,6 +42,12 @@ export async function createOrganization(req: Request, res: Response) {
   if (!slug || typeof slug !== "string" || slug.trim() === "") {
     return res.status(400).json({ success: false, error: "slug is required" });
   }
+  if (logo_url !== undefined && logo_url !== null && typeof logo_url !== "string") {
+    return res.status(400).json({ success: false, error: "logo_url must be a string or null" });
+  }
+  if (typeof logo_url === "string" && !orgRepo.isOrgLogoPath(logo_url)) {
+    return res.status(400).json({ success: false, error: "logo_url must be a valid organization logo path" });
+  }
 
   try {
     const org = await orgRepo.createOrganization({ name: name.trim(), slug: slug.trim(), logo_url });
@@ -63,6 +69,9 @@ export async function updateOrganization(req: Request, res: Response) {
   }
   if (logo_url !== undefined && logo_url !== null && typeof logo_url !== "string") {
     return res.status(400).json({ success: false, error: "logo_url must be a string or null" });
+  }
+  if (typeof logo_url === "string" && !orgRepo.isOrgLogoPath(logo_url)) {
+    return res.status(400).json({ success: false, error: "logo_url must be a valid organization logo path" });
   }
 
   try {
@@ -102,11 +111,11 @@ export async function prepareOrgLogo(req: Request, res: Response) {
 
 export async function deleteOrganization(req: Request, res: Response) {
   if (req.params.id === MESTERPLAN_ORG_ID) {
-    return res.status(403).json({ success: false, error: "MesterPlan organisation kan ikke slettes" });
+    return res.status(403).json({ success: false, error: "MesterPlan organization cannot be deleted" });
   }
   try {
     await orgRepo.deleteOrganization(req.params.id as string);
-    return res.json({ success: true });
+    return res.status(204).send();
   } catch (error) {
     return handleDomainError(error, res, "Failed to delete organization");
   }

@@ -45,7 +45,7 @@ export async function createUser(req: Request, res: Response) {
     let organization_id: string | null | undefined;
     if (actor.role === UserRole.SUPER_ADMIN) {
       organization_id = typeof body.organization_id === "string" && body.organization_id.trim() !== ""
-        ? body.organization_id
+        ? body.organization_id.trim()
         : null;
       if (!organization_id) {
         return res.status(400).json({ success: false, error: "organization_id is required" });

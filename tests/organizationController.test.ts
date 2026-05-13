@@ -65,6 +65,15 @@ describe("organizationController.createOrganization", () => {
 
     expect(res.statusCode).toBe(400);
   });
+
+  test("returns 400 for invalid logo_url", async () => {
+    const req = createRequest({ body: { name: "Org 1", slug: "org-1", logo_url: "https://example.com/logo.png" } });
+    const res = createMockResponse();
+
+    await orgController.createOrganization(req, res);
+
+    expect(res.statusCode).toBe(400);
+  });
 });
 
 describe("organizationController.updateOrganization", () => {
@@ -89,6 +98,17 @@ describe("organizationController.updateOrganization", () => {
 
     expect(updateSpy).toHaveBeenCalledWith("org1", { name: "Org 1", slug: "org-1", logo_url: null });
     expect(res.body).toEqual({ success: true, data: organization });
+  });
+
+  test("returns 400 for invalid update logo_url", async () => {
+    const updateSpy = spyOn(orgRepo, "updateOrganization");
+    const req = createRequest({ params: { id: "org1" }, body: { logo_url: "not-a-gcs-path" } });
+    const res = createMockResponse();
+
+    await orgController.updateOrganization(req, res);
+
+    expect(updateSpy).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
   });
 });
 
@@ -140,5 +160,18 @@ describe("organizationController.deleteOrganization", () => {
 
     expect(deleteSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(403);
+    expect(res.body).toEqual({ success: false, error: "MesterPlan organization cannot be deleted" });
+  });
+
+  test("deletes organization with no content response", async () => {
+    const deleteSpy = spyOn(orgRepo, "deleteOrganization").mockResolvedValue(undefined as never);
+    const req = createRequest({ params: { id: "org1" } });
+    const res = createMockResponse();
+    res.send = mock(() => res) as unknown as Response["send"];
+
+    await orgController.deleteOrganization(req, res);
+
+    expect(deleteSpy).toHaveBeenCalledWith("org1");
+    expect(res.statusCode).toBe(204);
   });
 });

@@ -12,7 +12,7 @@ export class OrganizationNotFoundError extends Error {
 export interface CreateOrganizationInput {
   name: string;
   slug: string;
-  logo_url?: string;
+  logo_url?: string | null;
 }
 
 export interface UpdateOrganizationInput {
@@ -23,7 +23,12 @@ export interface UpdateOrganizationInput {
 
 async function withSignedLogo<T extends { logo_url: string | null }>(org: T): Promise<T> {
   if (!org.logo_url) return org;
+  if (!isOrgLogoPath(org.logo_url)) return org;
   return { ...org, logo_url: await generateSignedReadUrl(org.logo_url) };
+}
+
+export function isOrgLogoPath(value: string): boolean {
+  return /^orgs\/[^/]+\/logo\.(jpe?g|png|webp|heic)$/i.test(value);
 }
 
 export async function getAllOrganizations() {
@@ -47,7 +52,8 @@ export async function getOrganizationBySlug(slug: string): Promise<Organization 
 }
 
 export async function createOrganization(data: CreateOrganizationInput): Promise<Organization> {
-  return prisma.organization.create({ data });
+  const org = await prisma.organization.create({ data });
+  return withSignedLogo(org);
 }
 
 export async function updateOrganization(
@@ -56,7 +62,8 @@ export async function updateOrganization(
 ): Promise<Organization> {
   const existing = await prisma.organization.findUnique({ where: { org_id: id } });
   if (!existing) throw new OrganizationNotFoundError(id);
-  return prisma.organization.update({ where: { org_id: id }, data });
+  const org = await prisma.organization.update({ where: { org_id: id }, data });
+  return withSignedLogo(org);
 }
 
 export async function deleteOrganization(id: string): Promise<void> {

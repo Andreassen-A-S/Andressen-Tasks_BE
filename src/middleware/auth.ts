@@ -4,7 +4,9 @@ import * as authService from "../services/authService";
 import { UserRole } from "../generated/prisma/client";
 
 function normalizeOrgId(value: unknown): string | null {
-  return typeof value === "string" && value.trim() !== "" ? value : null;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed !== "" ? trimmed : null;
 }
 
 export function authenticateToken(
