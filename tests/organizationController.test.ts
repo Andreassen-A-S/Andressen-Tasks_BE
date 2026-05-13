@@ -91,7 +91,11 @@ describe("organizationController.updateOrganization", () => {
   test("updates organization with trimmed fields", async () => {
     const organization = { org_id: "org1", name: "Org 1", slug: "org-1" };
     const updateSpy = spyOn(orgRepo, "updateOrganization").mockResolvedValue(organization as never);
-    const req = createRequest({ params: { id: "org1" }, body: { name: " Org 1 ", slug: " org-1 ", logo_url: null } });
+    const req = createRequest({
+      params: { id: "org1" },
+      user: { role: "SUPER_ADMIN" },
+      body: { name: " Org 1 ", slug: " org-1 ", logo_url: null },
+    });
     const res = createMockResponse();
 
     await orgController.updateOrganization(req, res);
@@ -110,6 +114,21 @@ describe("organizationController.updateOrganization", () => {
     expect(updateSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(400);
   });
+
+  test("returns 403 when admin updates slug", async () => {
+    const updateSpy = spyOn(orgRepo, "updateOrganization");
+    const req = createRequest({
+      params: { id: "org1" },
+      user: { role: "ADMIN" },
+      body: { slug: "new-slug" },
+    });
+    const res = createMockResponse();
+
+    await orgController.updateOrganization(req, res);
+
+    expect(updateSpy).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
+  });
 });
 
 describe("organizationController.prepareOrgLogo", () => {
@@ -122,6 +141,18 @@ describe("organizationController.prepareOrgLogo", () => {
 
     expect(uploadSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(400);
+  });
+
+  test("returns 400 when mime_type is not a supported image", async () => {
+    const uploadSpy = spyOn(storageService, "generateOrgLogoUploadUrl");
+    const req = createRequest({ params: { id: "org1" }, body: { mime_type: "application/pdf" } });
+    const res = createMockResponse();
+
+    await orgController.prepareOrgLogo(req, res);
+
+    expect(uploadSpy).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: "Unsupported logo mime_type" });
   });
 
   test("returns 404 when organization does not exist", async () => {

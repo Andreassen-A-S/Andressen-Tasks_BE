@@ -3,6 +3,7 @@ import * as orgRepo from "../repositories/organizationRepository";
 import { OrganizationNotFoundError } from "../repositories/organizationRepository";
 import * as storageService from "../services/storageService";
 import { MESTERPLAN_ORG_ID } from "../constants";
+import { UserRole } from "../generated/prisma/client";
 
 function handleDomainError(error: unknown, res: Response, fallbackMessage: string): Response {
   if (error instanceof OrganizationNotFoundError) {
@@ -73,6 +74,9 @@ export async function updateOrganization(req: Request, res: Response) {
   if (typeof logo_url === "string" && !orgRepo.isOrgLogoPath(logo_url)) {
     return res.status(400).json({ success: false, error: "logo_url must be a valid organization logo path" });
   }
+  if (slug !== undefined && req.user?.role !== UserRole.SUPER_ADMIN) {
+    return res.status(403).json({ success: false, error: "Only super admins can update organization slug" });
+  }
 
   try {
     const org = await orgRepo.updateOrganization(req.params.id as string, {
@@ -90,6 +94,9 @@ export async function prepareOrgLogo(req: Request, res: Response) {
   const { mime_type } = req.body;
   if (!mime_type || typeof mime_type !== "string") {
     return res.status(400).json({ success: false, error: "mime_type is required" });
+  }
+  if (!storageService.ALLOWED_MIME_TYPES[mime_type] || !mime_type.startsWith("image/")) {
+    return res.status(400).json({ success: false, error: "Unsupported logo mime_type" });
   }
   try {
     const id = req.params.id;

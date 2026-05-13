@@ -68,7 +68,7 @@ describe("userController.getUser", () => {
 describe("userController.createUser", () => {
   test("creates user when admin", async () => {
     const user = { user_id: "u1", email: "a@a.com" };
-    spyOn(userRepo, "createUser").mockResolvedValue(user as never);
+    const createSpy = spyOn(userRepo, "createUser").mockResolvedValue(user as never);
     const req = createRequest({
       user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
       body: { email: "a@a.com", password: "x" },
@@ -77,6 +77,14 @@ describe("userController.createUser", () => {
 
     await userController.createUser(req, res);
 
+    expect(createSpy).toHaveBeenCalledWith({
+      name: undefined,
+      email: "a@a.com",
+      password: "x",
+      position: undefined,
+      role: UserRole.USER,
+      organization_id: "org1",
+    });
     expect(res.statusCode).toBe(201);
     expect(res.body).toEqual({ success: true, data: user });
   });
@@ -92,7 +100,50 @@ describe("userController.createUser", () => {
 
     await userController.createUser(req, res);
 
-    expect(createSpy).toHaveBeenCalledWith({ email: "a@a.com", password: "x", organization_id: "org1" });
+    expect(createSpy).toHaveBeenCalledWith({
+      name: undefined,
+      email: "a@a.com",
+      password: "x",
+      position: undefined,
+      role: UserRole.USER,
+      organization_id: "org1",
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  test("does not allow admin to create superadmin", async () => {
+    const createSpy = spyOn(userRepo, "createUser");
+    const req = createRequest({
+      user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
+      body: { email: "a@a.com", password: "x", role: UserRole.SUPER_ADMIN },
+    });
+    const res = createMockResponse();
+
+    await userController.createUser(req, res);
+
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
+  });
+
+  test("allows superadmin to create superadmin", async () => {
+    const user = { user_id: "u1", email: "a@a.com", role: UserRole.SUPER_ADMIN };
+    const createSpy = spyOn(userRepo, "createUser").mockResolvedValue(user as never);
+    const req = createRequest({
+      user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
+      body: { email: "a@a.com", password: "x", role: UserRole.SUPER_ADMIN, organization_id: "org1" },
+    });
+    const res = createMockResponse();
+
+    await userController.createUser(req, res);
+
+    expect(createSpy).toHaveBeenCalledWith({
+      name: undefined,
+      email: "a@a.com",
+      password: "x",
+      position: undefined,
+      role: UserRole.SUPER_ADMIN,
+      organization_id: "org1",
+    });
     expect(res.statusCode).toBe(201);
   });
 

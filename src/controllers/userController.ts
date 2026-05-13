@@ -8,6 +8,13 @@ function getAuthUser(req: Request) {
   return req.user as { user_id: string; role: UserRole; organization_id: string | null } | undefined;
 }
 
+function resolveCreateUserRole(actorRole: UserRole, requestedRole: unknown): UserRole | null {
+  if (requestedRole === undefined) return UserRole.USER;
+  if (requestedRole === UserRole.USER || requestedRole === UserRole.ADMIN) return requestedRole;
+  if (requestedRole === UserRole.SUPER_ADMIN && actorRole === UserRole.SUPER_ADMIN) return UserRole.SUPER_ADMIN;
+  return null;
+}
+
 export async function listUsers(req: Request, res: Response) {
   try {
     const orgId = req.effectiveOrgId;
@@ -41,6 +48,10 @@ export async function createUser(req: Request, res: Response) {
 
   try {
     const body = req.body as CreateUserInput;
+    const role = resolveCreateUserRole(actor.role, body.role);
+    if (!role) {
+      return res.status(400).json({ success: false, error: "Invalid role" });
+    }
     // ADMIN creates users in their own org; SUPER_ADMIN must supply organization_id in the body
     let organization_id: string | null | undefined;
     if (actor.role === UserRole.SUPER_ADMIN) {
@@ -56,7 +67,14 @@ export async function createUser(req: Request, res: Response) {
         return res.status(403).json({ success: false, error: "No organization assigned" });
       }
     }
-    const user = await userRepo.createUser({ ...body, organization_id });
+    const user = await userRepo.createUser({
+      name: body.name,
+      email: body.email,
+      password: body.password,
+      position: body.position,
+      role,
+      organization_id,
+    });
     res.status(201).json({ success: true, data: user });
   } catch (error) {
     console.error("Error in createUser:", error);
