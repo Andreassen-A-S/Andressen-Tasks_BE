@@ -4,26 +4,7 @@ import * as storageService from "../services/storageService";
 import { getParamId } from "../helper/helpers";
 import { getRequestContext } from "../types/requestContext";
 import { CreateCommentRequest } from "../types/comment";
-import {
-  CommentNotFoundError,
-  CommentForbiddenError,
-  TaskArchivedError,
-  InvalidUploadTokenError,
-} from "../errors/domainErrors";
-
-function handleDomainError(error: unknown, res: Response, fallbackMessage: string): Response {
-  if (error instanceof CommentNotFoundError) {
-    return res.status(404).json({ success: false, error: "Comment not found" });
-  }
-  if (error instanceof CommentForbiddenError) {
-    return res.status(403).json({ success: false, error: error.message });
-  }
-  if (error instanceof TaskArchivedError) {
-    return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
-  }
-  console.error(fallbackMessage, error);
-  return res.status(500).json({ success: false, error: fallbackMessage });
-}
+import { handleError } from "../middleware/errorMiddleware";
 
 export async function listTaskComments(req: Request, res: Response) {
   try {
@@ -35,14 +16,11 @@ export async function listTaskComments(req: Request, res: Response) {
 
     const comments = await commentService.getCommentsByTaskId(ctx, taskId);
 
-    if (comments === null) {
-      return res.status(404).json({ success: false, error: "Task not found" });
-    }
+    if (comments === null) return res.status(404).json({ success: false, error: "Task not found" });
 
     res.json({ success: true, data: comments });
   } catch (error) {
-    console.error("Error fetching comments:", error);
-    res.status(500).json({ success: false, error: "Failed to fetch comments" });
+    return handleError(error, res);
   }
 }
 
@@ -55,51 +33,16 @@ export async function createComment(req: Request, res: Response) {
     if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
     const { message, upload_tokens } = req.body as CreateCommentRequest;
-
     const hasTokens = Array.isArray(upload_tokens) && upload_tokens.length > 0;
 
-    if (!message?.trim() && !hasTokens) {
-      return res
-        .status(400)
-        .json({ success: false, error: "Message or attachment is required" });
-    }
+    const comment = await commentService.createComment(
+      ctx,
+      taskId,
+      message?.trim(),
+      hasTokens ? upload_tokens : undefined,
+    );
 
-    if (message && message.trim().length > 2000) {
-      return res.status(400).json({
-        success: false,
-        error: "Message too long (max 2000 characters)",
-      });
-    }
-
-    if (hasTokens && upload_tokens!.some((t) => typeof t !== "string")) {
-      return res.status(400).json({ success: false, error: "Invalid upload tokens" });
-    }
-
-    if (hasTokens && new Set(upload_tokens!).size !== upload_tokens!.length) {
-      return res.status(400).json({ success: false, error: "Duplicate upload tokens" });
-    }
-
-    let comment;
-    try {
-      comment = await commentService.createComment(
-        ctx,
-        taskId,
-        message?.trim(),
-        hasTokens ? upload_tokens : undefined,
-      );
-    } catch (err) {
-      if (err instanceof InvalidUploadTokenError) {
-        return res.status(400).json({ success: false, error: err.message });
-      }
-      if (err instanceof TaskArchivedError) {
-        return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
-      }
-      throw err;
-    }
-
-    if (comment === null) {
-      return res.status(404).json({ success: false, error: "Task not found" });
-    }
+    if (comment === null) return res.status(404).json({ success: false, error: "Task not found" });
 
     const commentWithSignedUrls = {
       ...comment,
@@ -113,8 +56,7 @@ export async function createComment(req: Request, res: Response) {
 
     res.status(201).json({ success: true, data: commentWithSignedUrls });
   } catch (error) {
-    console.error("Error creating comment:", error);
-    res.status(500).json({ success: false, error: "Failed to create comment" });
+    return handleError(error, res);
   }
 }
 
@@ -130,7 +72,7 @@ export async function deleteComment(req: Request, res: Response) {
 
     res.status(204).send();
   } catch (error) {
-    return handleDomainError(error, res, "Failed to delete comment");
+    return handleError(error, res);
   }
 }
 
@@ -142,72 +84,23 @@ export async function updateComment(req: Request, res: Response) {
     const ctx = getRequestContext(req);
     if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
-    if (!req.body) {
-      return res
-        .status(400)
-        .json({ success: false, error: "Missing request body" });
-    }
     const { message, upload_tokens, remove_attachment_ids } = req.body;
 
-    if (message !== undefined && typeof message !== "string") {
-      return res.status(400).json({ success: false, error: "Invalid message" });
-    }
-
     const trimmedMessage = message !== undefined ? (message as string).trim() : undefined;
-
-    if (trimmedMessage !== undefined && trimmedMessage.length > 2000) {
-      return res.status(400).json({
-        success: false,
-        error: "Message too long (max 2000 characters)",
-      });
-    }
-
-    if (upload_tokens !== undefined && !Array.isArray(upload_tokens)) {
-      return res.status(400).json({ success: false, error: "Invalid upload tokens" });
-    }
-
-    if (Array.isArray(upload_tokens) && upload_tokens.some((t) => typeof t !== "string")) {
-      return res.status(400).json({ success: false, error: "Invalid upload tokens" });
-    }
-
-    if (Array.isArray(upload_tokens) && new Set(upload_tokens).size !== upload_tokens.length) {
-      return res.status(400).json({ success: false, error: "Duplicate upload tokens" });
-    }
-
-    if (remove_attachment_ids !== undefined && !Array.isArray(remove_attachment_ids)) {
-      return res.status(400).json({ success: false, error: "Invalid remove_attachment_ids" });
-    }
-
-    if (Array.isArray(remove_attachment_ids) && remove_attachment_ids.some((id) => typeof id !== "string")) {
-      return res.status(400).json({ success: false, error: "Invalid remove_attachment_ids" });
-    }
-
+    const hasMessage = trimmedMessage !== undefined && trimmedMessage.length > 0;
     const hasTokens = Array.isArray(upload_tokens) && upload_tokens.length > 0;
     const hasRemovals = Array.isArray(remove_attachment_ids) && remove_attachment_ids.length > 0;
-    const hasMessage = trimmedMessage !== undefined && trimmedMessage.length > 0;
-    if (!hasMessage && !hasTokens && !hasRemovals) {
-      return res.status(400).json({ success: false, error: "No changes provided" });
-    }
 
-    let updatedComment;
-    try {
-      updatedComment = await commentService.updateComment(
-        ctx,
-        commentId,
-        hasMessage ? trimmedMessage : undefined,
-        hasTokens ? upload_tokens : undefined,
-        hasRemovals ? remove_attachment_ids : undefined,
-      );
-    } catch (err) {
-      if (err instanceof InvalidUploadTokenError) {
-        return res.status(400).json({ success: false, error: err.message });
-      }
-      return handleDomainError(err, res, "Failed to update comment");
-    }
+    const updatedComment = await commentService.updateComment(
+      ctx,
+      commentId,
+      hasMessage ? trimmedMessage : undefined,
+      hasTokens ? upload_tokens : undefined,
+      hasRemovals ? remove_attachment_ids : undefined,
+    );
 
     res.json({ success: true, data: updatedComment });
   } catch (error) {
-    console.error("Error updating comment:", error);
-    res.status(500).json({ success: false, error: "Failed to update comment" });
+    return handleError(error, res);
   }
 }

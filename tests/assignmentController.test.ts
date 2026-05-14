@@ -151,7 +151,7 @@ describe("assignmentController.getAssignment", () => {
 
     expect(repoSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ error: "Missing or invalid id" });
+    expect(res.body).toEqual({ success: false, error: "Missing or invalid id" });
   });
 });
 

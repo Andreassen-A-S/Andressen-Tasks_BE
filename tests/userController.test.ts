@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import * as userController from "../src/controllers/userController";
 import * as userRepo from "../src/repositories/userRepository";
 import { UserRole } from "../src/generated/prisma/client";
+import { UserNotFoundError } from "../src/errors/domainErrors";
 
 type MockResponse = Response & {
   statusCode?: number;
@@ -225,7 +226,7 @@ describe("userController.updateUser", () => {
   });
 
   test("admin from org A cannot update user from org B", async () => {
-    const updateSpy = spyOn(userRepo, "updateUserInOrg").mockRejectedValue(new Error("User not found"));
+    const updateSpy = spyOn(userRepo, "updateUserInOrg").mockRejectedValue(new UserNotFoundError("user-org-b"));
     const req = createRequest({
       user: { user_id: "admin-a", role: UserRole.ADMIN, organization_id: "org-a" },
       effectiveOrgId: "org-a",
@@ -238,7 +239,7 @@ describe("userController.updateUser", () => {
 
     expect(updateSpy).toHaveBeenCalledWith("user-org-b", "org-a", { name: "Hacked" });
     expect(res.statusCode).toBe(404);
-    expect(res.body).toEqual({ success: false, error: "User not found or update failed" });
+    expect(res.body).toEqual({ success: false, error: "User not found: user-org-b" });
   });
 
   test("superadmin with org context is scoped to that organization on update", async () => {
@@ -324,7 +325,7 @@ describe("userController.deleteUser", () => {
   });
 
   test("returns 404 when delete fails", async () => {
-    spyOn(userRepo, "deleteUserInOrg").mockRejectedValue(new Error("missing"));
+    spyOn(userRepo, "deleteUserInOrg").mockRejectedValue(new UserNotFoundError("u1"));
     const req = createRequest({
       user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
       params: { id: "u1" } as Request["params"],
@@ -334,11 +335,11 @@ describe("userController.deleteUser", () => {
     await userController.deleteUser(req, res);
 
     expect(res.statusCode).toBe(404);
-    expect(res.body).toEqual({ success: false, error: "User not found" });
+    expect(res.body).toEqual({ success: false, error: "User not found: u1" });
   });
 
   test("admin from org A cannot delete user from org B", async () => {
-    const deleteSpy = spyOn(userRepo, "deleteUserInOrg").mockRejectedValue(new Error("User not found"));
+    const deleteSpy = spyOn(userRepo, "deleteUserInOrg").mockRejectedValue(new UserNotFoundError("user-org-b"));
     const req = createRequest({
       user: { user_id: "admin-a", role: UserRole.ADMIN, organization_id: "org-a" },
       effectiveOrgId: "org-a",
@@ -350,7 +351,7 @@ describe("userController.deleteUser", () => {
 
     expect(deleteSpy).toHaveBeenCalledWith("user-org-b", "org-a");
     expect(res.statusCode).toBe(404);
-    expect(res.body).toEqual({ success: false, error: "User not found" });
+    expect(res.body).toEqual({ success: false, error: "User not found: user-org-b" });
   });
 
   test("superadmin without org context can delete globally", async () => {

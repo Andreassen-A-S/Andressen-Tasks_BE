@@ -1,4 +1,5 @@
 import * as statsRepository from "../repositories/statRepository";
+import { ValidationError } from "../errors/domainErrors";
 
 /**
  * Stats service - business logic layer for dashboard statistics
@@ -37,7 +38,7 @@ export class StatsService {
    */
   async getTopPerformers(limit: number = 5, orgId: string | null = null) {
     if (limit < 1 || limit > 20) {
-      throw new Error("Limit must be between 1 and 20");
+      throw new ValidationError("Limit must be between 1 and 20");
     }
     return await statsRepository.getTopPerformers(limit, orgId);
   }
@@ -61,7 +62,7 @@ export class StatsService {
    */
   async getTaskTrends(days: number = 7, orgId: string | null = null) {
     if (days < 1 || days > 90) {
-      throw new Error("Days must be between 1 and 90");
+      throw new ValidationError("Days must be between 1 and 90");
     }
     return await statsRepository.getTaskTrends(days, orgId);
   }
@@ -80,7 +81,7 @@ export class StatsService {
    */
   async getStatsForWindow(days: number = 30, orgId: string | null = null) {
     if (!Number.isFinite(days) || !Number.isInteger(days) || days < 1 || days > 365) {
-      throw new Error("Days must be between 1 and 365");
+      throw new ValidationError("Days must be between 1 and 365");
     }
     return await statsRepository.getStatsForWindow(days, orgId);
   }

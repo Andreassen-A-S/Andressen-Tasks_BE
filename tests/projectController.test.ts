@@ -112,23 +112,6 @@ describe("projectController.createProject", () => {
     expect(res.body).toEqual({ success: true, data: project });
   });
 
-  test("returns 400 when name is missing", async () => {
-    const req = createRequest({ user: { user_id: "u1" }, effectiveOrgId: "org1", body: {} });
-    const res = createMockResponse();
-
-    await projectController.createProject(req, res);
-
-    expect(res.statusCode).toBe(400);
-  });
-
-  test("returns 400 when name is empty string", async () => {
-    const req = createRequest({ user: { user_id: "u1" }, effectiveOrgId: "org1", body: { name: "  " } });
-    const res = createMockResponse();
-
-    await projectController.createProject(req, res);
-
-    expect(res.statusCode).toBe(400);
-  });
 
   test("returns 401 when unauthenticated", async () => {
     const req = createRequest({ body: { name: "New Project" }, user: undefined });

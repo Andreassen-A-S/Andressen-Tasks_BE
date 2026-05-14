@@ -1,6 +1,8 @@
 import { Router } from "express";
 import * as templateController from "../controllers/templateController";
 import { authenticateToken } from "../middleware/auth";
+import { validate } from "../middleware/validateMiddleware";
+import { createTemplateSchema, updateTemplateSchema } from "../schemas/templateSchemas";
 
 const router = Router();
 
@@ -15,13 +17,13 @@ router.get(
 );
 
 // Create new template
-router.post("/", authenticateToken, templateController.createTemplate);
+router.post("/", authenticateToken, validate(createTemplateSchema), templateController.createTemplate);
 
 // Get single template
 router.get("/:id", authenticateToken, templateController.getTemplate);
 
 // Update template
-router.patch("/:id", authenticateToken, templateController.updateTemplate);
+router.patch("/:id", authenticateToken, validate(updateTemplateSchema), templateController.updateTemplate);
 
 // Delete template
 router.delete("/:id", authenticateToken, templateController.deleteTemplate);

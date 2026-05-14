@@ -1,6 +1,8 @@
 import { Router } from "express";
 import * as commentController from "../controllers/commentController";
 import { authenticateToken } from "../middleware/auth";
+import { validate } from "../middleware/validateMiddleware";
+import { createCommentSchema, updateCommentSchema } from "../schemas/commentSchemas";
 
 const router = Router();
 
@@ -15,6 +17,7 @@ router.get(
 router.post(
   "/task/:taskId",
   authenticateToken,
+  validate(createCommentSchema),
   commentController.createComment,
 );
 
@@ -26,6 +29,6 @@ router.delete(
 );
 
 // PATCH /api/comments/:commentId - Edit a comment
-router.patch("/:commentId", authenticateToken, commentController.updateComment);
+router.patch("/:commentId", authenticateToken, validate(updateCommentSchema), commentController.updateComment);
 
 export default router;

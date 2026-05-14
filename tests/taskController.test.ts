@@ -100,7 +100,7 @@ describe("taskController.listTasks", () => {
     expect(res.statusCode).toBe(500);
     expect(res.body).toEqual({
       success: false,
-      error: "Failed to fetch tasks",
+      error: "Internal server error",
     });
   });
 });
@@ -197,37 +197,6 @@ describe("taskController.createTask", () => {
     expect(res.statusCode).toBe(201);
   });
 
-  test("returns 400 when project_id is missing", async () => {
-    const repoSpy = spyOn(taskRepo, "createTaskWithAssignments");
-
-    const req = createRequest({
-      user: { user_id: "u1" },
-      body: { title: "Task", created_by: "u1" },
-    });
-    const res = createMockResponse();
-
-    await taskController.createTask(req, res);
-
-    expect(repoSpy).not.toHaveBeenCalled();
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "project_id is required" });
-  });
-
-  test("returns 400 when project_id is blank", async () => {
-    const repoSpy = spyOn(taskRepo, "createTaskWithAssignments");
-
-    const req = createRequest({
-      user: { user_id: "u1" },
-      body: { title: "Task", created_by: "u1", project_id: "   " },
-    });
-    const res = createMockResponse();
-
-    await taskController.createTask(req, res);
-
-    expect(repoSpy).not.toHaveBeenCalled();
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "project_id is required" });
-  });
 
   test("creates task and logs task + assignment events", async () => {
     transactionMock.mockImplementation((fn: any) => fn({}));

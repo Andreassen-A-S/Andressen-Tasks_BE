@@ -2,15 +2,7 @@ import type { Request, Response } from "express";
 import * as projectService from "../services/projectService";
 import { getRequestContext } from "../types/requestContext";
 import { getParamId } from "../helper/helpers";
-import { ProjectNotFoundError } from "../errors/domainErrors";
-
-function handleDomainError(error: unknown, res: Response, fallbackMessage: string): Response {
-  if (error instanceof ProjectNotFoundError) {
-    return res.status(404).json({ success: false, error: error.message });
-  }
-  console.error(fallbackMessage, error);
-  return res.status(500).json({ success: false, error: fallbackMessage });
-}
+import { handleError } from "../middleware/errorMiddleware";
 
 export async function listProjects(req: Request, res: Response) {
   try {
@@ -20,8 +12,7 @@ export async function listProjects(req: Request, res: Response) {
     const projects = await projectService.listProjects(ctx);
     return res.json({ success: true, data: projects });
   } catch (error) {
-    console.error("Error in listProjects:", error);
-    return res.status(500).json({ success: false, error: "Failed to fetch projects" });
+    return handleError(error, res);
   }
 }
 
@@ -37,7 +28,7 @@ export async function getProject(req: Request, res: Response) {
     if (!project) return res.status(404).json({ success: false, error: "Project not found" });
     return res.json({ success: true, data: project });
   } catch (error) {
-    return handleDomainError(error, res, "Failed to fetch project");
+    return handleError(error, res);
   }
 }
 
@@ -50,16 +41,11 @@ export async function createProject(req: Request, res: Response) {
   }
 
   const { name, description, color } = req.body;
-  if (!name || typeof name !== "string" || name.trim() === "") {
-    return res.status(400).json({ success: false, error: "name is required" });
-  }
-
   try {
     const project = await projectService.createProject(ctx, { name: name.trim(), description, color });
     return res.status(201).json({ success: true, data: project });
   } catch (error) {
-    console.error("Error in createProject:", error);
-    return res.status(500).json({ success: false, error: "Failed to create project" });
+    return handleError(error, res);
   }
 }
 
@@ -68,11 +54,6 @@ export async function updateProject(req: Request, res: Response) {
   if (!id) return res.status(400).json({ success: false, error: "Missing or invalid id" });
 
   const { name, description, color } = req.body;
-
-  if (name !== undefined && (typeof name !== "string" || name.trim() === "")) {
-    return res.status(400).json({ success: false, error: "name must be a non-empty string" });
-  }
-
   try {
     const ctx = getRequestContext(req);
     if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
@@ -80,7 +61,7 @@ export async function updateProject(req: Request, res: Response) {
     const project = await projectService.updateProject(ctx, id, { name: name?.trim(), description, color });
     return res.json({ success: true, data: project });
   } catch (error) {
-    return handleDomainError(error, res, "Failed to update project");
+    return handleError(error, res);
   }
 }
 
@@ -95,6 +76,6 @@ export async function deleteProject(req: Request, res: Response) {
     await projectService.deleteProject(ctx, id);
     return res.status(204).send();
   } catch (error) {
-    return handleDomainError(error, res, "Failed to delete project");
+    return handleError(error, res);
   }
 }

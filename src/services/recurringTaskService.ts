@@ -9,6 +9,7 @@ import {
 import { appDateKey } from "../utils/dateUtils";
 import { prisma } from "../db/prisma";
 import * as templateRepository from "../repositories/templateRepository";
+import { ValidationError } from "../errors/domainErrors";
 import {
   RecurrenceFrequency,
   TaskEventType,
@@ -161,7 +162,7 @@ export class RecurringTaskService {
       );
 
       if (invalidUserIds.length > 0) {
-        throw new Error(
+        throw new ValidationError(
           `Invalid user IDs: ${invalidUserIds.join(", ")}. These users do not exist.`,
         );
       }

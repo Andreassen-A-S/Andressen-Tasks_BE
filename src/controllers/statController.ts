@@ -3,6 +3,7 @@ import { StatsService } from "../services/statService";
 import { getParamId } from "../helper/helpers";
 import { UserRole } from "../generated/prisma/client";
 import { getRequestContext } from "../types/requestContext";
+import { handleError } from "../middleware/errorMiddleware";
 
 const statsService = new StatsService();
 
@@ -13,8 +14,7 @@ export async function getOverview(req: Request, res: Response) {
     const stats = await statsService.getOverview(ctx.effectiveOrgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
-    console.error("Error in getOverview:", error);
-    return res.status(500).json({ success: false, error: "Failed to fetch overview stats" });
+    return handleError(error, res);
   }
 }
 
@@ -25,8 +25,7 @@ export async function getCompletionRates(req: Request, res: Response) {
     const stats = await statsService.getCompletionRates(ctx.effectiveOrgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
-    console.error("Error in getCompletionRates:", error);
-    return res.status(500).json({ success: false, error: "Failed to fetch completion rates" });
+    return handleError(error, res);
   }
 }
 
@@ -37,8 +36,7 @@ export async function getPriorityStats(req: Request, res: Response) {
     const stats = await statsService.getPriorityStats(ctx.effectiveOrgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
-    console.error("Error in getPriorityStats:", error);
-    return res.status(500).json({ success: false, error: "Failed to fetch priority stats" });
+    return handleError(error, res);
   }
 }
 
@@ -49,8 +47,7 @@ export async function getStatusStats(req: Request, res: Response) {
     const stats = await statsService.getStatusStats(ctx.effectiveOrgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
-    console.error("Error in getStatusStats:", error);
-    return res.status(500).json({ success: false, error: "Failed to fetch status stats" });
+    return handleError(error, res);
   }
 }
 
@@ -62,11 +59,7 @@ export async function getTopPerformers(req: Request, res: Response) {
     const stats = await statsService.getTopPerformers(limit, ctx.effectiveOrgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
-    console.error("Error in getTopPerformers:", error);
-    if (error instanceof Error && error.message.includes("must be between")) {
-      return res.status(400).json({ success: false, error: error.message });
-    }
-    return res.status(500).json({ success: false, error: "Failed to fetch top performers" });
+    return handleError(error, res);
   }
 }
 
@@ -77,8 +70,7 @@ export async function getWorkloadDistribution(req: Request, res: Response) {
     const stats = await statsService.getWorkloadDistribution(ctx.effectiveOrgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
-    console.error("Error in getWorkloadDistribution:", error);
-    return res.status(500).json({ success: false, error: "Failed to fetch workload distribution" });
+    return handleError(error, res);
   }
 }
 
@@ -89,8 +81,7 @@ export async function getRecurringStats(req: Request, res: Response) {
     const stats = await statsService.getRecurringStats(ctx.effectiveOrgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
-    console.error("Error in getRecurringStats:", error);
-    return res.status(500).json({ success: false, error: "Failed to fetch recurring stats" });
+    return handleError(error, res);
   }
 }
 
@@ -102,11 +93,7 @@ export async function getTaskTrends(req: Request, res: Response) {
     const stats = await statsService.getTaskTrends(days, ctx.effectiveOrgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
-    console.error("Error in getTaskTrends:", error);
-    if (error instanceof Error && error.message.includes("must be between")) {
-      return res.status(400).json({ success: false, error: error.message });
-    }
-    return res.status(500).json({ success: false, error: "Failed to fetch task trends" });
+    return handleError(error, res);
   }
 }
 
@@ -119,11 +106,7 @@ export async function getDashboardStats(req: Request, res: Response) {
     const stats = await statsService.getStatsForWindow(days, ctx.effectiveOrgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
-    console.error("Error in getDashboardStats:", error);
-    if (error instanceof Error && error.message.includes("must be between")) {
-      return res.status(400).json({ success: false, error: error.message });
-    }
-    return res.status(500).json({ success: false, error: "Failed to fetch dashboard stats" });
+    return handleError(error, res);
   }
 }
 
@@ -133,7 +116,6 @@ export async function getUserStats(req: Request, res: Response) {
 
   try {
     const targetUserId = getParamId(req, "userId") || ctx.actorUserId;
-    // Users can only view their own stats; admins and super-admins can view any user's stats.
     const isPrivileged = ctx.actorRole === UserRole.ADMIN || ctx.isSuperAdmin;
     if (targetUserId !== ctx.actorUserId && !isPrivileged) {
       return res.status(403).json({ success: false, error: "Not authorized to view other users' stats" });
@@ -142,8 +124,7 @@ export async function getUserStats(req: Request, res: Response) {
     const stats = await statsService.getUserStats(targetUserId, ctx.effectiveOrgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
-    console.error("Error in getUserStats:", error);
-    return res.status(500).json({ success: false, error: "Failed to fetch user stats" });
+    return handleError(error, res);
   }
 }
 
@@ -154,7 +135,6 @@ export async function getMyStats(req: Request, res: Response) {
     const stats = await statsService.getUserStats(ctx.actorUserId, ctx.effectiveOrgId);
     return res.json({ success: true, data: stats });
   } catch (error) {
-    console.error("Error in getMyStats:", error);
-    return res.status(500).json({ success: false, error: "Failed to fetch your stats" });
+    return handleError(error, res);
   }
 }

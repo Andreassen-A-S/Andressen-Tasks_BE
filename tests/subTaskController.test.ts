@@ -48,18 +48,6 @@ afterEach(() => {
 });
 
 describe("subTaskController.createSubtask", () => {
-  test("returns 400 when parent_task_id is missing", async () => {
-    const req = createRequest({ body: { title: "subtask" } });
-    const res = createMockResponse();
-
-    await subTaskController.createSubtask(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({
-      success: false,
-      error: "parent_task_id is required",
-    });
-  });
 
   test("returns 404 when parent task does not exist", async () => {
     spyOn(taskRepo, "getTaskById").mockResolvedValue(null);
@@ -71,7 +59,7 @@ describe("subTaskController.createSubtask", () => {
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({
       success: false,
-      error: "Parent task not found",
+      error: "Task not found: p1",
     });
   });
 

@@ -16,6 +16,7 @@ import projectRoutes from "./routes/project.routes";
 import attachmentRoutes from "./routes/attachment.routes";
 import organizationRoutes from "./routes/organization.routes";
 import { initScheduler } from "./services/schedulerService";
+import { errorMiddleware } from "./middleware/errorMiddleware";
 
 if (!process.env.JWT_SECRET) {
   console.error("FATAL: JWT_SECRET environment variable is not set");
@@ -107,18 +108,8 @@ app.use((_req, res) => {
   res.status(404).json({ success: false, error: "Not Found" });
 });
 
-// Error handler (includes CORS errors)
-app.use(
-  (
-    err: unknown,
-    _req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction,
-  ) => {
-    console.error(err);
-    res.status(500).json({ success: false, error: "Internal Server Error" });
-  },
-);
+// Centralized error handler — handles AppError subclasses and unexpected throws.
+app.use(errorMiddleware);
 
 function getLanIp(): string | null {
   const nets = os.networkInterfaces();

@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { UserRole } from "../src/generated/prisma/client";
 import * as statController from "../src/controllers/statController";
 import { StatsService } from "../src/services/statService";
+import { ValidationError } from "../src/errors/domainErrors";
 
 type MockResponse = Response & {
   statusCode?: number;
@@ -136,7 +137,7 @@ describe("statController.getUserStats", () => {
 describe("statController.getTopPerformers", () => {
   test("returns 400 for invalid limit", async () => {
     spyOn(StatsService.prototype, "getTopPerformers").mockRejectedValue(
-      new Error("Limit must be between 1 and 20"),
+      new ValidationError("Limit must be between 1 and 20"),
     );
 
     const req = createRequest({
@@ -194,7 +195,7 @@ describe("statController.getDashboardStats", () => {
 
   test("returns 400 for out-of-range days", async () => {
     spyOn(StatsService.prototype, "getStatsForWindow").mockRejectedValue(
-      new Error("Days must be between 1 and 365"),
+      new ValidationError("Days must be between 1 and 365"),
     );
 
     const req = createRequest({

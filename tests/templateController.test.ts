@@ -141,7 +141,7 @@ describe("recurringTemplateController.listTemplates", () => {
     expect(res.statusCode).toBe(500);
     expect(res.body).toEqual({
       success: false,
-      error: "Failed to fetch templates",
+      error: "Internal server error",
     });
   });
 });
@@ -191,7 +191,7 @@ describe("recurringTemplateController.listActiveTemplates", () => {
     expect(res.statusCode).toBe(500);
     expect(res.body).toEqual({
       success: false,
-      error: "Failed to fetch active templates",
+      error: "Internal server error",
     });
   });
 });
@@ -255,58 +255,6 @@ describe("recurringTemplateController.createTemplate", () => {
     expect(res.body).toEqual({ success: false, error: "Unauthorized" });
   });
 
-  test("returns 400 when required fields are missing", async () => {
-    const req = createRequest({
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { title: "" },
-    });
-    const res = createMockResponse();
-
-    await recurringTemplateController.createTemplate(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({
-      success: false,
-      error: "title is required and must be a non-empty string",
-    });
-  });
-
-  test("returns 400 when project_id is missing", async () => {
-    const req = createRequest({
-      user: { user_id: "u1", role: UserRole.USER },
-      body: {
-        title: "Daily standup",
-        frequency: RecurrenceFrequency.DAILY,
-        interval: 1,
-        start_date: new Date("2026-02-01"),
-      },
-    });
-    const res = createMockResponse();
-
-    await recurringTemplateController.createTemplate(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "project_id is required" });
-  });
-
-  test("returns 400 when project_id is blank", async () => {
-    const req = createRequest({
-      user: { user_id: "u1", role: UserRole.USER },
-      body: {
-        title: "Daily standup",
-        frequency: RecurrenceFrequency.DAILY,
-        interval: 1,
-        start_date: new Date("2026-02-01"),
-        project_id: "   ",
-      },
-    });
-    const res = createMockResponse();
-
-    await recurringTemplateController.createTemplate(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "project_id is required" });
-  });
 
   test("creates template and generates 12 initial instances", async () => {
     const createdTemplate = {

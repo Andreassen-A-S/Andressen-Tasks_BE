@@ -104,47 +104,6 @@ describe("commentController.listTaskComments", () => {
 });
 
 describe("commentController.createComment", () => {
-  test("returns 400 when body is empty", async () => {
-    const req = createRequest({
-      params: { taskId: "t1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { message: "   " },
-    });
-    const res = createMockResponse();
-
-    await commentController.createComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Message or attachment is required" });
-  });
-
-  test("returns 400 when upload_tokens contains non-string", async () => {
-    const req = createRequest({
-      params: { taskId: "t1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { upload_tokens: [123] },
-    });
-    const res = createMockResponse();
-
-    await commentController.createComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Invalid upload tokens" });
-  });
-
-  test("returns 400 when upload_tokens contains duplicates", async () => {
-    const req = createRequest({
-      params: { taskId: "t1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { upload_tokens: ["tok1", "tok1"] },
-    });
-    const res = createMockResponse();
-
-    await commentController.createComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Duplicate upload tokens" });
-  });
 
   test("returns 400 when createComment throws invalid token error", async () => {
     findFirstMock.mockResolvedValueOnce({
@@ -540,61 +499,6 @@ describe("commentController.updateComment", () => {
     expect(res.statusCode).toBe(403);
   });
 
-  test("returns 400 when upload_tokens is not an array", async () => {
-    spyOn(commentRepo, "getCommentById").mockResolvedValue({
-      comment_id: "c1",
-      user_id: "u1",
-      task_id: "t1",
-      message: "old",
-    } as never);
-
-    const req = createRequest({
-      params: { commentId: "c1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { message: "new", upload_tokens: "not-an-array" },
-    });
-    const res = createMockResponse();
-
-    await commentController.updateComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Invalid upload tokens" });
-  });
-
-  test("returns 400 when upload_tokens contains non-string", async () => {
-    spyOn(commentRepo, "getCommentById").mockResolvedValue({
-      comment_id: "c1",
-      user_id: "u1",
-      task_id: "t1",
-      message: "old",
-    } as never);
-
-    const req = createRequest({
-      params: { commentId: "c1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { message: "new", upload_tokens: [123] },
-    });
-    const res = createMockResponse();
-
-    await commentController.updateComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Invalid upload tokens" });
-  });
-
-  test("returns 400 when upload_tokens contains duplicates", async () => {
-    const req = createRequest({
-      params: { commentId: "c1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { message: "new", upload_tokens: ["tok1", "tok1"] },
-    });
-    const res = createMockResponse();
-
-    await commentController.updateComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Duplicate upload tokens" });
-  });
 
   test("returns 400 when updateComment throws invalid token error", async () => {
     spyOn(commentRepo, "getCommentById").mockResolvedValue({
@@ -650,68 +554,6 @@ describe("commentController.updateComment", () => {
     expect(updateSpy.mock.calls[0]?.[4]).toBeUndefined();
   });
 
-  test("returns 400 when remove_attachment_ids is not an array", async () => {
-    spyOn(commentRepo, "getCommentById").mockResolvedValue({
-      comment_id: "c1",
-      user_id: "u1",
-      task_id: "t1",
-      message: "old",
-    } as never);
-
-    const req = createRequest({
-      params: { commentId: "c1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { message: "new", remove_attachment_ids: "not-an-array" },
-    });
-    const res = createMockResponse();
-
-    await commentController.updateComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Invalid remove_attachment_ids" });
-  });
-
-  test("returns 400 when remove_attachment_ids contains non-string", async () => {
-    spyOn(commentRepo, "getCommentById").mockResolvedValue({
-      comment_id: "c1",
-      user_id: "u1",
-      task_id: "t1",
-      message: "old",
-    } as never);
-
-    const req = createRequest({
-      params: { commentId: "c1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { message: "new", remove_attachment_ids: [123] },
-    });
-    const res = createMockResponse();
-
-    await commentController.updateComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Invalid remove_attachment_ids" });
-  });
-
-  test("returns 400 when no changes are provided", async () => {
-    spyOn(commentRepo, "getCommentById").mockResolvedValue({
-      comment_id: "c1",
-      user_id: "u1",
-      task_id: "t1",
-      message: "old",
-    } as never);
-
-    const req = createRequest({
-      params: { commentId: "c1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: {},
-    });
-    const res = createMockResponse();
-
-    await commentController.updateComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "No changes provided" });
-  });
 
   test("updates without message when only remove_attachment_ids provided", async () => {
     spyOn(commentRepo, "getCommentById").mockResolvedValue({
