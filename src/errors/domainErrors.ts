@@ -13,7 +13,7 @@ export class TaskNotFoundError extends Error {
 // A task must be transitioned back before it can be re-completed.
 export class TaskAlreadyDoneError extends Error {
   constructor() {
-    super("Task is already marked as done and cannot be set to done again.");
+    super("Task is already marked as done and cannot be set to done again");
     this.name = "TaskAlreadyDoneError";
   }
 }
@@ -22,7 +22,7 @@ export class TaskAlreadyDoneError extends Error {
 // Archived tasks are read-only; they must be un-archived first.
 export class TaskArchivedError extends Error {
   constructor() {
-    super("Task is archived and cannot be modified.");
+    super("Task is archived and cannot be modified");
     this.name = "TaskArchivedError";
   }
 }
@@ -32,7 +32,7 @@ export class TaskArchivedError extends Error {
 // user tries to log progress but has no assignment on the task.
 // Admins may log progress on any task in their org regardless of assignment.
 export class AssignmentNotFoundError extends Error {
-  constructor(message = "Assignment not found.") {
+  constructor(message = "Assignment not found") {
     super(message);
     this.name = "AssignmentNotFoundError";
   }
@@ -50,7 +50,7 @@ export class TaskNotProgressableError extends Error {
 // Example: assigning a user from org-B to a task in org-A.
 // Super-admins bypass org scoping intentionally; this only fires for org-scoped calls.
 export class CrossOrganizationReferenceError extends Error {
-  constructor(message = "Referenced records must belong to the same organization.") {
+  constructor(message = "Referenced records must belong to the same organization") {
     super(message);
     this.name = "CrossOrganizationReferenceError";
   }
@@ -103,7 +103,7 @@ export class UserNotFoundError extends Error {
 // Thrown when an assignment would reference a task or user outside the caller's org.
 // Example: assigning a user from org-B to a task in org-A.
 export class AssignmentCrossOrganizationError extends Error {
-  constructor(message = "Assignment references entities in different organizations.") {
+  constructor(message = "Assignment references entities in different organizations") {
     super(message);
     this.name = "AssignmentCrossOrganizationError";
   }
@@ -129,7 +129,7 @@ export class OrganizationNotFoundError extends Error {
 // This org is the platform owner and must never be deleted.
 export class ProtectedOrganizationError extends Error {
   constructor() {
-    super("This organization cannot be deleted.");
+    super("This organization cannot be deleted");
     this.name = "ProtectedOrganizationError";
   }
 }
@@ -137,7 +137,7 @@ export class ProtectedOrganizationError extends Error {
 // Thrown when a comment is not found or the caller lacks access to it.
 export class CommentNotFoundError extends Error {
   constructor() {
-    super("Comment not found.");
+    super("Comment not found");
     this.name = "CommentNotFoundError";
   }
 }
@@ -146,7 +146,7 @@ export class CommentNotFoundError extends Error {
 // Admins and super-admins may override this via their role check.
 export class CommentForbiddenError extends Error {
   constructor() {
-    super("You do not have permission to modify this comment.");
+    super("You do not have permission to modify this comment");
     this.name = "CommentForbiddenError";
   }
 }
@@ -154,7 +154,7 @@ export class CommentForbiddenError extends Error {
 // Thrown when an attachment is not found.
 export class AttachmentNotFoundError extends Error {
   constructor() {
-    super("Attachment not found.");
+    super("Attachment not found");
     this.name = "AttachmentNotFoundError";
   }
 }
@@ -163,7 +163,7 @@ export class AttachmentNotFoundError extends Error {
 // Task access requires: task creator, assigned user, admin, or super-admin.
 export class AttachmentAccessError extends Error {
   constructor() {
-    super("You do not have access to this task.");
+    super("You do not have access to this task");
     this.name = "AttachmentAccessError";
   }
 }
@@ -171,7 +171,7 @@ export class AttachmentAccessError extends Error {
 // Thrown when a user is already assigned to the target task.
 export class DuplicateAssignmentError extends Error {
   constructor() {
-    super("User is already assigned to this task.");
+    super("User is already assigned to this task");
     this.name = "DuplicateAssignmentError";
   }
 }
@@ -179,7 +179,7 @@ export class DuplicateAssignmentError extends Error {
 // Thrown when one or more upload tokens are invalid, expired, or already used.
 export class InvalidUploadTokenError extends Error {
   constructor() {
-    super("One or more upload tokens are invalid or expired.");
+    super("One or more upload tokens are invalid or expired");
     this.name = "InvalidUploadTokenError";
   }
 }

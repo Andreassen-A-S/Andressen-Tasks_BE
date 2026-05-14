@@ -64,15 +64,7 @@ export async function assignTask(req: Request, res: Response) {
 
     res.status(201).json({ success: true, data: assignment });
   } catch (error) {
-    if (error instanceof AssignmentCrossOrganizationError) {
-      return res.status(403).json({ success: false, error: error.message });
-    }
-    if (error instanceof TaskArchivedError) {
-      return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
-    }
-    console.error("Error in assignTask:", error);
-    const message = error instanceof Error ? error.message : "Failed to assign task";
-    return res.status(400).json({ success: false, error: message });
+    return handleDomainError(error, res, "Failed to assign task");
   }
 }
 

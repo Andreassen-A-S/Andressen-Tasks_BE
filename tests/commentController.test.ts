@@ -166,7 +166,7 @@ describe("commentController.createComment", () => {
     await commentController.createComment(req, res);
 
     expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "One or more upload tokens are invalid or expired." });
+    expect(res.body).toEqual({ success: false, error: "One or more upload tokens are invalid or expired" });
   });
 
   test("creates comment and logs event", async () => {
@@ -616,7 +616,7 @@ describe("commentController.updateComment", () => {
     await commentController.updateComment(req, res);
 
     expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "One or more upload tokens are invalid or expired." });
+    expect(res.body).toEqual({ success: false, error: "One or more upload tokens are invalid or expired" });
   });
 
   test("forwards upload_tokens to repository", async () => {

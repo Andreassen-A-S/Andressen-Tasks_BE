@@ -8,11 +8,12 @@ mock.module("../src/db/prisma", () => ({
 }));
 
 import * as assignmentController from "../src/controllers/assignmentController";
+import * as assignmentService from "../src/services/assignmentService";
 import * as assignmentRepo from "../src/repositories/assignmentRepository";
 import * as taskRepo from "../src/repositories/taskRepository";
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
 import * as userRepo from "../src/repositories/userRepository";
-import { AssignmentCrossOrganizationError } from "../src/repositories/assignmentRepository";
+import { AssignmentCrossOrganizationError, DuplicateAssignmentError } from "../src/errors/domainErrors";
 
 type MockResponse = Response & {
   statusCode?: number;
@@ -98,6 +99,22 @@ describe("assignmentController.assignTask", () => {
     );
     expect(res.statusCode).toBe(201);
     expect(res.body).toEqual({ success: true, data: assignment });
+  });
+
+  test("returns 409 for duplicate assignment", async () => {
+    spyOn(assignmentService, "assignTaskToUser").mockRejectedValue(
+      new DuplicateAssignmentError(),
+    );
+    const req = createRequest({
+      user: { user_id: "u1" },
+      body: { task_id: "t1", user_id: "u2" },
+    });
+    const res = createMockResponse();
+
+    await assignmentController.assignTask(req, res);
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toEqual({ success: false, error: "User is already assigned to this task" });
   });
 
   test("rejects assigning task to a user from another organization", async () => {

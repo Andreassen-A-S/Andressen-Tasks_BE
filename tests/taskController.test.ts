@@ -439,7 +439,7 @@ describe("taskController.updateTask", () => {
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({
       success: false,
-      error: "Task is already marked as done and cannot be set to done again.",
+      error: "Task is already marked as done and cannot be set to done again",
     });
   });
 
@@ -514,7 +514,7 @@ describe("taskController.updateTask", () => {
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({
       success: false,
-      error: "Task is already marked as done and cannot be set to done again.",
+      error: "Task is already marked as done and cannot be set to done again",
     });
   });
 
@@ -859,7 +859,7 @@ describe("taskController.upsertProgressLog", () => {
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({
       success: false,
-      error: "Assignment not found.",
+      error: "Assignment not found",
     });
   });
 

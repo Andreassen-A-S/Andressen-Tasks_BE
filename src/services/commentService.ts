@@ -173,15 +173,10 @@ export async function updateComment(
       .map((a) => a.gcs_path);
   }
 
-  let updatedComment: any;
-  try {
-    const result = await prisma.$transaction(async (tx) => {
-      return commentRepo.updateComment(tx, commentId, message, uploadTokens, removeAttachmentIds);
-    });
-    updatedComment = result.comment;
-  } catch (err) {
-    throw err;
-  }
+  const result = await prisma.$transaction(async (tx) => {
+    return commentRepo.updateComment(tx, commentId, message, uploadTokens, removeAttachmentIds);
+  });
+  const updatedComment = result.comment;
 
   // Delete GCS files only after the DB transaction succeeds.
   if (gcsPathsToDelete.length > 0) {
