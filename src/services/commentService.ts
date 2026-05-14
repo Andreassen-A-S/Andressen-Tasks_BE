@@ -11,6 +11,7 @@ import type { RequestContext } from "../types/requestContext";
 import {
   CommentNotFoundError,
   CommentForbiddenError,
+  TaskArchivedError,
 } from "../errors/domainErrors";
 
 export { CommentNotFoundError, CommentForbiddenError };
@@ -85,9 +86,7 @@ export async function createComment(
   if (!canAccessTask(task, ctx)) return null;
 
   if (task.status === TaskStatus.ARCHIVED) {
-    const err: any = new Error("Task is archived and cannot be modified.");
-    err.code = "TASK_ARCHIVED";
-    throw err;
+    throw new TaskArchivedError();
   }
 
   const comment = await prisma.$transaction(async (tx) => {
@@ -160,9 +159,7 @@ export async function updateComment(
   });
   if (!commentTask) throw new CommentNotFoundError();
   if (commentTask.status === TaskStatus.ARCHIVED) {
-    const err: any = new Error("Task is archived and cannot be modified.");
-    err.code = "TASK_ARCHIVED";
-    throw err;
+    throw new TaskArchivedError();
   }
 
   if (!canModifyComment(comment, ctx)) throw new CommentForbiddenError();
@@ -225,9 +222,7 @@ export async function deleteComment(ctx: RequestContext, commentId: string) {
   });
   if (!commentTask) throw new CommentNotFoundError();
   if (commentTask.status === TaskStatus.ARCHIVED) {
-    const err: any = new Error("Task is archived and cannot be modified.");
-    err.code = "TASK_ARCHIVED";
-    throw err;
+    throw new TaskArchivedError();
   }
 
   // Only the comment author, admins, and super-admins may delete.

@@ -7,6 +7,8 @@ import { CreateCommentRequest } from "../types/comment";
 import {
   CommentNotFoundError,
   CommentForbiddenError,
+  TaskArchivedError,
+  InvalidUploadTokenError,
 } from "../errors/domainErrors";
 
 function handleDomainError(error: unknown, res: Response, fallbackMessage: string): Response {
@@ -16,7 +18,7 @@ function handleDomainError(error: unknown, res: Response, fallbackMessage: strin
   if (error instanceof CommentForbiddenError) {
     return res.status(403).json({ success: false, error: error.message });
   }
-  if (error instanceof Error && (error as any).code === "TASK_ARCHIVED") {
+  if (error instanceof TaskArchivedError) {
     return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
   }
   console.error(fallbackMessage, error);
@@ -86,10 +88,10 @@ export async function createComment(req: Request, res: Response) {
         hasTokens ? upload_tokens : undefined,
       );
     } catch (err) {
-      if (err instanceof Error && err.message === "One or more upload tokens are invalid or expired") {
+      if (err instanceof InvalidUploadTokenError) {
         return res.status(400).json({ success: false, error: err.message });
       }
-      if (err instanceof Error && (err as any).code === "TASK_ARCHIVED") {
+      if (err instanceof TaskArchivedError) {
         return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
       }
       throw err;
@@ -197,7 +199,7 @@ export async function updateComment(req: Request, res: Response) {
         hasRemovals ? remove_attachment_ids : undefined,
       );
     } catch (err) {
-      if (err instanceof Error && err.message === "One or more upload tokens are invalid or expired") {
+      if (err instanceof InvalidUploadTokenError) {
         return res.status(400).json({ success: false, error: err.message });
       }
       return handleDomainError(err, res, "Failed to update comment");

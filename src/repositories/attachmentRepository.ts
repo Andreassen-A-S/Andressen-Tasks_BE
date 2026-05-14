@@ -1,6 +1,7 @@
 import { prisma } from "../db/prisma";
 import { AttachmentStatus, AttachmentType } from "../generated/prisma/client";
 import type { DbClient } from "../types/db";
+import { InvalidUploadTokenError } from "../errors/domainErrors";
 
 export async function getAttachmentsByTaskId(taskId: string) {
   return prisma.taskAttachment.findMany({
@@ -74,7 +75,7 @@ export async function confirmAttachments(
   });
 
   if (attachments.length !== uniqueTokens.length) {
-    throw new Error("One or more upload tokens are invalid or expired");
+    throw new InvalidUploadTokenError();
   }
 
   const updated = await tx.taskAttachment.updateMany({
@@ -89,7 +90,7 @@ export async function confirmAttachments(
   });
 
   if (updated.count !== uniqueTokens.length) {
-    throw new Error("One or more upload tokens are invalid or expired");
+    throw new InvalidUploadTokenError();
   }
 }
 

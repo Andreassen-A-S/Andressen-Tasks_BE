@@ -3,19 +3,24 @@ import Expo from "expo-server-sdk";
 import type { CreateUserInput, UpdateUserInput } from "../types/user";
 import { getRequestContext } from "../types/requestContext";
 import * as userService from "../services/userService";
-import { RequiredOrganizationIdError } from "../services/userService";
+import {
+  ForbiddenUserOperationError,
+  InvalidUserRoleError,
+  MissingOrganizationError,
+  RequiredOrganizationIdError,
+} from "../errors/domainErrors";
 
 function handleUserServiceError(error: unknown, res: Response, notFoundMessage: string) {
-  if (error instanceof userService.ForbiddenUserOperationError) {
+  if (error instanceof ForbiddenUserOperationError) {
     return res.status(403).json({ success: false, error: error.message });
   }
-  if (error instanceof userService.InvalidUserRoleError) {
+  if (error instanceof InvalidUserRoleError) {
     return res.status(400).json({ success: false, error: error.message });
   }
   if (error instanceof RequiredOrganizationIdError) {
     return res.status(400).json({ success: false, error: error.message });
   }
-  if (error instanceof userService.MissingOrganizationError) {
+  if (error instanceof MissingOrganizationError) {
     return res.status(403).json({ success: false, error: error.message });
   }
   console.error(notFoundMessage, error);
@@ -58,9 +63,9 @@ export async function createUser(req: Request, res: Response) {
     res.status(201).json({ success: true, data: user });
   } catch (error) {
     if (
-      error instanceof userService.ForbiddenUserOperationError ||
-      error instanceof userService.InvalidUserRoleError ||
-      error instanceof userService.MissingOrganizationError ||
+      error instanceof ForbiddenUserOperationError ||
+      error instanceof InvalidUserRoleError ||
+      error instanceof MissingOrganizationError ||
       error instanceof RequiredOrganizationIdError
     ) {
       return handleUserServiceError(error, res, "Failed to create user");

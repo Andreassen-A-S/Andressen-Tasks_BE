@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { Request, Response } from "express";
 import { Task, TaskStatus, UserRole } from "../src/generated/prisma/client";
+import { InvalidUploadTokenError } from "../src/errors/domainErrors";
 import * as commentRepo from "../src/repositories/commentRepository";
 import * as attachmentRepo from "../src/repositories/attachmentRepository";
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
@@ -153,9 +154,7 @@ describe("commentController.createComment", () => {
       assignments: [],
     } as any);
     // commentService wraps createComment in $transaction; the repo throws inside
-    transactionMock.mockRejectedValue(
-      new Error("One or more upload tokens are invalid or expired"),
-    );
+    transactionMock.mockRejectedValue(new InvalidUploadTokenError());
 
     const req = createRequest({
       params: { taskId: "t1" } as Request["params"],
@@ -167,7 +166,7 @@ describe("commentController.createComment", () => {
     await commentController.createComment(req, res);
 
     expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "One or more upload tokens are invalid or expired" });
+    expect(res.body).toEqual({ success: false, error: "One or more upload tokens are invalid or expired." });
   });
 
   test("creates comment and logs event", async () => {
@@ -605,9 +604,7 @@ describe("commentController.updateComment", () => {
       message: "old",
     } as never);
     findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING } as any);
-    transactionMock.mockRejectedValue(
-      new Error("One or more upload tokens are invalid or expired"),
-    );
+    transactionMock.mockRejectedValue(new InvalidUploadTokenError());
 
     const req = createRequest({
       params: { commentId: "c1" } as Request["params"],
@@ -619,7 +616,7 @@ describe("commentController.updateComment", () => {
     await commentController.updateComment(req, res);
 
     expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "One or more upload tokens are invalid or expired" });
+    expect(res.body).toEqual({ success: false, error: "One or more upload tokens are invalid or expired." });
   });
 
   test("forwards upload_tokens to repository", async () => {

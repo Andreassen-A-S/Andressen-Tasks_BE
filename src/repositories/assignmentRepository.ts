@@ -5,7 +5,7 @@ import type {
 } from "../types/assignment";
 
 import type { TaskAssignment } from "../generated/prisma/client";
-import { AssignmentNotFoundError, AssignmentCrossOrganizationError } from "../errors/domainErrors";
+import { AssignmentNotFoundError, AssignmentCrossOrganizationError, DuplicateAssignmentError } from "../errors/domainErrors";
 import type { DbClient } from "../types/db";
 
 // Re-export for backward compatibility with imports from this module.
@@ -71,7 +71,7 @@ export async function assignTaskToUser(
   });
 
   if (existing) {
-    throw new Error("User is already assigned to this task");
+    throw new DuplicateAssignmentError();
   }
 
   return prisma.taskAssignment.create({

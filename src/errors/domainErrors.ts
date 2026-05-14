@@ -167,3 +167,19 @@ export class AttachmentAccessError extends Error {
     this.name = "AttachmentAccessError";
   }
 }
+
+// Thrown when a user is already assigned to the target task.
+export class DuplicateAssignmentError extends Error {
+  constructor() {
+    super("User is already assigned to this task.");
+    this.name = "DuplicateAssignmentError";
+  }
+}
+
+// Thrown when one or more upload tokens are invalid, expired, or already used.
+export class InvalidUploadTokenError extends Error {
+  constructor() {
+    super("One or more upload tokens are invalid or expired.");
+    this.name = "InvalidUploadTokenError";
+  }
+}

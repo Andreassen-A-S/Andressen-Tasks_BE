@@ -6,6 +6,7 @@ import {
   AssignmentNotFoundError,
   AssignmentCrossOrganizationError,
   TaskArchivedError,
+  DuplicateAssignmentError,
 } from "../errors/domainErrors";
 
 function handleDomainError(error: unknown, res: Response, fallbackMessage: string): Response {
@@ -17,6 +18,9 @@ function handleDomainError(error: unknown, res: Response, fallbackMessage: strin
   }
   if (error instanceof TaskArchivedError) {
     return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
+  }
+  if (error instanceof DuplicateAssignmentError) {
+    return res.status(409).json({ success: false, error: error.message });
   }
   console.error(fallbackMessage, error);
   return res.status(500).json({ success: false, error: fallbackMessage });

@@ -3,7 +3,7 @@ import { TaskStatus, UserRole } from "../generated/prisma/client";
 import * as attachmentRepo from "../repositories/attachmentRepository";
 import { generateSignedUploadUrl, generateSignedReadUrl, deleteFile } from "./storageService";
 import type { RequestContext } from "../types/requestContext";
-import { AttachmentNotFoundError, AttachmentAccessError, TaskNotFoundError } from "../errors/domainErrors";
+import { AttachmentNotFoundError, AttachmentAccessError, TaskNotFoundError, TaskArchivedError } from "../errors/domainErrors";
 
 export { AttachmentNotFoundError, AttachmentAccessError };
 
@@ -43,9 +43,7 @@ export async function prepareAttachments(
   const task = await assertTaskAccess(ctx, taskId);
 
   if ((task as any).status === TaskStatus.ARCHIVED) {
-    const err: any = new Error("Task is archived and cannot be modified.");
-    err.code = "TASK_ARCHIVED";
-    throw err;
+    throw new TaskArchivedError();
   }
 
   const created: { attachmentId: string; uploadToken: string; uploadUrl: string }[] = [];
@@ -104,9 +102,7 @@ export async function deleteAttachment(ctx: RequestContext, attachmentId: string
   if (!attachmentTask) throw new AttachmentNotFoundError();
 
   if (attachmentTask.status === TaskStatus.ARCHIVED) {
-    const err: any = new Error("Task is archived and cannot be modified.");
-    err.code = "TASK_ARCHIVED";
-    throw err;
+    throw new TaskArchivedError();
   }
 
   const isAdmin = ctx.actorRole === UserRole.ADMIN || ctx.isSuperAdmin;

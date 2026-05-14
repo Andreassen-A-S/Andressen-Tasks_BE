@@ -3,7 +3,7 @@ import * as attachmentService from "../services/attachmentService";
 import * as storageService from "../services/storageService";
 import { getRequestContext } from "../types/requestContext";
 import { getParamId } from "../helper/helpers";
-import { AttachmentNotFoundError, AttachmentAccessError, TaskNotFoundError } from "../errors/domainErrors";
+import { AttachmentNotFoundError, AttachmentAccessError, TaskNotFoundError, TaskArchivedError } from "../errors/domainErrors";
 
 const MAX_FILES_PER_REQUEST = 20;
 
@@ -17,7 +17,7 @@ function handleDomainError(error: unknown, res: Response, fallbackMessage: strin
   if (error instanceof AttachmentAccessError) {
     return res.status(403).json({ success: false, error: "Access denied" });
   }
-  if (error instanceof Error && (error as any).code === "TASK_ARCHIVED") {
+  if (error instanceof TaskArchivedError) {
     return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
   }
   console.error(fallbackMessage, error);
