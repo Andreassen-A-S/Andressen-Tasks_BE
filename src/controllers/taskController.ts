@@ -1,43 +1,21 @@
 import type { Request, Response } from "express";
 import {
-  TaskEventType,
-  TaskPriority,
-  TaskStatus,
-} from "../generated/prisma/client";
-
-
-import * as taskEventRepo from "../repositories/taskEventRepository";
-import * as taskRepo from "../repositories/taskRepository";
-import * as userRepo from "../repositories/userRepository";
-import { sendPushNotification } from "../services/notificationService";
-import {
   AssignmentNotFoundError,
   CrossOrganizationReferenceError,
   TaskAlreadyDoneError,
   TaskArchivedError,
   TaskNotFoundError,
   TaskNotProgressableError,
-} from "../repositories/taskRepository";
+} from "../errors/domainErrors";
 import type { CreateTaskInput, UpdateTaskInput } from "../types/task";
-import { getParamId, requireUserId } from "../helper/helpers";
-import { appDateKey } from "../utils/dateUtils";
+import { getParamId } from "../helper/helpers";
+import { getRequestContext } from "../types/requestContext";
+import * as taskService from "../services/taskService";
 
 /**
  * These routes are protected by auth middleware.
  * Kept as a safety net for robust controller behavior.
  */
-
-function actorConnect(userId: string) {
-  return { connect: { user_id: userId } } as const;
-}
-
-function taskConnect(taskId: string) {
-  return { connect: { task_id: taskId } } as const;
-}
-
-function emptyObj() {
-  return {} as Record<string, never>;
-}
 
 // ---------------------------------------------------------------------------
 // Domain error → HTTP status mapper
@@ -77,8 +55,9 @@ function handleDomainError(
 
 export async function listTasks(req: Request, res: Response) {
   try {
-    const orgId = req.effectiveOrgId;
-    const tasks = await taskRepo.getAllTasks(orgId);
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
+    const tasks = await taskService.listTasks(ctx);
     return res.json({ success: true, data: tasks });
   } catch (error) {
     console.error("Error in listTasks:", error);
@@ -97,8 +76,9 @@ export async function getTask(req: Request, res: Response) {
   }
 
   try {
-    const orgId = req.effectiveOrgId;
-    const task = await taskRepo.getTaskById(id, orgId);
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
+    const task = await taskService.getTask(ctx, id);
     if (!task) {
       return res.status(404).json({ success: false, error: "Task not found" });
     }
@@ -112,19 +92,13 @@ export async function getTask(req: Request, res: Response) {
 }
 
 export async function createTask(req: Request, res: Response) {
-  const userId = requireUserId(req, res);
-  if (!userId) return;
+  const ctx = getRequestContext(req);
+  if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
   try {
     const body = req.body as CreateTaskInput;
 
-    if (body.created_by && body.created_by !== userId) {
-      return res.status(400).json({
-        success: false,
-        error: "created_by must match the authenticated user",
-      });
-    }
-
+    // TODO: move to Zod schema middleware
     if (
       !body.project_id ||
       typeof body.project_id !== "string" ||
@@ -137,56 +111,15 @@ export async function createTask(req: Request, res: Response) {
 
     const input: CreateTaskInput = {
       ...body,
-      created_by: userId,
+      created_by: ctx.actorUserId,
       project_id: body.project_id.trim(),
     };
-    const task = await taskRepo.createTaskWithAssignments(input, req.effectiveOrgId);
+    const task = await taskService.createTask(ctx, input);
 
     if (!task) {
       return res
         .status(500)
         .json({ success: false, error: "Failed to create task" });
-    }
-
-    await taskEventRepo.createTaskEvent({
-      task: taskConnect(task.task_id),
-      actor: actorConnect(userId),
-      type: TaskEventType.TASK_CREATED,
-      message: "Task created",
-      before_json: emptyObj(),
-      after_json: task,
-    });
-
-    if (task.assignments && task.assignments.length > 0) {
-      await Promise.all(
-        task.assignments.map((assignment) =>
-          taskEventRepo.createTaskEvent({
-            task: taskConnect(task.task_id),
-            actor: actorConnect(userId),
-            type: TaskEventType.ASSIGNMENT_CREATED,
-            message: "Created assignment",
-            assignment: {
-              connect: { assignment_id: assignment.assignment_id },
-            },
-            before_json: undefined,
-            after_json: assignment,
-          }),
-        ),
-      );
-
-      // Notify assigned users
-      const tokenMap = await userRepo.getPushTokensForUsers(
-        task.assignments.map((a) => a.user_id),
-      );
-      for (const [userId, pushToken] of tokenMap) {
-        void sendPushNotification(
-          pushToken,
-          "Ny opgave tildelt",
-          `Du er blevet tildelt: ${task.title}`,
-          { taskId: task.task_id },
-          userId,
-        );
-      }
     }
 
     return res.status(201).json({ success: true, data: task });
@@ -196,8 +129,8 @@ export async function createTask(req: Request, res: Response) {
 }
 
 export async function updateTask(req: Request, res: Response) {
-  const userId = requireUserId(req, res);
-  if (!userId) return;
+  const ctx = getRequestContext(req);
+  if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
   const id = getParamId(req);
   if (!id) {
@@ -208,150 +141,20 @@ export async function updateTask(req: Request, res: Response) {
 
   try {
     const updateData = req.body as UpdateTaskInput;
-    const actor = actorConnect(userId);
-
-    const orgId = req.effectiveOrgId;
-    const oldTask = await taskRepo.getTaskById(id, orgId);
-    if (!oldTask) {
+    const updatedTask = await taskService.updateTask(ctx, id, updateData);
+    if (!updatedTask) {
       return res.status(404).json({ success: false, error: "Task not found" });
     }
 
-    const updatedTask = await taskRepo.updateTask(id, updateData, userId, orgId);
-    if (!updatedTask) {
-      return res
-        .status(404)
-        .json({ success: false, error: "Task not found or update failed" });
-    }
-
-    // Diff and emit assignment events if assignments were part of the update.
-    if (updateData.assigned_users !== undefined) {
-      const oldUserIds = new Set(oldTask.assigned_users ?? []);
-      const added = updatedTask.assignments.filter(
-        (a) => !oldUserIds.has(a.user_id),
-      );
-      const removedUserIds = (oldTask.assigned_users ?? []).filter(
-        (uid) => !updatedTask.assignments.some((a) => a.user_id === uid),
-      );
-
-      await Promise.all([
-        ...added.map((assignment) =>
-          taskEventRepo.createTaskEvent({
-            task: taskConnect(updatedTask.task_id),
-            actor,
-            type: TaskEventType.ASSIGNMENT_CREATED,
-            message: "Created assignment",
-            assignment: {
-              connect: { assignment_id: assignment.assignment_id },
-            },
-            before_json: undefined,
-            after_json: assignment,
-          }),
-        ),
-        ...removedUserIds.map((uid) =>
-          taskEventRepo.createTaskEvent({
-            task: taskConnect(updatedTask.task_id),
-            actor,
-            type: TaskEventType.ASSIGNMENT_DELETED,
-            message: "Deleted assignment",
-            before_json: { user_id: uid },
-            after_json: emptyObj(),
-          }),
-        ),
-      ]);
-
-      const tokenMap = await userRepo.getPushTokensForUsers(
-        added.map((a) => a.user_id),
-      );
-      for (const [uid, pushToken] of tokenMap) {
-        void sendPushNotification(
-          pushToken,
-          "Ny opgave tildelt",
-          `Du er blevet tildelt: ${updatedTask.title}`,
-          { taskId: updatedTask.task_id },
-          uid,
-        );
-      }
-    }
-
-    await taskEventRepo.createTaskEvent({
-      task: taskConnect(updatedTask.task_id),
-      actor,
-      type: TaskEventType.TASK_UPDATED,
-      message: "Task updated",
-      before_json: oldTask,
-      after_json: updatedTask,
-    });
-
-    if (updateData.status && oldTask.status !== updatedTask.status) {
-      await taskEventRepo.createTaskEvent({
-        task: taskConnect(updatedTask.task_id),
-        actor,
-        type: TaskEventType.TASK_STATUS_CHANGED,
-        message: `Status changed from ${oldTask.status} to ${updatedTask.status}`,
-        before_json: { status: oldTask.status },
-        after_json: { status: updatedTask.status },
-      });
-
-      if (updatedTask.status === TaskStatus.DONE) {
-        const admins = await userRepo.getAdminPushTokens(orgId);
-        for (const { user_id, push_token } of admins) {
-          void sendPushNotification(
-            push_token,
-            "Opgave afsluttet",
-            updatedTask.title,
-            {
-              taskId: updatedTask.task_id,
-            },
-            user_id,
-          );
-        }
-      }
-    }
-
-    // Notify assignees when priority is raised to HIGH on an active task.
-    // Active = start_date has passed (includes overdue) and not in a terminal status.
-    const priorityChangedToHigh =
-      updateData.priority === TaskPriority.HIGH &&
-      oldTask.priority !== TaskPriority.HIGH;
-    const taskIsActive =
-      updatedTask.start_date !== null &&
-      appDateKey(updatedTask.start_date) <= appDateKey() &&
-      updatedTask.status !== TaskStatus.DONE &&
-      updatedTask.status !== TaskStatus.REJECTED &&
-      updatedTask.status !== TaskStatus.ARCHIVED;
-
-    if (
-      priorityChangedToHigh &&
-      taskIsActive &&
-      updatedTask.assignments.length > 0
-    ) {
-      const tokenMap = await userRepo.getPushTokensForUsers(
-        updatedTask.assignments.map((a) => a.user_id),
-      );
-      for (const [uid, pushToken] of tokenMap) {
-        void sendPushNotification(
-          pushToken,
-          "Prioritet ændret",
-          `${updatedTask.title} – prioritet ændret til høj`,
-          { taskId: updatedTask.task_id },
-          uid,
-        );
-      }
-    }
-
-    const { assignments, ...taskData } = updatedTask;
-    return res.json({
-      success: true,
-      data: { ...taskData, assigned_users: assignments.map((a) => a.user_id) },
-    });
+    return res.json({ success: true, data: updatedTask });
   } catch (error) {
     return handleDomainError(error, res, "Failed to update task");
   }
 }
 
 export async function deleteTask(req: Request, res: Response) {
-  const userId = requireUserId(req, res);
-  if (!userId) return;
+  const ctx = getRequestContext(req);
+  if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
   const id = getParamId(req);
   if (!id) {
@@ -361,22 +164,10 @@ export async function deleteTask(req: Request, res: Response) {
   }
 
   try {
-    const orgId = req.effectiveOrgId;
-    const task = await taskRepo.getTaskById(id, orgId);
-    if (!task) {
+    const deleted = await taskService.deleteTask(ctx, id);
+    if (!deleted) {
       return res.status(404).json({ success: false, error: "Task not found" });
     }
-
-    await taskEventRepo.createTaskEvent({
-      task: taskConnect(task.task_id),
-      actor: actorConnect(userId),
-      type: TaskEventType.TASK_DELETED,
-      message: "Task deleted",
-      before_json: task,
-      after_json: emptyObj(),
-    });
-
-    await taskRepo.deleteTask(id, orgId);
     return res.status(204).send();
   } catch (error) {
     return handleDomainError(error, res, "Failed to delete task");
@@ -384,8 +175,8 @@ export async function deleteTask(req: Request, res: Response) {
 }
 
 export async function upsertProgressLog(req: Request, res: Response) {
-  const userId = requireUserId(req, res);
-  if (!userId) return;
+  const ctx = getRequestContext(req);
+  if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
   const taskId = getParamId(req);
   if (!taskId) {
@@ -402,53 +193,17 @@ export async function upsertProgressLog(req: Request, res: Response) {
   }
 
   try {
-    const orgId = req.effectiveOrgId;
-    const { progressLog, updatedTask } = await taskRepo.upsertProgressLog(
+    const data = await taskService.upsertProgressLog(
+      ctx,
       taskId,
-      userId,
       quantity_done,
       unit,
       note,
-      orgId,
     );
-
-    await taskEventRepo.createTaskEvent({
-      task: taskConnect(taskId),
-      actor: actorConnect(userId),
-      type: TaskEventType.PROGRESS_LOGGED,
-      message: `Logged progress: ${quantity_done} ${unit || "units"}`,
-      progress: { connect: { progress_id: progressLog.progress_id } },
-      before_json: emptyObj(),
-      after_json: progressLog,
-    });
-
-    void (async () => {
-      try {
-        const admins = await userRepo.getAdminPushTokens(orgId);
-        for (const { user_id: adminId, push_token } of admins) {
-          if (adminId === userId) continue;
-          void sendPushNotification(
-            push_token,
-            "Fremgang logget",
-            updatedTask.title,
-            { taskId: updatedTask.task_id },
-            adminId,
-          );
-        }
-      } catch (err) {
-        console.error("Failed to notify admins of progress log:", err);
-      }
-    })();
 
     return res.json({
       success: true,
-      data: {
-        progressLog,
-        task: {
-          current_quantity: updatedTask.current_quantity,
-          status: updatedTask.status,
-        },
-      },
+      data,
     });
   } catch (error) {
     return handleDomainError(error, res, "Failed to upsert progress log");

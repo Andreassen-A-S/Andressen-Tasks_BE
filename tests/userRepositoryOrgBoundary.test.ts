@@ -29,11 +29,11 @@ afterEach(() => {
 });
 
 describe("userRepository organization boundaries", () => {
-  test("updateUser scopes admin mutation by effective org", async () => {
+  test("updateUserInOrg scopes admin mutation by effective org", async () => {
     userFindFirstMock.mockResolvedValue({ role: UserRole.USER });
     userUpdateMock.mockResolvedValue({ user_id: "user-a", name: "Updated" });
 
-    await userRepo.updateUser("user-a", { name: "Updated" }, "org-a");
+    await userRepo.updateUserInOrg("user-a", "org-a", { name: "Updated" });
 
     expect(userFindFirstMock).toHaveBeenCalledWith({
       where: { user_id: "user-a", organization_id: "org-a" },
@@ -41,19 +41,19 @@ describe("userRepository organization boundaries", () => {
     });
   });
 
-  test("updateUser rejects users outside scoped org", async () => {
+  test("updateUserInOrg rejects users outside scoped org", async () => {
     userFindFirstMock.mockResolvedValue(null);
 
-    await expect(userRepo.updateUser("user-b", { name: "Nope" }, "org-a"))
-      .rejects.toThrow("User not found");
+    await expect(userRepo.updateUserInOrg("user-b", "org-a", { name: "Nope" }))
+      .rejects.toThrow("User not found: user-b");
 
     expect(userUpdateMock).not.toHaveBeenCalled();
   });
 
-  test("deleteUser scopes deletion by effective org", async () => {
+  test("deleteUserInOrg scopes deletion by effective org", async () => {
     userDeleteManyMock.mockResolvedValue({ count: 1 });
 
-    await userRepo.deleteUser("user-a", "org-a");
+    await userRepo.deleteUserInOrg("user-a", "org-a");
 
     expect(userDeleteManyMock).toHaveBeenCalledWith({
       where: {
@@ -64,9 +64,9 @@ describe("userRepository organization boundaries", () => {
     });
   });
 
-  test("deleteUser rejects users outside scoped org", async () => {
+  test("deleteUserInOrg rejects users outside scoped org", async () => {
     userDeleteManyMock.mockResolvedValue({ count: 0 });
 
-    await expect(userRepo.deleteUser("user-b", "org-a")).rejects.toThrow("User not found");
+    await expect(userRepo.deleteUserInOrg("user-b", "org-a")).rejects.toThrow("User not found: user-b");
   });
 });

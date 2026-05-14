@@ -62,9 +62,8 @@ describe("taskRepository organization boundaries", () => {
         findMany: mock(() => Promise.resolve([{ user_id: "user-a" }])),
       },
     });
-    transactionMock.mockImplementation((fn) => fn(tx));
 
-    await expect(taskRepo.createTaskWithAssignments({
+    await expect(taskRepo.createTaskWithAssignments(tx as any, {
       title: "Task",
       description: "",
       priority: TaskPriority.MEDIUM,
@@ -81,47 +80,45 @@ describe("taskRepository organization boundaries", () => {
     });
   });
 
-  test("updateTask rejects moving a task to a project in another organization", async () => {
+  test("updateTaskPlatform rejects moving a task to a project in another organization", async () => {
     const tx = createTx({
       project: {
         findFirst: mock(() => Promise.resolve({ organization_id: "org-b" })),
       },
     });
-    transactionMock.mockImplementation((fn) => fn(tx));
 
-    await expect(taskRepo.updateTask(
+    await expect(taskRepo.updateTaskPlatform(
+      tx as any,
       "task-a",
       { project_id: "project-b" },
       "admin-a",
-      null,
     )).rejects.toThrow("Task cannot be moved to a project in another organization.");
   });
 
-  test("deleteTask scopes deletion by effective org", async () => {
+  test("deleteTaskInOrg scopes deletion by effective org", async () => {
+    const mockDb = { task: { deleteMany: deleteManyMock } };
     deleteManyMock.mockResolvedValue({ count: 1 });
-
-    await taskRepo.deleteTask("task-a", "org-a");
-
+    await taskRepo.deleteTaskInOrg(mockDb as any, "task-a", "org-a");
     expect(deleteManyMock).toHaveBeenCalledWith({
       where: { task_id: "task-a", project: { organization_id: "org-a" } },
     });
   });
 
-  test("upsertProgressLog treats tasks outside the effective org as not found", async () => {
+  test("upsertProgressLogInOrg treats tasks outside the effective org as not found", async () => {
     const tx = createTx({
       task: {
         findFirst: mock(() => Promise.resolve(null)),
       },
     });
-    transactionMock.mockImplementation((fn) => fn(tx));
 
-    await expect(taskRepo.upsertProgressLog(
+    await expect(taskRepo.upsertProgressLogInOrg(
+      tx as any,
       "task-b",
+      "org-a",
       "user-a",
       1,
       undefined,
       undefined,
-      "org-a",
     )).rejects.toThrow("Task not found: task-b");
 
     expect(tx.task.findFirst).toHaveBeenCalledWith({

@@ -1,27 +1,33 @@
 import { Request, Response } from "express";
-import { TaskStatus, UserRole } from "../generated/prisma/client";
-import { prisma } from "../db/prisma";
-import * as attachmentRepo from "../repositories/attachmentRepository";
+import * as attachmentService from "../services/attachmentService";
 import * as storageService from "../services/storageService";
-import { getParamId, requireUserId } from "../helper/helpers";
+import { getRequestContext } from "../types/requestContext";
+import { getParamId } from "../helper/helpers";
+import { AttachmentNotFoundError, AttachmentAccessError, TaskNotFoundError, TaskArchivedError } from "../errors/domainErrors";
 
 const MAX_FILES_PER_REQUEST = 20;
 
-function isPrivileged(role?: UserRole) {
-  return role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN;
+function handleDomainError(error: unknown, res: Response, fallbackMessage: string): Response {
+  if (error instanceof AttachmentNotFoundError) {
+    return res.status(404).json({ success: false, error: "Attachment not found" });
+  }
+  if (error instanceof TaskNotFoundError) {
+    return res.status(404).json({ success: false, error: "Task not found" });
+  }
+  if (error instanceof AttachmentAccessError) {
+    return res.status(403).json({ success: false, error: "Access denied" });
+  }
+  if (error instanceof TaskArchivedError) {
+    return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
+  }
+  console.error(fallbackMessage, error);
+  return res.status(500).json({ success: false, error: fallbackMessage });
 }
 
 export async function prepareAttachments(req: Request, res: Response) {
   try {
-    const userId = requireUserId(req, res);
-    if (!userId) return;
-
-    // Verify the user actually exists in the DB (guards against stale JWTs after DB resets)
-    const userExists = await prisma.user.findUnique({ where: { user_id: userId }, select: { user_id: true } });
-    if (!userExists) {
-      console.error("prepareAttachments: userId from JWT not found in users table", { userId });
-      return res.status(401).json({ success: false, error: "User not found — please log in again" });
-    }
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
     const { task_id, files } = req.body as {
       task_id?: string;
@@ -36,6 +42,7 @@ export async function prepareAttachments(req: Request, res: Response) {
       return res.status(400).json({ success: false, error: `Maximum ${MAX_FILES_PER_REQUEST} files per request` });
     }
 
+    // Input validation: shape-check each file entry.
     for (const f of files) {
       if (f === null || typeof f !== "object") {
         return res.status(400).json({ success: false, error: "Invalid file entry" });
@@ -55,52 +62,19 @@ export async function prepareAttachments(req: Request, res: Response) {
       }
     }
 
-    const orgId = req.effectiveOrgId;
-    const isAdmin = isPrivileged(req.user?.role);
-    const task = await prisma.task.findFirst({
-      where: {
-        task_id,
-        ...(orgId ? { project: { organization_id: orgId } } : {}),
-      },
-      include: { assignments: { where: { user_id: userId } } },
-    });
-    if (!task) {
-      return res.status(404).json({ success: false, error: "Task not found" });
-    }
-    if (task.status === TaskStatus.ARCHIVED) {
-      return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
-    }
-    if (task.created_by !== userId && task.assignments.length === 0 && !isAdmin) {
-      return res.status(403).json({ success: false, error: "Access denied" });
-    }
+    const result = await attachmentService.prepareAttachments(
+      ctx,
+      task_id,
+      files.map((f) => ({
+        mimeType: f.mime_type as string,
+        fileName: f.file_name ?? null,
+        fileSize: f.file_size ?? null,
+      })),
+    );
 
-    const created: { attachmentId: string; uploadToken: string; uploadUrl: string }[] = [];
-    try {
-      for (const f of files) {
-        const mimeType = f.mime_type as string;
-        const { uploadUrl, gcsPath, url } = await storageService.generateSignedUploadUrl(task_id, mimeType);
-        const { upload_token, attachment_id } = await attachmentRepo.prepareAttachment({
-          taskId: task_id,
-          userId,
-          mimeType,
-          gcsPath,
-          url,
-          fileName: f.file_name ?? null,
-          fileSize: f.file_size ?? null,
-        });
-        created.push({ attachmentId: attachment_id, uploadToken: upload_token, uploadUrl });
-      }
-    } catch (error) {
-      await Promise.allSettled(
-        created.map((c) => attachmentRepo.deleteAttachment(c.attachmentId)),
-      );
-      throw error;
-    }
-
-    res.json({ success: true, data: created.map(({ uploadToken, uploadUrl }) => ({ upload_token: uploadToken, upload_url: uploadUrl })) });
+    res.json({ success: true, data: result });
   } catch (error) {
-    console.error("Error preparing attachments:", error);
-    res.status(500).json({ success: false, error: "Failed to prepare attachments" });
+    return handleDomainError(error, res, "Failed to prepare attachments");
   }
 }
 
@@ -109,39 +83,13 @@ export async function getTaskAttachments(req: Request, res: Response) {
     const taskId = getParamId(req, "taskId");
     if (!taskId) return res.status(400).json({ success: false, error: "Missing taskId" });
 
-    const userId = requireUserId(req, res);
-    if (!userId) return;
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
-    const orgId = req.effectiveOrgId;
-    const isAdmin = isPrivileged(req.user?.role);
-
-    const task = await prisma.task.findFirst({
-      where: {
-        task_id: taskId,
-        ...(orgId ? { project: { organization_id: orgId } } : {}),
-      },
-      include: { assignments: { where: { user_id: userId } } },
-    });
-
-    if (!task) {
-      return res.status(404).json({ success: false, error: "Task not found" });
-    }
-
-    if (task.created_by !== userId && task.assignments.length === 0 && !isAdmin) {
-      return res.status(403).json({ success: false, error: "Access denied" });
-    }
-
-    const attachments = await attachmentRepo.getAttachmentsByTaskId(taskId);
-    const attachmentsWithSignedUrls = await Promise.all(
-      attachments.map(async (a) => ({
-        ...a,
-        url: await storageService.generateSignedReadUrl(a.gcs_path),
-      })),
-    );
-    res.json({ success: true, data: attachmentsWithSignedUrls });
+    const attachments = await attachmentService.getAttachmentsByTask(ctx, taskId);
+    res.json({ success: true, data: attachments });
   } catch (error) {
-    console.error("Error fetching task attachments:", error);
-    res.status(500).json({ success: false, error: "Failed to fetch attachments" });
+    return handleDomainError(error, res, "Failed to fetch attachments");
   }
 }
 
@@ -150,41 +98,13 @@ export async function deleteAttachment(req: Request, res: Response) {
     const attachmentId = getParamId(req, "attachmentId");
     if (!attachmentId) return res.status(400).json({ success: false, error: "Missing attachmentId" });
 
-    const userId = requireUserId(req, res);
-    if (!userId) return;
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
-    const isAdmin = isPrivileged(req.user?.role);
-    const orgId = req.effectiveOrgId;
-
-    const attachment = await attachmentRepo.getAttachmentById(attachmentId);
-    if (!attachment) {
-      return res.status(404).json({ success: false, error: "Attachment not found" });
-    }
-
-    const attachmentTask = await prisma.task.findFirst({
-      where: {
-        task_id: attachment.task_id,
-        ...(orgId ? { project: { organization_id: orgId } } : {}),
-      },
-      select: { status: true },
-    });
-    if (!attachmentTask) {
-      return res.status(404).json({ success: false, error: "Attachment not found" });
-    }
-    if (attachmentTask?.status === TaskStatus.ARCHIVED) {
-      return res.status(409).json({ success: false, error: "Task is archived and cannot be modified." });
-    }
-
-    if (attachment.uploaded_by !== userId && !isAdmin) {
-      return res.status(403).json({ success: false, error: "Access denied" });
-    }
-
-    await storageService.deleteFile(attachment.gcs_path);
-    await attachmentRepo.deleteAttachment(attachmentId);
+    await attachmentService.deleteAttachment(ctx, attachmentId);
 
     res.status(204).send();
   } catch (error) {
-    console.error("Error deleting attachment:", error);
-    res.status(500).json({ success: false, error: "Failed to delete attachment" });
+    return handleDomainError(error, res, "Failed to delete attachment");
   }
 }

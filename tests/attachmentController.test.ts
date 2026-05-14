@@ -4,20 +4,15 @@ import { UserRole } from "../src/generated/prisma/client";
 import * as attachmentRepo from "../src/repositories/attachmentRepository";
 import * as storageService from "../src/services/storageService";
 
+// attachmentService uses prisma.task.findFirst for access control.
 const findFirstMock = mock<(...args: any[]) => Promise<any>>(() =>
-  Promise.resolve({ status: "PENDING" }),
-);
-const userFindUniqueMock = mock<(...args: any[]) => Promise<any>>(() =>
-  Promise.resolve({ user_id: "u1" })
+  Promise.resolve({ task_id: "t1", status: "PENDING", created_by: "u1", assignments: [] }),
 );
 
 mock.module("../src/db/prisma", () => ({
   prisma: {
     task: {
       findFirst: findFirstMock,
-    },
-    user: {
-      findUnique: userFindUniqueMock,
     },
   },
 }));
@@ -72,21 +67,6 @@ describe("attachmentController.prepareAttachments", () => {
     expect(res.statusCode).toBe(401);
   });
 
-  test("returns 401 when JWT user_id does not exist in DB", async () => {
-    userFindUniqueMock.mockResolvedValueOnce(null);
-
-    const req = createRequest({
-      body: { task_id: "t1", files: [{ file_name: "photo.jpg", mime_type: "image/jpeg", file_size: 1024 }] },
-      user: { user_id: "stale-user", role: UserRole.USER },
-    });
-    const res = createMockResponse();
-
-    await attachmentController.prepareAttachments(req, res);
-
-    expect(res.statusCode).toBe(401);
-    expect(res.body).toEqual({ success: false, error: "User not found — please log in again" });
-  });
-
   test("returns 400 when taskId is missing", async () => {
     const req = createRequest({
       body: { files: [{ mime_type: "image/jpeg" }] },
@@ -114,7 +94,7 @@ describe("attachmentController.prepareAttachments", () => {
   });
 
   test("accepts exactly 20 files", async () => {
-    findFirstMock.mockResolvedValueOnce({ task_id: "t1", created_by: "u1", assignments: [] });
+    findFirstMock.mockResolvedValueOnce({ task_id: "t1", status: "PENDING", created_by: "u1", assignments: [] });
     spyOn(storageService, "generateSignedUploadUrl").mockResolvedValue({
       uploadUrl: "https://storage.googleapis.com/signed",
       gcsPath: "tasks/t1/uuid.jpg",
@@ -212,7 +192,7 @@ describe("attachmentController.prepareAttachments", () => {
     ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "doc.docx"],
     ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "sheet.xlsx"],
   ])("allows %s files through validation", async (mimeType, fileName) => {
-    findFirstMock.mockResolvedValueOnce({ task_id: "t1", created_by: "u1", assignments: [] });
+    findFirstMock.mockResolvedValueOnce({ task_id: "t1", status: "PENDING", created_by: "u1", assignments: [] });
     spyOn(storageService, "generateSignedUploadUrl").mockResolvedValue({
       uploadUrl: "https://storage.googleapis.com/signed",
       gcsPath: `tasks/t1/uuid.${fileName.split(".").pop()}`,
@@ -261,7 +241,7 @@ describe("attachmentController.prepareAttachments", () => {
   });
 
   test("returns 403 when user has no access to task", async () => {
-    findFirstMock.mockResolvedValueOnce({ task_id: "t1", created_by: "other", assignments: [] });
+    findFirstMock.mockResolvedValueOnce({ task_id: "t1", status: "PENDING", created_by: "other", assignments: [] });
 
     const req = createRequest({
       body: { task_id: "t1", files: [{ file_name: "photo.jpg", mime_type: "image/jpeg", file_size: 1024 }] },
@@ -276,7 +256,7 @@ describe("attachmentController.prepareAttachments", () => {
   });
 
   test("returns upload tokens and signed URLs on success", async () => {
-    findFirstMock.mockResolvedValueOnce({ task_id: "t1", created_by: "u1", assignments: [] });
+    findFirstMock.mockResolvedValueOnce({ task_id: "t1", status: "PENDING", created_by: "u1", assignments: [] });
     spyOn(storageService, "generateSignedUploadUrl").mockResolvedValue({
       uploadUrl: "https://storage.googleapis.com/signed",
       gcsPath: "tasks/t1/uuid.jpg",
@@ -320,8 +300,11 @@ describe("attachmentController.deleteAttachment", () => {
     spyOn(attachmentRepo, "getAttachmentById").mockResolvedValue({
       attachment_id: "a1",
       uploaded_by: "owner",
+      task_id: "t1",
       gcs_path: "tasks/t1/uuid.jpg",
     } as never);
+    // attachmentService checks task status
+    findFirstMock.mockResolvedValueOnce({ status: "PENDING" } as any);
 
     const req = createRequest({
       params: { attachmentId: "a1" },
@@ -339,8 +322,10 @@ describe("attachmentController.deleteAttachment", () => {
     spyOn(attachmentRepo, "getAttachmentById").mockResolvedValue({
       attachment_id: "a1",
       uploaded_by: "u1",
+      task_id: "t1",
       gcs_path: "tasks/t1/uuid.jpg",
     } as never);
+    findFirstMock.mockResolvedValueOnce({ status: "PENDING" } as any);
     const deleteSpy = spyOn(storageService, "deleteFile").mockResolvedValue(undefined);
     const repoDeleteSpy = spyOn(attachmentRepo, "deleteAttachment").mockResolvedValue(undefined as never);
 
@@ -361,8 +346,10 @@ describe("attachmentController.deleteAttachment", () => {
     spyOn(attachmentRepo, "getAttachmentById").mockResolvedValue({
       attachment_id: "a1",
       uploaded_by: "other-user",
+      task_id: "t1",
       gcs_path: "tasks/t1/uuid.jpg",
     } as never);
+    findFirstMock.mockResolvedValueOnce({ status: "PENDING" } as any);
     spyOn(storageService, "deleteFile").mockResolvedValue(undefined);
     spyOn(attachmentRepo, "deleteAttachment").mockResolvedValue(undefined as never);
 
@@ -380,7 +367,7 @@ describe("attachmentController.deleteAttachment", () => {
 
 describe("attachmentController.getTaskAttachments", () => {
   test("returns 403 when user has no access to task", async () => {
-    findFirstMock.mockResolvedValueOnce({ task_id: "t1", created_by: "other", assignments: [] });
+    findFirstMock.mockResolvedValueOnce({ task_id: "t1", status: "PENDING", created_by: "other", assignments: [] });
 
     const req = createRequest({
       params: { taskId: "t1" },
@@ -395,7 +382,7 @@ describe("attachmentController.getTaskAttachments", () => {
   });
 
   test("returns attachments with signed URLs for task creator", async () => {
-    findFirstMock.mockResolvedValueOnce({ task_id: "t1", created_by: "u1", assignments: [] });
+    findFirstMock.mockResolvedValueOnce({ task_id: "t1", status: "PENDING", created_by: "u1", assignments: [] });
     spyOn(attachmentRepo, "getAttachmentsByTaskId").mockResolvedValue([
       { attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg", url: "old" } as never,
     ]);
@@ -419,6 +406,7 @@ describe("attachmentController.getTaskAttachments", () => {
   test("returns attachments for assignee", async () => {
     findFirstMock.mockResolvedValueOnce({
       task_id: "t1",
+      status: "PENDING",
       created_by: "other",
       assignments: [{ user_id: "u1" }],
     });

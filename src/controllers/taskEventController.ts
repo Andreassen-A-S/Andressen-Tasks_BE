@@ -1,46 +1,37 @@
 import type { Request, Response } from "express";
-import { UserRole } from "../generated/prisma/client";
-import { prisma } from "../db/prisma";
+import * as taskService from "../services/taskService";
 import * as taskEventRepo from "../repositories/taskEventRepository";
 import * as storageService from "../services/storageService";
-import { requireUserId } from "../helper/helpers";
+import { getRequestContext } from "../types/requestContext";
+import { prisma } from "../db/prisma";
 
 export async function listTaskEvents(req: Request, res: Response) {
   const taskId = req.params.taskId as string;
   try {
-    const userId = requireUserId(req, res);
-    if (!userId) return;
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
-    const isAdmin = req.user?.role === UserRole.ADMIN || req.user?.role === UserRole.SUPER_ADMIN;
-    const orgId = req.effectiveOrgId;
-    const task = await prisma.task.findFirst({
-      where: {
-        task_id: taskId,
-        ...(orgId ? { project: { organization_id: orgId } } : {}),
-      },
-      include: { assignments: { where: { user_id: userId } } },
-    });
-    if (!task) return res.status(404).json({ success: false, error: "Task not found" });
-    if (task.created_by !== userId && task.assignments.length === 0 && !isAdmin) {
-      return res.status(403).json({ success: false, error: "Access denied" });
+    // Access control is enforced by the service; null means not found or no access.
+    const events = await taskService.getTaskEvents(ctx, taskId);
+    if (events === null) {
+      return res.status(404).json({ success: false, error: "Task not found" });
     }
 
-    const events = await taskEventRepo.getTaskEventsByTaskId(taskId);
-
+    // Sign attachment URLs in the presentation layer — this is display logic, not business logic.
     const eventsWithSignedUrls = await Promise.all(
       events.map(async (event) => {
         if (!event.comment?.attachments?.length) return event;
         const signedAttachments = await Promise.all(
-          event.comment.attachments.map(async (a) => {
+          event.comment.attachments.map(async (a: any) => {
             try {
               return { ...a, url: await storageService.generateSignedReadUrl(a.gcs_path) };
             } catch {
               return a;
             }
-          })
+          }),
         );
         return { ...event, comment: { ...event.comment, attachments: signedAttachments } };
-      })
+      }),
     );
 
     res.json({ success: true, data: eventsWithSignedUrls });
@@ -51,7 +42,7 @@ export async function listTaskEvents(req: Request, res: Response) {
 
 export async function createTaskEvent(req: Request, res: Response) {
   try {
-    const event = await taskEventRepo.createTaskEvent(req.body);
+    const event = await taskEventRepo.createTaskEvent(prisma, req.body);
     res.status(201).json({ success: true, data: event });
   } catch (error) {
     res.status(400).json({ success: false, error: "Failed to create event" });

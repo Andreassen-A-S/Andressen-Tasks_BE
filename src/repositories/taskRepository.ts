@@ -8,60 +8,33 @@ import {
   UserRole,
 } from "../generated/prisma/client";
 import type { CreateTaskInput, UpdateTaskInput } from "../types/task";
+import type { DbClient } from "../types/db";
 import { appDayBounds } from "../utils/dateUtils";
+import {
+  TaskNotFoundError,
+  TaskAlreadyDoneError,
+  TaskArchivedError,
+  AssignmentNotFoundError,
+  TaskNotProgressableError,
+  CrossOrganizationReferenceError,
+} from "../errors/domainErrors";
 
-// ---------------------------------------------------------------------------
-// Domain errors — catch these in controllers and map to appropriate HTTP codes
-// ---------------------------------------------------------------------------
-
-export class TaskNotFoundError extends Error {
-  constructor(id: string) {
-    super(`Task not found: ${id}`);
-    this.name = "TaskNotFoundError";
-  }
-}
-
-export class TaskAlreadyDoneError extends Error {
-  constructor() {
-    super("Task is already marked as done and cannot be set to done again.");
-    this.name = "TaskAlreadyDoneError";
-  }
-}
-
-export class TaskArchivedError extends Error {
-  constructor() {
-    super("Task is archived and cannot be modified.");
-    this.name = "TaskArchivedError";
-  }
-}
-
-export class AssignmentNotFoundError extends Error {
-  constructor() {
-    super("Assignment not found for this task and user.");
-    this.name = "AssignmentNotFoundError";
-  }
-}
-
-export class TaskNotProgressableError extends Error {
-  constructor(status: TaskStatus) {
-    super(`Cannot log progress on tasks with status: ${status}`);
-    this.name = "TaskNotProgressableError";
-  }
-}
-
-export class CrossOrganizationReferenceError extends Error {
-  constructor(message = "Referenced records must belong to the same organization.") {
-    super(message);
-    this.name = "CrossOrganizationReferenceError";
-  }
-}
+// Re-export domain errors for backward compatibility with existing test imports.
+export {
+  TaskNotFoundError,
+  TaskAlreadyDoneError,
+  TaskArchivedError,
+  AssignmentNotFoundError,
+  TaskNotProgressableError,
+  CrossOrganizationReferenceError,
+} from "../errors/domainErrors";
 
 async function resolveProjectOrgId(
-  client: Prisma.TransactionClient,
+  client: DbClient,
   projectId: string,
   effectiveOrgId: string | null,
 ): Promise<string> {
-  const project = await client.project.findFirst({
+  const project = await (client as any).project.findFirst({
     where: {
       project_id: projectId,
       ...(effectiveOrgId ? { organization_id: effectiveOrgId } : {}),
@@ -73,13 +46,13 @@ async function resolveProjectOrgId(
 }
 
 async function assertUsersInOrg(
-  client: Prisma.TransactionClient,
+  client: DbClient,
   userIds: string[] | undefined,
   organizationId: string,
 ): Promise<void> {
   if (!userIds || userIds.length === 0) return;
   const uniqueUserIds = Array.from(new Set(userIds));
-  const users = await client.user.findMany({
+  const users = await (client as any).user.findMany({
     where: {
       user_id: { in: uniqueUserIds },
       organization_id: organizationId,
@@ -93,7 +66,7 @@ async function assertUsersInOrg(
 }
 
 // ---------------------------------------------------------------------------
-// Reads
+// Reads — use prisma directly; they never participate in cross-repo transactions
 // ---------------------------------------------------------------------------
 
 export async function getAllTasks(orgId: string | null) {
@@ -124,212 +97,236 @@ export async function getTaskById(id: string, orgId: string | null) {
   return { ...rest, assigned_users: assignments.map((a) => a.user_id) };
 }
 
-
 // ---------------------------------------------------------------------------
 // Creates
 // ---------------------------------------------------------------------------
 
-export async function createTask(data: CreateTaskInput) {
-  return prisma.task.create({ data });
-}
-
+// Services own the transaction; db is the tx client passed from the service.
 export async function createTaskWithAssignments(
+  db: DbClient,
   data: CreateTaskInput,
   effectiveOrgId: string | null,
 ) {
-  return prisma.$transaction(async (tx) => {
-    const projectOrgId = await resolveProjectOrgId(tx, data.project_id, effectiveOrgId);
-    await assertUsersInOrg(tx, data.assigned_users, projectOrgId);
+  const projectOrgId = await resolveProjectOrgId(db, data.project_id, effectiveOrgId);
+  await assertUsersInOrg(db, data.assigned_users, projectOrgId);
 
-    if (data.parent_task_id) {
-      const parent = await tx.task.findFirst({
-        where: {
-          task_id: data.parent_task_id,
-          project: { organization_id: projectOrgId },
-        },
-        select: { task_id: true },
-      });
-      if (!parent) throw new CrossOrganizationReferenceError("Parent task not found in organization.");
-    }
-
-    const task = await tx.task.create({
-      data: {
-        title: data.title,
-        description: data.description,
-        priority: data.priority,
-        status: data.status,
-        deadline: data.deadline,
-        creator: { connect: { user_id: data.created_by } },
-        project: { connect: { project_id: data.project_id } },
-        ...(data.parent_task_id
-          ? { parent: { connect: { task_id: data.parent_task_id } } }
-          : {}),
-        start_date: data.start_date,
-        unit: data.unit ?? TaskUnit.NONE,
-        goal_type: data.goal_type ?? TaskGoalType.OPEN,
-        target_quantity: data.target_quantity ?? null,
-        current_quantity: data.current_quantity ?? 0,
+  if (data.parent_task_id) {
+    const parent = await (db as any).task.findFirst({
+      where: {
+        task_id: data.parent_task_id,
+        project: { organization_id: projectOrgId },
       },
+      select: { task_id: true },
     });
+    if (!parent) throw new CrossOrganizationReferenceError("Parent task not found in organization.");
+  }
 
-    if (data.assigned_users && data.assigned_users.length > 0) {
-      await tx.taskAssignment.createMany({
-        data: data.assigned_users.map((userId) => ({
-          task_id: task.task_id,
-          user_id: userId,
-        })),
-      });
-    }
+  const task = await (db as any).task.create({
+    data: {
+      title: data.title,
+      description: data.description,
+      priority: data.priority,
+      status: data.status,
+      deadline: data.deadline,
+      creator: { connect: { user_id: data.created_by } },
+      project: { connect: { project_id: data.project_id } },
+      ...(data.parent_task_id
+        ? { parent: { connect: { task_id: data.parent_task_id } } }
+        : {}),
+      start_date: data.start_date,
+      unit: data.unit ?? TaskUnit.NONE,
+      goal_type: data.goal_type ?? TaskGoalType.OPEN,
+      target_quantity: data.target_quantity ?? null,
+      current_quantity: data.current_quantity ?? 0,
+    },
+  });
 
-    return tx.task.findUnique({
-      where: { task_id: task.task_id },
-      include: {
-        assignments: {
-          include: {
-            user: {
-              select: {
-                user_id: true,
-                name: true,
-                email: true,
-                position: true,
-              },
+  if (data.assigned_users && data.assigned_users.length > 0) {
+    await (db as any).taskAssignment.createMany({
+      data: data.assigned_users.map((userId: string) => ({
+        task_id: task.task_id,
+        user_id: userId,
+      })),
+    });
+  }
+
+  return (db as any).task.findUnique({
+    where: { task_id: task.task_id },
+    include: {
+      assignments: {
+        include: {
+          user: {
+            select: {
+              user_id: true,
+              name: true,
+              email: true,
+              position: true,
             },
           },
         },
       },
-    });
+    },
   });
 }
 
 // ---------------------------------------------------------------------------
-// Updates
+// Updates — db is the transaction client passed from the service
 // ---------------------------------------------------------------------------
 
-export async function updateTask(
+// Internal scoped update; no transaction wrapper — the service provides the tx.
+async function updateTaskScoped(
+  db: DbClient,
   id: string,
   data: UpdateTaskInput,
   userId?: string,
-  effectiveOrgId: string | null = null,
+  effectiveOrgId?: string,
 ) {
-  return prisma.$transaction(async (tx) => {
-    const existingTask = await tx.task.findFirst({
-      where: {
-        task_id: id,
-        ...(effectiveOrgId ? { project: { organization_id: effectiveOrgId } } : {}),
-      },
-      select: { status: true, project_id: true, project: { select: { organization_id: true } } },
-    });
-    if (!existingTask) throw new TaskNotFoundError(id);
-
-    if (existingTask.status === TaskStatus.ARCHIVED) {
-      throw new TaskArchivedError();
-    }
-
-    if (data.status === TaskStatus.DONE && existingTask.status === TaskStatus.DONE) {
-      throw new TaskAlreadyDoneError();
-    }
-
-    const { assigned_users, ...taskUpdateData } = data;
-    const targetProjectOrgId = data.project_id
-      ? await resolveProjectOrgId(tx, data.project_id, effectiveOrgId)
-      : existingTask.project.organization_id;
-
-    if (targetProjectOrgId !== existingTask.project.organization_id) {
-      throw new CrossOrganizationReferenceError("Task cannot be moved to a project in another organization.");
-    }
-
-    await assertUsersInOrg(tx, assigned_users, targetProjectOrgId);
-
-    const finalStatus = data.status ?? existingTask.status;
-    const completionTimestamp = new Date();
-
-    const preserveCompletion =
-      data.status === TaskStatus.ARCHIVED && existingTask.status === TaskStatus.DONE;
-
-    const updateData: Prisma.TaskUpdateInput = {
-      ...taskUpdateData,
-      ...(data.status === TaskStatus.DONE
-        ? userId ? { completed_by: userId, completed_at: completionTimestamp } : {}
-        : data.status !== undefined && !preserveCompletion
-          ? { completed_by: null, completed_at: null }
-          : {}),
-    };
-
-    await tx.task.update({ where: { task_id: id }, data: updateData });
-
-    if (assigned_users !== undefined) {
-      if (finalStatus === TaskStatus.DONE || preserveCompletion) {
-        // Preserve existing completion timestamps for DONE and DONE→ARCHIVED transitions.
-        // New assignees added during DONE→ARCHIVED get null (they weren't assigned at completion time).
-        const existingAssignments = await tx.taskAssignment.findMany({
-          where: { task_id: id },
-          select: { user_id: true, completed_at: true },
-        });
-        const existingMap = new Map(existingAssignments.map((a) => [a.user_id, a.completed_at]));
-        await tx.taskAssignment.deleteMany({ where: { task_id: id } });
-        if (assigned_users.length > 0) {
-          await tx.taskAssignment.createMany({
-            data: assigned_users.map((assigneeId) => ({
-              task_id: id,
-              user_id: assigneeId,
-              completed_at: existingMap.get(assigneeId) ?? (finalStatus === TaskStatus.DONE ? completionTimestamp : null),
-            })),
-          });
-        }
-      } else {
-        await tx.taskAssignment.deleteMany({ where: { task_id: id } });
-        if (assigned_users.length > 0) {
-          await tx.taskAssignment.createMany({
-            data: assigned_users.map((assigneeId) => ({
-              task_id: id,
-              user_id: assigneeId,
-              completed_at: null,
-            })),
-          });
-        }
-      }
-    } else if (data.status === TaskStatus.DONE) {
-      await tx.taskAssignment.updateMany({
-        where: { task_id: id },
-        data: { completed_at: completionTimestamp },
-      });
-    } else if (data.status !== undefined && !preserveCompletion) {
-      await tx.taskAssignment.updateMany({
-        where: { task_id: id },
-        data: { completed_at: null },
-      });
-    }
-
-    return tx.task.findUnique({
-      where: { task_id: id },
-      include: {
-        assignments: {
-          include: {
-            user: { select: { user_id: true, name: true, email: true, position: true } },
-          },
-        },
-        project: { select: { name: true, color: true } },
-      },
-    });
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Delete
-// ---------------------------------------------------------------------------
-
-export async function deleteTask(id: string, effectiveOrgId: string | null): Promise<void> {
-  const result = await prisma.task.deleteMany({
+  const existingTask = await (db as any).task.findFirst({
     where: {
       task_id: id,
       ...(effectiveOrgId ? { project: { organization_id: effectiveOrgId } } : {}),
     },
+    select: { status: true, project_id: true, project: { select: { organization_id: true } } },
+  });
+  if (!existingTask) throw new TaskNotFoundError(id);
+
+  // Archived tasks are read-only; mutations are rejected to preserve audit integrity.
+  if (existingTask.status === TaskStatus.ARCHIVED) {
+    throw new TaskArchivedError();
+  }
+
+  // A task already marked done cannot be set to done again without transitioning first.
+  if (data.status === TaskStatus.DONE && existingTask.status === TaskStatus.DONE) {
+    throw new TaskAlreadyDoneError();
+  }
+
+  const { assigned_users, ...taskUpdateData } = data;
+  const targetProjectOrgId = data.project_id
+    ? await resolveProjectOrgId(db, data.project_id, effectiveOrgId ?? null)
+    : existingTask.project.organization_id;
+
+  if (targetProjectOrgId !== existingTask.project.organization_id) {
+    throw new CrossOrganizationReferenceError("Task cannot be moved to a project in another organization.");
+  }
+
+  await assertUsersInOrg(db, assigned_users, targetProjectOrgId);
+
+  const finalStatus = data.status ?? existingTask.status;
+  const completionTimestamp = new Date();
+
+  const preserveCompletion =
+    data.status === TaskStatus.ARCHIVED && existingTask.status === TaskStatus.DONE;
+
+  const updateData: Prisma.TaskUpdateInput = {
+    ...taskUpdateData,
+    ...(data.status === TaskStatus.DONE
+      ? userId ? { completed_by: userId, completed_at: completionTimestamp } : {}
+      : data.status !== undefined && !preserveCompletion
+        ? { completed_by: null, completed_at: null }
+        : {}),
+  };
+
+  await (db as any).task.update({ where: { task_id: id }, data: updateData });
+
+  if (assigned_users !== undefined) {
+    if (finalStatus === TaskStatus.DONE || preserveCompletion) {
+      // Preserve existing completion timestamps for DONE and DONE→ARCHIVED transitions.
+      // New assignees added during DONE→ARCHIVED get null (they weren't assigned at completion time).
+      const existingAssignments = await (db as any).taskAssignment.findMany({
+        where: { task_id: id },
+        select: { user_id: true, completed_at: true },
+      });
+      const existingMap = new Map(existingAssignments.map((a: any) => [a.user_id, a.completed_at]));
+      await (db as any).taskAssignment.deleteMany({ where: { task_id: id } });
+      if (assigned_users.length > 0) {
+        await (db as any).taskAssignment.createMany({
+          data: assigned_users.map((assigneeId: string) => ({
+            task_id: id,
+            user_id: assigneeId,
+            completed_at: existingMap.get(assigneeId) ?? (finalStatus === TaskStatus.DONE ? completionTimestamp : null),
+          })),
+        });
+      }
+    } else {
+      await (db as any).taskAssignment.deleteMany({ where: { task_id: id } });
+      if (assigned_users.length > 0) {
+        await (db as any).taskAssignment.createMany({
+          data: assigned_users.map((assigneeId: string) => ({
+            task_id: id,
+            user_id: assigneeId,
+            completed_at: null,
+          })),
+        });
+      }
+    }
+  } else if (data.status === TaskStatus.DONE) {
+    await (db as any).taskAssignment.updateMany({
+      where: { task_id: id },
+      data: { completed_at: completionTimestamp },
+    });
+  } else if (data.status !== undefined && !preserveCompletion) {
+    await (db as any).taskAssignment.updateMany({
+      where: { task_id: id },
+      data: { completed_at: null },
+    });
+  }
+
+  return (db as any).task.findUnique({
+    where: { task_id: id },
+    include: {
+      assignments: {
+        include: {
+          user: { select: { user_id: true, name: true, email: true, position: true } },
+        },
+      },
+      project: { select: { name: true, color: true } },
+    },
+  });
+}
+
+// Org-scoped update. db is the tx client passed from the service.
+export async function updateTaskInOrg(
+  db: DbClient,
+  id: string,
+  orgId: string,
+  data: UpdateTaskInput,
+  userId?: string,
+) {
+  return updateTaskScoped(db, id, data, userId, orgId);
+}
+
+// Platform-level update (super-admin). db is the tx client passed from the service.
+export async function updateTaskPlatform(
+  db: DbClient,
+  id: string,
+  data: UpdateTaskInput,
+  userId?: string,
+) {
+  return updateTaskScoped(db, id, data, userId);
+}
+
+// ---------------------------------------------------------------------------
+// Delete — db is the transaction client passed from the service
+// ---------------------------------------------------------------------------
+
+// Org-scoped delete; rejects with TaskNotFoundError if task is outside the org.
+export async function deleteTaskInOrg(db: DbClient, id: string, orgId: string): Promise<void> {
+  const result = await (db as any).task.deleteMany({
+    where: { task_id: id, project: { organization_id: orgId } },
+  });
+  if (result.count === 0) throw new TaskNotFoundError(id);
+}
+
+// Platform-level delete (super-admin).
+export async function deleteTaskPlatform(db: DbClient, id: string): Promise<void> {
+  const result = await (db as any).task.deleteMany({
+    where: { task_id: id },
   });
   if (result.count === 0) throw new TaskNotFoundError(id);
 }
 
 // ---------------------------------------------------------------------------
-// Scheduler queries
+// Scheduler queries — use prisma directly; standalone reads
 // ---------------------------------------------------------------------------
 
 export async function getTodayTasksPerUser(
@@ -412,102 +409,129 @@ export async function getUsersWithNoActivityToday(
 }
 
 // ---------------------------------------------------------------------------
-// Progress logging
+// Progress logging — db is the transaction client passed from the service
 // ---------------------------------------------------------------------------
 
-export async function upsertProgressLog(
+// Internal scoped progress log upsert; no transaction wrapper — the service provides the tx.
+async function upsertProgressLogScoped(
+  db: DbClient,
   taskId: string,
   userId: string,
   quantity_done: number,
   unit?: TaskUnit,
   note?: string,
-  effectiveOrgId: string | null = null,
+  effectiveOrgId?: string,
 ) {
-  return prisma.$transaction(async (tx) => {
-    const task = await tx.task.findFirst({
-      where: {
-        task_id: taskId,
-        ...(effectiveOrgId ? { project: { organization_id: effectiveOrgId } } : {}),
-      },
-    });
-    if (!task) throw new TaskNotFoundError(taskId);
-
-    const nonProgressableStatuses: TaskStatus[] = [
-      TaskStatus.ARCHIVED,
-      TaskStatus.REJECTED,
-      TaskStatus.DONE,
-    ];
-    if (nonProgressableStatuses.includes(task.status)) {
-      throw new TaskNotProgressableError(task.status);
-    }
-
-    const assignment = await tx.taskAssignment.findUnique({
-      where: { task_id_user_id: { task_id: taskId, user_id: userId } },
-    });
-    const user = await tx.user.findFirst({
-      where: {
-        user_id: userId,
-        ...(effectiveOrgId ? { organization_id: effectiveOrgId } : {}),
-      },
-      select: { role: true },
-    });
-
-    const isAdmin = user?.role === UserRole.ADMIN || user?.role === UserRole.SUPER_ADMIN;
-    if (!assignment && !isAdmin) throw new AssignmentNotFoundError();
-
-    const resolvedAssignment = assignment ?? await tx.taskAssignment.upsert({
-      where: { task_id_user_id: { task_id: taskId, user_id: userId } },
-      create: { task_id: taskId, user_id: userId },
-      update: {},
-    });
-
-    const progressLog = await tx.taskProgressLog.create({
-      data: {
-        assignment_id: resolvedAssignment.assignment_id,
-        quantity_done,
-        unit,
-        note,
-      },
-    });
-
-    const newCurrentQuantity = (task.current_quantity || 0) + quantity_done;
-    let newStatus: TaskStatus = task.status;
-
-    if (quantity_done > 0 && task.status === TaskStatus.PENDING) {
-      newStatus = TaskStatus.IN_PROGRESS;
-    }
-
-    if (
-      task.goal_type === TaskGoalType.FIXED &&
-      task.target_quantity &&
-      newCurrentQuantity >= task.target_quantity
-    ) {
-      newStatus = TaskStatus.DONE;
-    }
-
-    const completionTimestamp = new Date();
-
-    const updatedTask = await tx.task.update({
-      where: { task_id: taskId },
-      data: {
-        current_quantity: newCurrentQuantity,
-        status: newStatus,
-        updated_at: new Date(),
-        ...(newStatus === TaskStatus.DONE
-          ? { completed_by: userId, completed_at: completionTimestamp }
-          : {}),
-      },
-    });
-
-    if (newStatus === TaskStatus.DONE) {
-      await tx.taskAssignment.updateMany({
-        where: { task_id: taskId },
-        data: { completed_at: completionTimestamp },
-      });
-    }
-
-    return { progressLog, updatedTask };
+  const task = await (db as any).task.findFirst({
+    where: {
+      task_id: taskId,
+      ...(effectiveOrgId ? { project: { organization_id: effectiveOrgId } } : {}),
+    },
   });
+  if (!task) throw new TaskNotFoundError(taskId);
+
+  const nonProgressableStatuses: TaskStatus[] = [
+    TaskStatus.ARCHIVED,
+    TaskStatus.REJECTED,
+    TaskStatus.DONE,
+  ];
+  if (nonProgressableStatuses.includes(task.status)) {
+    throw new TaskNotProgressableError(task.status);
+  }
+
+  const assignment = await (db as any).taskAssignment.findUnique({
+    where: { task_id_user_id: { task_id: taskId, user_id: userId } },
+  });
+  const user = await (db as any).user.findFirst({
+    where: {
+      user_id: userId,
+      ...(effectiveOrgId ? { organization_id: effectiveOrgId } : {}),
+    },
+    select: { role: true },
+  });
+
+  // Non-admin users must be assigned to the task to log progress.
+  // Admins may log progress on any task in their org regardless of assignment.
+  const isAdmin = user?.role === UserRole.ADMIN || user?.role === UserRole.SUPER_ADMIN;
+  if (!assignment && !isAdmin) throw new AssignmentNotFoundError();
+
+  const resolvedAssignment = assignment ?? await (db as any).taskAssignment.upsert({
+    where: { task_id_user_id: { task_id: taskId, user_id: userId } },
+    create: { task_id: taskId, user_id: userId },
+    update: {},
+  });
+
+  const progressLog = await (db as any).taskProgressLog.create({
+    data: {
+      assignment_id: resolvedAssignment.assignment_id,
+      quantity_done,
+      unit,
+      note,
+    },
+  });
+
+  const newCurrentQuantity = (task.current_quantity || 0) + quantity_done;
+  let newStatus: TaskStatus = task.status;
+
+  if (quantity_done > 0 && task.status === TaskStatus.PENDING) {
+    newStatus = TaskStatus.IN_PROGRESS;
+  }
+
+  if (
+    task.goal_type === TaskGoalType.FIXED &&
+    task.target_quantity &&
+    newCurrentQuantity >= task.target_quantity
+  ) {
+    newStatus = TaskStatus.DONE;
+  }
+
+  const completionTimestamp = new Date();
+
+  const updatedTask = await (db as any).task.update({
+    where: { task_id: taskId },
+    data: {
+      current_quantity: newCurrentQuantity,
+      status: newStatus,
+      updated_at: new Date(),
+      ...(newStatus === TaskStatus.DONE
+        ? { completed_by: userId, completed_at: completionTimestamp }
+        : {}),
+    },
+  });
+
+  if (newStatus === TaskStatus.DONE) {
+    await (db as any).taskAssignment.updateMany({
+      where: { task_id: taskId },
+      data: { completed_at: completionTimestamp },
+    });
+  }
+
+  return { progressLog, updatedTask };
+}
+
+// Org-scoped progress log upsert. db is the tx client passed from the service.
+export async function upsertProgressLogInOrg(
+  db: DbClient,
+  taskId: string,
+  orgId: string,
+  userId: string,
+  quantity_done: number,
+  unit?: TaskUnit,
+  note?: string,
+) {
+  return upsertProgressLogScoped(db, taskId, userId, quantity_done, unit, note, orgId);
+}
+
+// Platform-level progress log upsert (super-admin). db is the tx client passed from the service.
+export async function upsertProgressLogPlatform(
+  db: DbClient,
+  taskId: string,
+  userId: string,
+  quantity_done: number,
+  unit?: TaskUnit,
+  note?: string,
+) {
+  return upsertProgressLogScoped(db, taskId, userId, quantity_done, unit, note);
 }
 
 export async function getStaleDoneTasks(olderThanDays: number) {

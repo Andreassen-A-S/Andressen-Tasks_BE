@@ -1,7 +1,9 @@
 import type { Request, Response } from "express";
-import * as projectRepo from "../repositories/projectRepository";
-import { ProjectNotFoundError } from "../repositories/projectRepository";
-import { getParamId, requireUserId } from "../helper/helpers";
+import * as projectService from "../services/projectService";
+import { getRequestContext } from "../types/requestContext";
+import { getParamId } from "../helper/helpers";
+import { ProjectNotFoundError } from "../errors/domainErrors";
+
 function handleDomainError(error: unknown, res: Response, fallbackMessage: string): Response {
   if (error instanceof ProjectNotFoundError) {
     return res.status(404).json({ success: false, error: error.message });
@@ -12,8 +14,10 @@ function handleDomainError(error: unknown, res: Response, fallbackMessage: strin
 
 export async function listProjects(req: Request, res: Response) {
   try {
-    const orgId = req.effectiveOrgId;
-    const projects = await projectRepo.getAllProjects(orgId);
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
+
+    const projects = await projectService.listProjects(ctx);
     return res.json({ success: true, data: projects });
   } catch (error) {
     console.error("Error in listProjects:", error);
@@ -26,8 +30,10 @@ export async function getProject(req: Request, res: Response) {
   if (!id) return res.status(400).json({ success: false, error: "Missing or invalid id" });
 
   try {
-    const orgId = req.effectiveOrgId;
-    const project = await projectRepo.getProjectWithTasks(id, orgId);
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
+
+    const project = await projectService.getProject(ctx, id);
     if (!project) return res.status(404).json({ success: false, error: "Project not found" });
     return res.json({ success: true, data: project });
   } catch (error) {
@@ -36,11 +42,10 @@ export async function getProject(req: Request, res: Response) {
 }
 
 export async function createProject(req: Request, res: Response) {
-  const userId = requireUserId(req, res);
-  if (!userId) return;
+  const ctx = getRequestContext(req);
+  if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
-  const orgId = req.effectiveOrgId;
-  if (!orgId) {
+  if (!ctx.effectiveOrgId) {
     return res.status(403).json({ success: false, error: "No organization assigned" });
   }
 
@@ -50,7 +55,7 @@ export async function createProject(req: Request, res: Response) {
   }
 
   try {
-    const project = await projectRepo.createProject({ name: name.trim(), description, color }, userId, orgId);
+    const project = await projectService.createProject(ctx, { name: name.trim(), description, color });
     return res.status(201).json({ success: true, data: project });
   } catch (error) {
     console.error("Error in createProject:", error);
@@ -69,8 +74,10 @@ export async function updateProject(req: Request, res: Response) {
   }
 
   try {
-    const orgId = req.effectiveOrgId;
-    const project = await projectRepo.updateProject(id, { name: name?.trim(), description, color }, orgId);
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
+
+    const project = await projectService.updateProject(ctx, id, { name: name?.trim(), description, color });
     return res.json({ success: true, data: project });
   } catch (error) {
     return handleDomainError(error, res, "Failed to update project");
@@ -82,8 +89,10 @@ export async function deleteProject(req: Request, res: Response) {
   if (!id) return res.status(400).json({ success: false, error: "Missing or invalid id" });
 
   try {
-    const orgId = req.effectiveOrgId;
-    await projectRepo.deleteProject(id, orgId);
+    const ctx = getRequestContext(req);
+    if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
+
+    await projectService.deleteProject(ctx, id);
     return res.status(204).send();
   } catch (error) {
     return handleDomainError(error, res, "Failed to delete project");

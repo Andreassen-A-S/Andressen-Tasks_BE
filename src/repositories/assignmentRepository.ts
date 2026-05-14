@@ -5,20 +5,11 @@ import type {
 } from "../types/assignment";
 
 import type { TaskAssignment } from "../generated/prisma/client";
+import { AssignmentNotFoundError, AssignmentCrossOrganizationError, DuplicateAssignmentError } from "../errors/domainErrors";
+import type { DbClient } from "../types/db";
 
-export class AssignmentNotFoundError extends Error {
-  constructor(id: string) {
-    super(`Assignment not found: ${id}`);
-    this.name = "AssignmentNotFoundError";
-  }
-}
-
-export class AssignmentCrossOrganizationError extends Error {
-  constructor(message = "Task and user must belong to the same organization.") {
-    super(message);
-    this.name = "AssignmentCrossOrganizationError";
-  }
-}
+// Re-export for backward compatibility with imports from this module.
+export { AssignmentNotFoundError, AssignmentCrossOrganizationError } from "../errors/domainErrors";
 
 export async function getAllAssignments(orgId: string | null): Promise<TaskAssignment[]> {
   return prisma.taskAssignment.findMany({
@@ -80,7 +71,7 @@ export async function assignTaskToUser(
   });
 
   if (existing) {
-    throw new Error("User is already assigned to this task");
+    throw new DuplicateAssignmentError();
   }
 
   return prisma.taskAssignment.create({
@@ -163,11 +154,12 @@ export async function getUserAssignments(
 }
 
 export async function updateAssignment(
+  db: DbClient,
   assignmentId: string,
   data: UpdateTaskAssignmentInput,
   effectiveOrgId: string | null,
 ): Promise<TaskAssignment> {
-  const existing = await prisma.taskAssignment.findFirst({
+  const existing = await (db as any).taskAssignment.findFirst({
     where: {
       assignment_id: assignmentId,
       ...(effectiveOrgId ? { task: { project: { organization_id: effectiveOrgId } } } : {}),
@@ -176,7 +168,7 @@ export async function updateAssignment(
   });
   if (!existing) throw new AssignmentNotFoundError(assignmentId);
 
-  return prisma.taskAssignment.update({
+  return (db as any).taskAssignment.update({
     where: { assignment_id: existing.assignment_id },
     data,
     include: {
