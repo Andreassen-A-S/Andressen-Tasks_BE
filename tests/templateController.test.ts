@@ -13,6 +13,19 @@ import {
   TaskEventType,
   UserRole,
 } from "../src/generated/prisma/client";
+import { errorMiddleware } from "../src/middleware/errorMiddleware";
+
+async function callController(
+  fn: (req: Request, res: Response) => Promise<void>,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    await (fn as any)(req, res);
+  } catch (err) {
+    errorMiddleware(err, req, res, () => {});
+  }
+}
 
 // Mock Prisma BEFORE importing anything
 const prismaMock = {
@@ -123,7 +136,7 @@ describe("recurringTemplateController.listTemplates", () => {
     const req = createRequest({ user: { user_id: "u1", role: UserRole.USER } });
     const res = createMockResponse();
 
-    await recurringTemplateController.listTemplates(req, res);
+    await callController(recurringTemplateController.listTemplates, req, res);
 
     expect(res.body).toEqual({ success: true, data: templates });
   });
@@ -136,7 +149,7 @@ describe("recurringTemplateController.listTemplates", () => {
     const req = createRequest({ user: { user_id: "u1", role: UserRole.USER } });
     const res = createMockResponse();
 
-    await recurringTemplateController.listTemplates(req, res);
+    await callController(recurringTemplateController.listTemplates, req, res);
 
     expect(res.statusCode).toBe(500);
     expect(res.body).toEqual({
@@ -171,7 +184,7 @@ describe("recurringTemplateController.listActiveTemplates", () => {
     const req = createRequest({ user: { user_id: "u1", role: UserRole.USER } });
     const res = createMockResponse();
 
-    await recurringTemplateController.listActiveTemplates(req, res);
+    await callController(recurringTemplateController.listActiveTemplates, req, res);
 
     expect(res.body).toEqual({ success: true, data: activeTemplates });
     activeTemplates.forEach((t) => expect(t.is_active).toBe(true));
@@ -186,7 +199,7 @@ describe("recurringTemplateController.listActiveTemplates", () => {
     const req = createRequest({ user: { user_id: "u1", role: UserRole.USER } });
     const res = createMockResponse();
 
-    await recurringTemplateController.listActiveTemplates(req, res);
+    await callController(recurringTemplateController.listActiveTemplates, req, res);
 
     expect(res.statusCode).toBe(500);
     expect(res.body).toEqual({
@@ -208,7 +221,7 @@ describe("recurringTemplateController.getTemplate", () => {
     });
     const res = createMockResponse();
 
-    await recurringTemplateController.getTemplate(req, res);
+    await callController(recurringTemplateController.getTemplate, req, res);
 
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({
@@ -238,7 +251,7 @@ describe("recurringTemplateController.getTemplate", () => {
     });
     const res = createMockResponse();
 
-    await recurringTemplateController.getTemplate(req, res);
+    await callController(recurringTemplateController.getTemplate, req, res);
 
     expect(res.body).toEqual({ success: true, data: template });
   });
@@ -249,7 +262,7 @@ describe("recurringTemplateController.createTemplate", () => {
     const req = createRequest({ user: undefined });
     const res = createMockResponse();
 
-    await recurringTemplateController.createTemplate(req, res);
+    await callController(recurringTemplateController.createTemplate, req, res);
 
     expect(res.statusCode).toBe(401);
     expect(res.body).toEqual({ success: false, error: "Unauthorized" });
@@ -292,7 +305,7 @@ describe("recurringTemplateController.createTemplate", () => {
     });
     const res = createMockResponse();
 
-    await recurringTemplateController.createTemplate(req, res);
+    await callController(recurringTemplateController.createTemplate, req, res);
 
     expect(res.statusCode).toBe(201);
     expect(res.body).toEqual({ success: true, data: createdTemplate });
@@ -312,7 +325,7 @@ describe("recurringTemplateController.updateTemplate", () => {
     });
     const res = createMockResponse();
 
-    await recurringTemplateController.updateTemplate(req, res);
+    await callController(recurringTemplateController.updateTemplate, req, res);
 
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({
@@ -334,7 +347,7 @@ describe("recurringTemplateController.updateTemplate", () => {
     });
     const res = createMockResponse();
 
-    await recurringTemplateController.updateTemplate(req, res);
+    await callController(recurringTemplateController.updateTemplate, req, res);
 
     expect(res.statusCode).toBe(403);
     expect(res.body).toEqual({
@@ -369,7 +382,7 @@ describe("recurringTemplateController.updateTemplate", () => {
     });
     const res = createMockResponse();
 
-    await recurringTemplateController.updateTemplate(req, res);
+    await callController(recurringTemplateController.updateTemplate, req, res);
 
     expect(res.statusCode).toBe(200);
   });
@@ -393,7 +406,7 @@ describe("recurringTemplateController.deleteTemplate", () => {
     });
     const res = createMockResponse();
 
-    await recurringTemplateController.deleteTemplate(req, res);
+    await callController(recurringTemplateController.deleteTemplate, req, res);
 
     expect(deleteSpy).toHaveBeenCalledWith("t1");
     expect(res.statusCode).toBe(204);
@@ -411,7 +424,7 @@ describe("recurringTemplateController.deleteTemplate", () => {
     });
     const res = createMockResponse();
 
-    await recurringTemplateController.deleteTemplate(req, res);
+    await callController(recurringTemplateController.deleteTemplate, req, res);
 
     expect(res.statusCode).toBe(403);
     expect(res.body).toEqual({
@@ -448,7 +461,7 @@ describe("recurringTemplateController.deactivateTemplate", () => {
     });
     const res = createMockResponse();
 
-    await recurringTemplateController.deactivateTemplate(req, res);
+    await callController(recurringTemplateController.deactivateTemplate, req, res);
 
     expect(res.statusCode).toBe(200);
     expect((res.body as any).data.is_active).toBe(false);
@@ -482,7 +495,7 @@ describe("recurringTemplateController.reactivateTemplate", () => {
     });
     const res = createMockResponse();
 
-    await recurringTemplateController.reactivateTemplate(req, res);
+    await callController(recurringTemplateController.reactivateTemplate, req, res);
 
     expect(res.statusCode).toBe(200);
     expect((res.body as any).data.is_active).toBe(true);
@@ -515,7 +528,7 @@ describe("recurringTemplateController.getTemplateInstances", () => {
     });
     const res = createMockResponse();
 
-    await recurringTemplateController.getTemplateInstances(req, res);
+    await callController(recurringTemplateController.getTemplateInstances, req, res);
 
     expect(res.body).toEqual({ success: true, data: instances });
   });

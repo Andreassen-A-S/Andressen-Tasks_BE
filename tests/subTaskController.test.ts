@@ -4,6 +4,19 @@ import { TaskEventType } from "../src/generated/prisma/client";
 import * as subTaskController from "../src/controllers/subTaskController";
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
 import * as taskRepo from "../src/repositories/taskRepository";
+import { errorMiddleware } from "../src/middleware/errorMiddleware";
+
+async function callController(
+  fn: (req: Request, res: Response) => Promise<void>,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    await (fn as any)(req, res);
+  } catch (err) {
+    errorMiddleware(err, req, res, () => {});
+  }
+}
 
 // subTaskService uses prisma.$transaction — mock it so tests don't need a real DB.
 const transactionMock = mock<(fn: (tx: any) => Promise<any>) => Promise<any>>();
@@ -54,7 +67,7 @@ describe("subTaskController.createSubtask", () => {
     const req = createRequest({ body: { parent_task_id: "p1", title: "sub" } });
     const res = createMockResponse();
 
-    await subTaskController.createSubtask(req, res);
+    await callController(subTaskController.createSubtask, req, res);
 
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({
@@ -83,7 +96,7 @@ describe("subTaskController.createSubtask", () => {
     });
     const res = createMockResponse();
 
-    await subTaskController.createSubtask(req, res);
+    await callController(subTaskController.createSubtask, req, res);
 
     expect(eventSpy).toHaveBeenCalledTimes(2);
     // createTaskEvent(db, data) — second arg (index 1) carries the event type

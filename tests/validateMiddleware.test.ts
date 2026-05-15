@@ -347,19 +347,6 @@ describe("validate middleware — prepareAttachments schema integration", () => 
     expect(error.fields["files.0.file_size"]).toBeDefined();
   });
 
-  test("rejects file_size exceeding limit", () => {
-    const { req, res } = makeReqRes({
-      task_id: "t1",
-      files: [{ mime_type: "image/jpeg", file_size: 11 * 1024 * 1024 }],
-    });
-    const next = mock();
-
-    validate(prepareAttachmentsSchema)(req, res, next);
-
-    const error = next.mock.calls[0][0];
-    expect(error).toBeInstanceOf(ValidationError);
-    expect(error.fields["files.0.file_size"]).toBeDefined();
-  });
 
   test("passes valid attachment request", () => {
     const { req, res } = makeReqRes({ task_id: "t1", files: [validFile] });
@@ -369,5 +356,41 @@ describe("validate middleware — prepareAttachments schema integration", () => 
 
     expect(next).toHaveBeenCalledWith();
     expect(req.body.task_id).toBe("t1");
+  });
+});
+
+describe("loginSchema", () => {
+  const { loginSchema } = require("../src/schemas/authSchemas");
+
+  test("rejects missing email", () => {
+    const { req, res } = makeReqRes({ password: "secret" });
+    const next = mock();
+
+    validate(loginSchema)(req, res, next);
+
+    const error = next.mock.calls[0][0];
+    expect(error).toBeInstanceOf(ValidationError);
+    expect(error.fields.email).toBeDefined();
+  });
+
+  test("rejects empty password", () => {
+    const { req, res } = makeReqRes({ email: "a@b.com", password: "" });
+    const next = mock();
+
+    validate(loginSchema)(req, res, next);
+
+    const error = next.mock.calls[0][0];
+    expect(error).toBeInstanceOf(ValidationError);
+    expect(error.fields.password).toBeDefined();
+  });
+
+  test("passes valid credentials and trims email", () => {
+    const { req, res } = makeReqRes({ email: "  a@b.com  ", password: "secret" });
+    const next = mock();
+
+    validate(loginSchema)(req, res, next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(req.body.email).toBe("a@b.com");
   });
 });

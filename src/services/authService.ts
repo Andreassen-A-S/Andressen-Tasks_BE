@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import * as authRepo from "../repositories/authRepository";
 import type { LoginRequest, JWTPayload } from "../types/auth";
 import { comparePassword } from "../helper/helpers";
+import { AuthenticationError } from "../errors/domainErrors";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN;
@@ -23,7 +24,7 @@ export async function authenticateUser(credentials: LoginRequest) {
 
   // Use a single generic failure path for both missing user and invalid password
   if (!user || !isPasswordValid) {
-    throw new Error("Invalid credentials");
+    throw new AuthenticationError("Invalid credentials");
   }
 
   // Validate JWT configuration - use type assertion to help TypeScript
@@ -93,7 +94,7 @@ export function verifyToken(token: string): JWTPayload {
       }
     }
 
-    // Always throw generic error to client
-    throw new Error("Invalid or expired token");
+    // Throw sanitized error — do not expose JWT error details to clients
+    throw new AuthenticationError("Invalid token");
   }
 }

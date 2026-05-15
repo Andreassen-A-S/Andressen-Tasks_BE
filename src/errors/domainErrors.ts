@@ -85,11 +85,10 @@ export class MissingOrganizationError extends AppError {
 }
 
 // Thrown when super-admin creates a user but omits organization_id.
-// Unlike MissingOrganizationError (403), this maps to 400 — caller sent an incomplete body.
-export class RequiredOrganizationIdError extends MissingOrganizationError {
+// Unlike MissingOrganizationError (403), this is a caller error that maps to 400.
+export class RequiredOrganizationIdError extends AppError {
   constructor() {
-    super("organization_id is required");
-    this.statusCode = 400;
+    super(400, "organization_id is required");
     this.name = "RequiredOrganizationIdError";
   }
 }
@@ -183,6 +182,22 @@ export class InvalidUploadTokenError extends AppError {
   constructor() {
     super(400, "One or more upload tokens are invalid or expired");
     this.name = "InvalidUploadTokenError";
+  }
+}
+
+// Thrown when an uploaded file exceeds the allowed size for its MIME type.
+export class PayloadTooLargeError extends AppError {
+  constructor(message: string) {
+    super(413, message);
+    this.name = "PayloadTooLargeError";
+  }
+}
+
+// Thrown when login credentials are invalid or a JWT token cannot be verified.
+export class AuthenticationError extends AppError {
+  constructor(message = "Invalid credentials") {
+    super(401, message);
+    this.name = "AuthenticationError";
   }
 }
 

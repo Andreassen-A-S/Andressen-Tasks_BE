@@ -1,9 +1,9 @@
 import { prisma } from "../db/prisma";
 import { TaskStatus, UserRole } from "../generated/prisma/client";
 import * as attachmentRepo from "../repositories/attachmentRepository";
-import { generateSignedUploadUrl, generateSignedReadUrl, deleteFile } from "./storageService";
+import { generateSignedUploadUrl, generateSignedReadUrl, deleteFile, ALLOWED_MIME_TYPES } from "./storageService";
 import type { RequestContext } from "../types/requestContext";
-import { AttachmentNotFoundError, AttachmentAccessError, TaskNotFoundError, TaskArchivedError } from "../errors/domainErrors";
+import { AttachmentNotFoundError, AttachmentAccessError, TaskNotFoundError, TaskArchivedError, PayloadTooLargeError } from "../errors/domainErrors";
 
 export { AttachmentNotFoundError, AttachmentAccessError };
 
@@ -44,6 +44,15 @@ export async function prepareAttachments(
 
   if ((task as any).status === TaskStatus.ARCHIVED) {
     throw new TaskArchivedError();
+  }
+
+  for (const f of files) {
+    if (f.fileSize != null) {
+      const mimeConfig = ALLOWED_MIME_TYPES[f.mimeType];
+      if (mimeConfig && f.fileSize > mimeConfig.maxBytes) {
+        throw new PayloadTooLargeError(`File exceeds maximum size of ${mimeConfig.maxBytes / (1024 * 1024)} MB`);
+      }
+    }
   }
 
   const created: { attachmentId: string; uploadToken: string; uploadUrl: string }[] = [];

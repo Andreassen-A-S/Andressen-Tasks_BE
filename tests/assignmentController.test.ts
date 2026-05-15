@@ -1,6 +1,19 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { Request, Response } from "express";
 import { TaskEventType, TaskStatus } from "../src/generated/prisma/client";
+import { errorMiddleware } from "../src/middleware/errorMiddleware";
+
+async function callController(
+  fn: (req: Request, res: Response) => Promise<void>,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    await (fn as any)(req, res);
+  } catch (err) {
+    errorMiddleware(err, req, res, () => {});
+  }
+}
 
 const transactionMock = mock<(fn: (tx: any) => Promise<any>) => Promise<any>>();
 mock.module("../src/db/prisma", () => ({
@@ -63,7 +76,7 @@ describe("assignmentController.listAssignments", () => {
     const req = createRequest({ query: { userId: "u1" } });
     const res = createMockResponse();
 
-    await assignmentController.listAssignments(req, res);
+    await callController(assignmentController.listAssignments, req, res);
 
     expect(repoSpy).toHaveBeenCalledWith("u1", null);
     expect(res.body).toEqual({ success: true, data });
@@ -89,7 +102,7 @@ describe("assignmentController.assignTask", () => {
     });
     const res = createMockResponse();
 
-    await assignmentController.assignTask(req, res);
+    await callController(assignmentController.assignTask, req, res);
 
     expect(assignSpy).toHaveBeenCalledWith({ task_id: "t1", user_id: "u2" }, null);
     expect(eventSpy).toHaveBeenCalledTimes(1);
@@ -111,7 +124,7 @@ describe("assignmentController.assignTask", () => {
     });
     const res = createMockResponse();
 
-    await assignmentController.assignTask(req, res);
+    await callController(assignmentController.assignTask, req, res);
 
     expect(res.statusCode).toBe(409);
     expect(res.body).toEqual({ success: false, error: "User is already assigned to this task" });
@@ -131,7 +144,7 @@ describe("assignmentController.assignTask", () => {
     });
     const res = createMockResponse();
 
-    await assignmentController.assignTask(req, res);
+    await callController(assignmentController.assignTask, req, res);
 
     expect(res.statusCode).toBe(403);
     expect(res.body).toEqual({
@@ -147,7 +160,7 @@ describe("assignmentController.getAssignment", () => {
     const req = createRequest({ params: { id: "" } as Request["params"] });
     const res = createMockResponse();
 
-    await assignmentController.getAssignment(req, res);
+    await callController(assignmentController.getAssignment, req, res);
 
     expect(repoSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(400);
@@ -161,7 +174,7 @@ describe("assignmentController.updateAssignment", () => {
     const req = createRequest({ params: { id: "a1" } as Request["params"] });
     const res = createMockResponse();
 
-    await assignmentController.updateAssignment(req, res);
+    await callController(assignmentController.updateAssignment, req, res);
 
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({ success: false, error: "Assignment not found" });
@@ -187,7 +200,7 @@ describe("assignmentController.updateAssignment", () => {
     });
     const res = createMockResponse();
 
-    await assignmentController.updateAssignment(req, res);
+    await callController(assignmentController.updateAssignment, req, res);
 
     expect(updateSpy).toHaveBeenCalledWith(expect.anything(), "a1", req.body, "org-a");
     expect(res.body).toEqual({ success: true, data: updated });
@@ -214,7 +227,7 @@ describe("assignmentController.deleteAssignment", () => {
     });
     const res = createMockResponse();
 
-    await assignmentController.deleteAssignment(req, res);
+    await callController(assignmentController.deleteAssignment, req, res);
 
     expect(eventSpy).toHaveBeenCalledTimes(1);
     // createTaskEvent(db, data) — check second arg (index 1) for the event type
@@ -242,7 +255,7 @@ describe("assignmentController.deleteAssignment", () => {
     });
     const res = createMockResponse();
 
-    await assignmentController.deleteAssignment(req, res);
+    await callController(assignmentController.deleteAssignment, req, res);
 
     expect(deleteSpy).toHaveBeenCalledWith("a1", "org-a");
     expect(res.statusCode).toBe(204);

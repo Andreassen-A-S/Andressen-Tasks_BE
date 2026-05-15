@@ -1,4 +1,4 @@
-import type { Request, Response, NextFunction } from "express";
+import type { Request, Response, NextFunction, RequestHandler } from "express";
 import { AppError } from "../errors/AppError";
 import { ValidationError } from "../errors/domainErrors";
 
@@ -8,15 +8,11 @@ function buildBody(error: AppError): Record<string, unknown> {
   return body;
 }
 
-// Shared utility used by controller catch blocks.
-// Returns the response so controllers can `return handleError(error, res)`.
-export function handleError(error: unknown, res: Response): Response {
-  if (error instanceof AppError) {
-    return res.status(error.statusCode).json(buildBody(error));
-  }
-  console.error(error);
-  return res.status(500).json({ success: false, error: "Internal server error" });
-}
+// Wraps an async route handler so thrown errors are forwarded to errorMiddleware via next().
+export const asyncHandler =
+  (fn: RequestHandler): RequestHandler =>
+  (req, res, next) =>
+    Promise.resolve(fn(req, res, next)).catch(next);
 
 // Express error middleware — catches anything passed to next(err) or thrown
 // outside a try/catch (e.g. CORS errors, unexpected throws in middleware).

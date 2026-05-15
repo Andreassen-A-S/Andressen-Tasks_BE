@@ -4,6 +4,19 @@ import * as orgController from "../src/controllers/organizationController";
 import * as orgRepo from "../src/repositories/organizationRepository";
 import * as storageService from "../src/services/storageService";
 import { MESTERPLAN_ORG_ID } from "../src/constants";
+import { errorMiddleware } from "../src/middleware/errorMiddleware";
+
+async function callController(
+  fn: (req: Request, res: Response) => Promise<void>,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    await (fn as any)(req, res);
+  } catch (err) {
+    errorMiddleware(err, req, res, () => {});
+  }
+}
 
 type MockResponse = Response & {
   statusCode?: number;
@@ -37,7 +50,7 @@ describe("organizationController.listOrganizations", () => {
     spyOn(orgRepo, "getAllOrganizations").mockResolvedValue(organizations as never);
     const res = createMockResponse();
 
-    await orgController.listOrganizations(createRequest(), res);
+    await callController(orgController.listOrganizations, createRequest(), res);
 
     expect(res.body).toEqual({ success: true, data: organizations });
   });
@@ -50,7 +63,7 @@ describe("organizationController.createOrganization", () => {
     const req = createRequest({ body: { name: " Org 1 ", slug: " org-1 " } });
     const res = createMockResponse();
 
-    await orgController.createOrganization(req, res);
+    await callController(orgController.createOrganization, req, res);
 
     expect(createSpy).toHaveBeenCalledWith({ name: "Org 1", slug: "org-1", logo_url: undefined });
     expect(res.statusCode).toBe(201);
@@ -72,7 +85,7 @@ describe("organizationController.updateOrganization", () => {
     });
     const res = createMockResponse();
 
-    await orgController.updateOrganization(req, res);
+    await callController(orgController.updateOrganization, req, res);
 
     expect(updateSpy).toHaveBeenCalledWith("org1", { name: "Org 1", slug: "org-1", logo_url: null });
     expect(res.body).toEqual({ success: true, data: organization });
@@ -88,7 +101,7 @@ describe("organizationController.updateOrganization", () => {
     });
     const res = createMockResponse();
 
-    await orgController.updateOrganization(req, res);
+    await callController(orgController.updateOrganization, req, res);
 
     expect(updateSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(403);
@@ -103,7 +116,7 @@ describe("organizationController.prepareOrgLogo", () => {
     const req = createRequest({ params: { id: "org1" }, body: { mime_type: "image/png" } });
     const res = createMockResponse();
 
-    await orgController.prepareOrgLogo(req, res);
+    await callController(orgController.prepareOrgLogo, req, res);
 
     expect(uploadSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(404);
@@ -116,7 +129,7 @@ describe("organizationController.prepareOrgLogo", () => {
     const req = createRequest({ params: { id: "org1" }, body: { mime_type: "image/png" } });
     const res = createMockResponse();
 
-    await orgController.prepareOrgLogo(req, res);
+    await callController(orgController.prepareOrgLogo, req, res);
 
     expect(uploadSpy).toHaveBeenCalledWith("org1", "image/png");
     expect(res.body).toEqual({ success: true, data: uploadData });
@@ -129,7 +142,7 @@ describe("organizationController.deleteOrganization", () => {
     const req = createRequest({ params: { id: MESTERPLAN_ORG_ID } });
     const res = createMockResponse();
 
-    await orgController.deleteOrganization(req, res);
+    await callController(orgController.deleteOrganization, req, res);
 
     expect(deleteSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(403);
@@ -142,7 +155,7 @@ describe("organizationController.deleteOrganization", () => {
     const res = createMockResponse();
     res.send = mock(() => res) as unknown as Response["send"];
 
-    await orgController.deleteOrganization(req, res);
+    await callController(orgController.deleteOrganization, req, res);
 
     expect(deleteSpy).toHaveBeenCalledWith("org1");
     expect(res.statusCode).toBe(204);

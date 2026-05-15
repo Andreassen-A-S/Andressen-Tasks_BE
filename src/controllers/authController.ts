@@ -1,22 +1,11 @@
 import type { Request, Response } from "express";
 import * as authService from "../services/authService";
-import type { LoginRequest, LoginResponse } from "../types/auth";
+import type { LoginResponse } from "../types/auth";
 
 export async function login(req: Request, res: Response) {
   try {
-    const credentials = req.body as LoginRequest;
-
-    // Validate required fields
-    if (!credentials.email || !credentials.password) {
-      const response: LoginResponse = {
-        success: false,
-        error: "Email and password are required",
-      };
-      return res.status(400).json(response);
-    }
-
     // Authenticate user
-    const authResult = await authService.authenticateUser(credentials);
+    const authResult = await authService.authenticateUser(req.body);
 
     const response: LoginResponse = {
       success: true,
@@ -26,18 +15,12 @@ export async function login(req: Request, res: Response) {
     res.json(response);
   } catch (error) {
     console.error("Login error:", {
-      message: error instanceof Error ? error.message : "Unknown error",
+      error: String(error),
       email: req.body?.email, // Log email for debugging (not password!)
       timestamp: new Date().toISOString(),
       ip: req.ip,
     });
-
-    const response: LoginResponse = {
-      success: false,
-      error: error instanceof Error ? error.message : "Authentication failed",
-    };
-
-    res.status(401).json(response);
+    throw error;
   }
 }
 
@@ -75,19 +58,13 @@ export async function verifyToken(req: Request, res: Response) {
   } catch (error) {
     // Detailed logging for debugging
     console.error("Token verification failed:", {
-      error: error instanceof Error ? error.message : "Unknown error",
-      errorName: error instanceof Error ? error.name : "UnknownError",
+      error: String(error),
       timestamp: new Date().toISOString(),
       ip: req.ip,
       userAgent: req.get("User-Agent"),
       // Log first few characters of token for debugging (not the whole token!)
       tokenPrefix: req.headers.authorization?.substring(0, 20) + "...",
     });
-
-    // Generic client response for security
-    res.status(401).json({
-      success: false,
-      error: "Invalid token",
-    });
+    throw error;
   }
 }

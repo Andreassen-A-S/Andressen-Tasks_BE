@@ -1,6 +1,7 @@
 import { Router } from "express";
 import * as statsController from "../controllers/statController";
 import { authenticateToken } from "../middleware/auth";
+import { asyncHandler } from "../middleware/errorMiddleware";
 
 const router = Router();
 
@@ -10,32 +11,32 @@ const router = Router();
  */
 
 // Get all dashboard stats in one call (RECOMMENDED)
-router.get("/dashboard", authenticateToken, statsController.getDashboardStats);
+router.get("/dashboard", authenticateToken, asyncHandler(statsController.getDashboardStats));
 
 // Individual stat endpoints
-router.get("/overview", authenticateToken, statsController.getOverview);
+router.get("/overview", authenticateToken, asyncHandler(statsController.getOverview));
 router.get(
   "/completion",
   authenticateToken,
-  statsController.getCompletionRates,
+  asyncHandler(statsController.getCompletionRates),
 );
-router.get("/priority", authenticateToken, statsController.getPriorityStats);
-router.get("/status", authenticateToken, statsController.getStatusStats);
+router.get("/priority", authenticateToken, asyncHandler(statsController.getPriorityStats));
+router.get("/status", authenticateToken, asyncHandler(statsController.getStatusStats));
 router.get(
   "/top-performers",
   authenticateToken,
-  statsController.getTopPerformers,
+  asyncHandler(statsController.getTopPerformers),
 );
 router.get(
   "/workload",
   authenticateToken,
-  statsController.getWorkloadDistribution,
+  asyncHandler(statsController.getWorkloadDistribution),
 );
-router.get("/recurring", authenticateToken, statsController.getRecurringStats);
-router.get("/trends", authenticateToken, statsController.getTaskTrends);
+router.get("/recurring", authenticateToken, asyncHandler(statsController.getRecurringStats));
+router.get("/trends", authenticateToken, asyncHandler(statsController.getTaskTrends));
 
 // User-specific stats
-router.get("/me", authenticateToken, statsController.getMyStats);
-router.get("/user/:userId", authenticateToken, statsController.getUserStats);
+router.get("/me", authenticateToken, asyncHandler(statsController.getMyStats));
+router.get("/user/:userId", authenticateToken, asyncHandler(statsController.getUserStats));
 
 export default router;

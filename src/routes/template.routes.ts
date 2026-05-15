@@ -3,50 +3,51 @@ import * as templateController from "../controllers/templateController";
 import { authenticateToken } from "../middleware/auth";
 import { validate } from "../middleware/validateMiddleware";
 import { createTemplateSchema, updateTemplateSchema } from "../schemas/templateSchemas";
+import { asyncHandler } from "../middleware/errorMiddleware";
 
 const router = Router();
 
 // GET /api/recurring-templates - List all templates
-router.get("/", authenticateToken, templateController.listTemplates);
+router.get("/", authenticateToken, asyncHandler(templateController.listTemplates));
 
 // List all active templates
 router.get(
   "/active",
   authenticateToken,
-  templateController.listActiveTemplates,
+  asyncHandler(templateController.listActiveTemplates),
 );
 
 // Create new template
-router.post("/", authenticateToken, validate(createTemplateSchema), templateController.createTemplate);
+router.post("/", authenticateToken, validate(createTemplateSchema), asyncHandler(templateController.createTemplate));
 
 // Get single template
-router.get("/:id", authenticateToken, templateController.getTemplate);
+router.get("/:id", authenticateToken, asyncHandler(templateController.getTemplate));
 
 // Update template
-router.patch("/:id", authenticateToken, validate(updateTemplateSchema), templateController.updateTemplate);
+router.patch("/:id", authenticateToken, validate(updateTemplateSchema), asyncHandler(templateController.updateTemplate));
 
 // Delete template
-router.delete("/:id", authenticateToken, templateController.deleteTemplate);
+router.delete("/:id", authenticateToken, asyncHandler(templateController.deleteTemplate));
 
 // Deactivate template (stop generating instances)
 router.post(
   "/:id/deactivate",
   authenticateToken,
-  templateController.deactivateTemplate,
+  asyncHandler(templateController.deactivateTemplate),
 );
 
 // Reactivate template (resume generating instances)
 router.post(
   "/:id/reactivate",
   authenticateToken,
-  templateController.reactivateTemplate,
+  asyncHandler(templateController.reactivateTemplate),
 );
 
 // Get all instances for a template
 router.get(
   "/:id/instances",
   authenticateToken,
-  templateController.getTemplateInstances,
+  asyncHandler(templateController.getTemplateInstances),
 );
 
 export default router;

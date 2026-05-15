@@ -3,6 +3,19 @@ import type { Request, Response } from "express";
 import { UserRole } from "../src/generated/prisma/client";
 import * as attachmentRepo from "../src/repositories/attachmentRepository";
 import * as storageService from "../src/services/storageService";
+import { errorMiddleware } from "../src/middleware/errorMiddleware";
+
+async function callController(
+  fn: (req: Request, res: Response) => Promise<void>,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    await (fn as any)(req, res);
+  } catch (err) {
+    errorMiddleware(err, req, res, () => {});
+  }
+}
 
 // attachmentService uses prisma.task.findFirst for access control.
 const findFirstMock = mock<(...args: any[]) => Promise<any>>(() =>
@@ -62,7 +75,7 @@ describe("attachmentController.prepareAttachments", () => {
     });
     const res = createMockResponse();
 
-    await attachmentController.prepareAttachments(req, res);
+    await callController(attachmentController.prepareAttachments, req, res);
 
     expect(res.statusCode).toBe(401);
   });
@@ -86,7 +99,7 @@ describe("attachmentController.prepareAttachments", () => {
     });
     const res = createMockResponse();
 
-    await attachmentController.prepareAttachments(req, res);
+    await callController(attachmentController.prepareAttachments, req, res);
 
     expect(res.statusCode).toBeUndefined();
     expect(res.body.success).toBe(true);
@@ -94,6 +107,21 @@ describe("attachmentController.prepareAttachments", () => {
     expect(res.body.data[0]).toMatchObject({ upload_token: "tok1" });
   });
 
+
+  test("returns 413 when file exceeds size limit for its mime type", async () => {
+    findFirstMock.mockResolvedValueOnce({ task_id: "t1", status: "PENDING", created_by: "u1", assignments: [] });
+
+    const req = createRequest({
+      body: { task_id: "t1", files: [{ file_name: "photo.jpg", mime_type: "image/jpeg", file_size: 11 * 1024 * 1024 }] },
+      user: { user_id: "u1", role: UserRole.USER },
+    });
+    const res = createMockResponse();
+
+    await callController(attachmentController.prepareAttachments, req, res);
+
+    expect(res.statusCode).toBe(413);
+    expect(res.body).toEqual({ success: false, error: "File exceeds maximum size of 10 MB" });
+  });
 
   test.each([
     ["application/pdf", "doc.pdf"],
@@ -114,7 +142,7 @@ describe("attachmentController.prepareAttachments", () => {
     });
     const res = createMockResponse();
 
-    await attachmentController.prepareAttachments(req, res);
+    await callController(attachmentController.prepareAttachments, req, res);
 
     expect(res.statusCode).toBeUndefined();
     expect(res.body).toMatchObject({ success: true, data: [{ upload_token: "tok1" }] });
@@ -130,7 +158,7 @@ describe("attachmentController.prepareAttachments", () => {
     });
     const res = createMockResponse();
 
-    await attachmentController.prepareAttachments(req, res);
+    await callController(attachmentController.prepareAttachments, req, res);
 
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({ success: false, error: "Task not found: t1" });
@@ -145,7 +173,7 @@ describe("attachmentController.prepareAttachments", () => {
     });
     const res = createMockResponse();
 
-    await attachmentController.prepareAttachments(req, res);
+    await callController(attachmentController.prepareAttachments, req, res);
 
     expect(res.statusCode).toBe(403);
     expect(res.body).toEqual({ success: false, error: "You do not have access to this task" });
@@ -166,7 +194,7 @@ describe("attachmentController.prepareAttachments", () => {
     });
     const res = createMockResponse();
 
-    await attachmentController.prepareAttachments(req, res);
+    await callController(attachmentController.prepareAttachments, req, res);
 
     expect(res.statusCode).toBeUndefined();
     expect(res.body).toMatchObject({
@@ -186,7 +214,7 @@ describe("attachmentController.deleteAttachment", () => {
     });
     const res = createMockResponse();
 
-    await attachmentController.deleteAttachment(req, res);
+    await callController(attachmentController.deleteAttachment, req, res);
 
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({ success: false, error: "Attachment not found" });
@@ -208,7 +236,7 @@ describe("attachmentController.deleteAttachment", () => {
     });
     const res = createMockResponse();
 
-    await attachmentController.deleteAttachment(req, res);
+    await callController(attachmentController.deleteAttachment, req, res);
 
     expect(res.statusCode).toBe(403);
     expect(res.body).toEqual({ success: false, error: "You do not have access to this task" });
@@ -231,7 +259,7 @@ describe("attachmentController.deleteAttachment", () => {
     });
     const res = createMockResponse();
 
-    await attachmentController.deleteAttachment(req, res);
+    await callController(attachmentController.deleteAttachment, req, res);
 
     expect(deleteSpy).toHaveBeenCalledWith("tasks/t1/uuid.jpg");
     expect(repoDeleteSpy).toHaveBeenCalledWith("a1");
@@ -255,7 +283,7 @@ describe("attachmentController.deleteAttachment", () => {
     });
     const res = createMockResponse();
 
-    await attachmentController.deleteAttachment(req, res);
+    await callController(attachmentController.deleteAttachment, req, res);
 
     expect(res.statusCode).toBe(204);
   });
@@ -271,7 +299,7 @@ describe("attachmentController.getTaskAttachments", () => {
     });
     const res = createMockResponse();
 
-    await attachmentController.getTaskAttachments(req, res);
+    await callController(attachmentController.getTaskAttachments, req, res);
 
     expect(res.statusCode).toBe(403);
     expect(res.body).toEqual({ success: false, error: "You do not have access to this task" });
@@ -290,7 +318,7 @@ describe("attachmentController.getTaskAttachments", () => {
     });
     const res = createMockResponse();
 
-    await attachmentController.getTaskAttachments(req, res);
+    await callController(attachmentController.getTaskAttachments, req, res);
 
     expect(res.statusCode).toBeUndefined();
     expect(res.body).toMatchObject({
@@ -314,7 +342,7 @@ describe("attachmentController.getTaskAttachments", () => {
     });
     const res = createMockResponse();
 
-    await attachmentController.getTaskAttachments(req, res);
+    await callController(attachmentController.getTaskAttachments, req, res);
 
     expect(res.statusCode).toBeUndefined();
     expect(res.body).toMatchObject({ success: true, data: [] });

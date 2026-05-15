@@ -1,6 +1,19 @@
 import { describe, expect, mock, spyOn, test, afterEach } from "bun:test";
 import type { Request, Response } from "express";
 import { RecurrenceFrequency, UserRole } from "../src/generated/prisma/client";
+import { errorMiddleware } from "../src/middleware/errorMiddleware";
+
+async function callController(
+  fn: (req: Request, res: Response) => Promise<void>,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    await (fn as any)(req, res);
+  } catch (err) {
+    errorMiddleware(err, req, res, () => {});
+  }
+}
 
 // Mock Prisma
 const prismaMock = {
@@ -116,7 +129,7 @@ describe("templateController.createTemplate - Validation Tests", () => {
     });
     const res = createMockResponse();
 
-    await templateController.createTemplate(req, res);
+    await callController(templateController.createTemplate, req, res);
 
     expect(res.statusCode).toBe(201);
     expect(res.body).toEqual({ success: true, data: template });
@@ -151,7 +164,7 @@ describe("templateController.createTemplate - Validation Tests", () => {
     });
     const res = createMockResponse();
 
-    await templateController.createTemplate(req, res);
+    await callController(templateController.createTemplate, req, res);
 
     expect(res.statusCode).toBe(201);
     expect(res.body).toEqual({ success: true, data: template });
@@ -183,7 +196,7 @@ describe("templateController.updateTemplate - Validation Tests", () => {
     });
     const res = createMockResponse();
 
-    await templateController.updateTemplate(req, res);
+    await callController(templateController.updateTemplate, req, res);
 
     expect(res.statusCode).toBe(400);
     expect(res.body).toMatchObject({
@@ -216,7 +229,7 @@ describe("templateController.updateTemplate - Validation Tests", () => {
     });
     const res = createMockResponse();
 
-    await templateController.updateTemplate(req, res);
+    await callController(templateController.updateTemplate, req, res);
 
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({
@@ -248,7 +261,7 @@ describe("templateController.updateTemplate - Validation Tests", () => {
     });
     const res = createMockResponse();
 
-    await templateController.updateTemplate(req, res);
+    await callController(templateController.updateTemplate, req, res);
 
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({

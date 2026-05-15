@@ -3,6 +3,19 @@ import type { Request, Response } from "express";
 import * as projectController from "../src/controllers/projectController";
 import * as projectRepo from "../src/repositories/projectRepository";
 import { ProjectNotFoundError } from "../src/repositories/projectRepository";
+import { errorMiddleware } from "../src/middleware/errorMiddleware";
+
+async function callController(
+  fn: (req: Request, res: Response) => Promise<void>,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    await (fn as any)(req, res);
+  } catch (err) {
+    errorMiddleware(err, req, res, () => {});
+  }
+}
 
 type MockResponse = Response & {
   statusCode?: number;
@@ -45,7 +58,7 @@ describe("projectController.listProjects", () => {
     spyOn(projectRepo, "getAllProjects").mockResolvedValue(projects as never);
     const res = createMockResponse();
 
-    await projectController.listProjects(createRequest(), res);
+    await callController(projectController.listProjects, createRequest(), res);
 
     expect(res.body).toEqual({ success: true, data: projects });
   });
@@ -54,7 +67,7 @@ describe("projectController.listProjects", () => {
     spyOn(projectRepo, "getAllProjects").mockRejectedValue(new Error("db fail"));
     const res = createMockResponse();
 
-    await projectController.listProjects(createRequest(), res);
+    await callController(projectController.listProjects, createRequest(), res);
 
     expect(res.statusCode).toBe(500);
   });
@@ -69,7 +82,7 @@ describe("projectController.getProject", () => {
     const req = createRequest({ params: { id: "p1" } });
     const res = createMockResponse();
 
-    await projectController.getProject(req, res);
+    await callController(projectController.getProject, req, res);
 
     expect(res.body).toEqual({ success: true, data: project });
   });
@@ -79,7 +92,7 @@ describe("projectController.getProject", () => {
     const req = createRequest({ params: { id: "p1" } });
     const res = createMockResponse();
 
-    await projectController.getProject(req, res);
+    await callController(projectController.getProject, req, res);
 
     expect(res.statusCode).toBe(404);
   });
@@ -87,7 +100,7 @@ describe("projectController.getProject", () => {
   test("returns 400 when id is missing", async () => {
     const res = createMockResponse();
 
-    await projectController.getProject(createRequest(), res);
+    await callController(projectController.getProject, createRequest(), res);
 
     expect(res.statusCode).toBe(400);
   });
@@ -106,7 +119,7 @@ describe("projectController.createProject", () => {
     });
     const res = createMockResponse();
 
-    await projectController.createProject(req, res);
+    await callController(projectController.createProject, req, res);
 
     expect(res.statusCode).toBe(201);
     expect(res.body).toEqual({ success: true, data: project });
@@ -117,7 +130,7 @@ describe("projectController.createProject", () => {
     const req = createRequest({ body: { name: "New Project" }, user: undefined });
     const res = createMockResponse();
 
-    await projectController.createProject(req, res);
+    await callController(projectController.createProject, req, res);
 
     expect(res.statusCode).toBe(401);
   });
@@ -131,7 +144,7 @@ describe("projectController.createProject", () => {
     });
     const res = createMockResponse();
 
-    await projectController.createProject(req, res);
+    await callController(projectController.createProject, req, res);
 
     expect(res.statusCode).toBe(500);
   });
@@ -149,7 +162,7 @@ describe("projectController.updateProject", () => {
     });
     const res = createMockResponse();
 
-    await projectController.updateProject(req, res);
+    await callController(projectController.updateProject, req, res);
 
     expect(res.body).toEqual({ success: true, data: project });
   });
@@ -159,7 +172,7 @@ describe("projectController.updateProject", () => {
     const req = createRequest({ params: { id: "p1" }, body: { name: "x" } });
     const res = createMockResponse();
 
-    await projectController.updateProject(req, res);
+    await callController(projectController.updateProject, req, res);
 
     expect(res.statusCode).toBe(404);
   });
@@ -167,7 +180,7 @@ describe("projectController.updateProject", () => {
   test("returns 400 when id is missing", async () => {
     const res = createMockResponse();
 
-    await projectController.updateProject(createRequest(), res);
+    await callController(projectController.updateProject, createRequest(), res);
 
     expect(res.statusCode).toBe(400);
   });
@@ -181,7 +194,7 @@ describe("projectController.deleteProject", () => {
     const req = createRequest({ params: { id: "p1" } });
     const res = createMockResponse();
 
-    await projectController.deleteProject(req, res);
+    await callController(projectController.deleteProject, req, res);
 
     expect(res.statusCode).toBe(204);
   });
@@ -191,7 +204,7 @@ describe("projectController.deleteProject", () => {
     const req = createRequest({ params: { id: "p1" } });
     const res = createMockResponse();
 
-    await projectController.deleteProject(req, res);
+    await callController(projectController.deleteProject, req, res);
 
     expect(res.statusCode).toBe(404);
   });
@@ -199,7 +212,7 @@ describe("projectController.deleteProject", () => {
   test("returns 400 when id is missing", async () => {
     const res = createMockResponse();
 
-    await projectController.deleteProject(createRequest(), res);
+    await callController(projectController.deleteProject, createRequest(), res);
 
     expect(res.statusCode).toBe(400);
   });
