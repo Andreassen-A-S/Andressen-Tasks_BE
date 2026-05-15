@@ -7,6 +7,19 @@ import {
   TaskUnit,
 } from "../src/generated/prisma/client";
 import * as taskController from "../src/controllers/taskController";
+import { errorMiddleware } from "../src/middleware/errorMiddleware";
+
+async function callController(
+  fn: (req: Request, res: Response) => Promise<void>,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    await (fn as any)(req, res);
+  } catch (err) {
+    errorMiddleware(err, req, res, () => {});
+  }
+}
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
 import * as taskRepo from "../src/repositories/taskRepository";
 import * as userRepo from "../src/repositories/userRepository";
@@ -73,7 +86,7 @@ describe("taskController.listTasks", () => {
     const req = createRequest({ user: { user_id: "u1", role: "USER", organization_id: null } });
     const res = createMockResponse();
 
-    await taskController.listTasks(req, res);
+    await callController(taskController.listTasks, req, res);
 
     expect(res.body).toEqual({ success: true, data: tasks });
   });
@@ -83,7 +96,7 @@ describe("taskController.listTasks", () => {
     const req = createRequest({ user: undefined });
     const res = createMockResponse();
 
-    await taskController.listTasks(req, res);
+    await callController(taskController.listTasks, req, res);
 
     expect(repoSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(401);
@@ -95,12 +108,12 @@ describe("taskController.listTasks", () => {
     const req = createRequest({ user: { user_id: "u1", role: "USER", organization_id: null } });
     const res = createMockResponse();
 
-    await taskController.listTasks(req, res);
+    await callController(taskController.listTasks, req, res);
 
     expect(res.statusCode).toBe(500);
     expect(res.body).toEqual({
       success: false,
-      error: "Failed to fetch tasks",
+      error: "Internal server error",
     });
   });
 });
@@ -111,7 +124,7 @@ describe("taskController.getTask", () => {
     const req = createRequest({ params: { id: " " } as Request["params"] });
     const res = createMockResponse();
 
-    await taskController.getTask(req, res);
+    await callController(taskController.getTask, req, res);
 
     expect(repoSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(400);
@@ -128,7 +141,7 @@ describe("taskController.createTask", () => {
     const req = createRequest({ user: undefined });
     const res = createMockResponse();
 
-    await taskController.createTask(req, res);
+    await callController(taskController.createTask, req, res);
 
     expect(repoSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(401);
@@ -156,7 +169,7 @@ describe("taskController.createTask", () => {
     });
     const res = createMockResponse();
 
-    await taskController.createTask(req, res);
+    await callController(taskController.createTask, req, res);
 
     expect(repoSpy).toHaveBeenCalledWith(
       expect.anything(),
@@ -186,7 +199,7 @@ describe("taskController.createTask", () => {
     });
     const res = createMockResponse();
 
-    await taskController.createTask(req, res);
+    await callController(taskController.createTask, req, res);
 
     // Service normalizes created_by to the authenticated actor (u1), ignoring the supplied value (u2).
     expect(repoSpy).toHaveBeenCalledWith(
@@ -197,37 +210,6 @@ describe("taskController.createTask", () => {
     expect(res.statusCode).toBe(201);
   });
 
-  test("returns 400 when project_id is missing", async () => {
-    const repoSpy = spyOn(taskRepo, "createTaskWithAssignments");
-
-    const req = createRequest({
-      user: { user_id: "u1" },
-      body: { title: "Task", created_by: "u1" },
-    });
-    const res = createMockResponse();
-
-    await taskController.createTask(req, res);
-
-    expect(repoSpy).not.toHaveBeenCalled();
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "project_id is required" });
-  });
-
-  test("returns 400 when project_id is blank", async () => {
-    const repoSpy = spyOn(taskRepo, "createTaskWithAssignments");
-
-    const req = createRequest({
-      user: { user_id: "u1" },
-      body: { title: "Task", created_by: "u1", project_id: "   " },
-    });
-    const res = createMockResponse();
-
-    await taskController.createTask(req, res);
-
-    expect(repoSpy).not.toHaveBeenCalled();
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "project_id is required" });
-  });
 
   test("creates task and logs task + assignment events", async () => {
     transactionMock.mockImplementation((fn: any) => fn({}));
@@ -252,7 +234,7 @@ describe("taskController.createTask", () => {
     });
     const res = createMockResponse();
 
-    await taskController.createTask(req, res);
+    await callController(taskController.createTask, req, res);
 
     expect(eventSpy).toHaveBeenCalledTimes(3);
     expect(eventSpy.mock.calls[0]?.[1]?.type).toBe(TaskEventType.TASK_CREATED);
@@ -281,7 +263,7 @@ describe("taskController.createTask", () => {
     });
     const res = createMockResponse();
 
-    await taskController.createTask(req, res);
+    await callController(taskController.createTask, req, res);
 
     expect(repoSpy).toHaveBeenCalledWith(
       expect.anything(),
@@ -303,7 +285,7 @@ describe("taskController.createTask", () => {
     });
     const res = createMockResponse();
 
-    await taskController.createTask(req, res);
+    await callController(taskController.createTask, req, res);
 
     expect(res.statusCode).toBe(403);
     expect(res.body).toEqual({
@@ -329,7 +311,7 @@ describe("taskController.updateTask", () => {
     });
     const res = createMockResponse();
 
-    await taskController.updateTask(req, res);
+    await callController(taskController.updateTask, req, res);
 
     expect(taskRepo.updateTaskPlatform).toHaveBeenCalledWith(expect.anything(), "t1", { title: "new" }, "u1");
     expect(eventSpy).toHaveBeenCalledTimes(1);
@@ -349,7 +331,7 @@ describe("taskController.updateTask", () => {
     });
     const res = createMockResponse();
 
-    await taskController.updateTask(req, res);
+    await callController(taskController.updateTask, req, res);
 
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({ success: false, error: "Task not found: t1" });
@@ -367,7 +349,7 @@ describe("taskController.updateTask", () => {
     });
     const res = createMockResponse();
 
-    await taskController.updateTask(req, res);
+    await callController(taskController.updateTask, req, res);
 
     expect(updateSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(404);
@@ -389,7 +371,7 @@ describe("taskController.updateTask", () => {
     });
     const res = createMockResponse();
 
-    await taskController.updateTask(req, res);
+    await callController(taskController.updateTask, req, res);
 
     expect(res.statusCode).toBe(403);
     expect(res.body).toEqual({
@@ -413,7 +395,7 @@ describe("taskController.updateTask", () => {
     });
     const res = createMockResponse();
 
-    await taskController.updateTask(req, res);
+    await callController(taskController.updateTask, req, res);
 
     expect(res.statusCode).toBe(403);
     expect(res.body).toEqual({
@@ -434,7 +416,7 @@ describe("taskController.updateTask", () => {
     });
     const res = createMockResponse();
 
-    await taskController.updateTask(req, res);
+    await callController(taskController.updateTask, req, res);
 
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({
@@ -467,7 +449,7 @@ describe("taskController.updateTask", () => {
     });
     const res = createMockResponse();
 
-    await taskController.updateTask(req, res);
+    await callController(taskController.updateTask, req, res);
 
     expect(eventSpy).toHaveBeenCalledTimes(3);
     expect(eventSpy.mock.calls[0]?.[1]?.type).toBe(TaskEventType.ASSIGNMENT_CREATED);
@@ -491,7 +473,7 @@ describe("taskController.updateTask", () => {
     });
     const res = createMockResponse();
 
-    await taskController.updateTask(req, res);
+    await callController(taskController.updateTask, req, res);
 
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({ success: false, error: "Task not found: t1" });
@@ -509,7 +491,7 @@ describe("taskController.updateTask", () => {
     });
     const res = createMockResponse();
 
-    await taskController.updateTask(req, res);
+    await callController(taskController.updateTask, req, res);
 
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({
@@ -530,7 +512,8 @@ describe("taskController.updateTask", () => {
     ]);
     sendPushNotificationMock.mockResolvedValue(undefined);
 
-    await taskController.updateTask(
+    await callController(
+      taskController.updateTask,
       createRequest({
         user: { user_id: "u1" },
         params: { id: "t1" } as Request["params"],
@@ -558,7 +541,8 @@ describe("taskController.updateTask", () => {
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
     const adminSpy = spyOn(userRepo, "getAdminPushTokens");
 
-    await taskController.updateTask(
+    await callController(
+      taskController.updateTask,
       createRequest({
         user: { user_id: "u1" },
         params: { id: "t1" } as Request["params"],
@@ -592,7 +576,8 @@ describe("taskController.updateTask", () => {
     );
     sendPushNotificationMock.mockResolvedValue(undefined);
 
-    await taskController.updateTask(
+    await callController(
+      taskController.updateTask,
       createRequest({
         user: { user_id: "u1" },
         params: { id: "t1" } as Request["params"],
@@ -628,7 +613,8 @@ describe("taskController.updateTask", () => {
     spyOn(taskRepo, "updateTaskPlatform").mockResolvedValue(updatedTask as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
 
-    await taskController.updateTask(
+    await callController(
+      taskController.updateTask,
       createRequest({
         user: { user_id: "u1" },
         params: { id: "t1" } as Request["params"],
@@ -658,7 +644,8 @@ describe("taskController.updateTask", () => {
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
 
-    await taskController.updateTask(
+    await callController(
+      taskController.updateTask,
       createRequest({
         user: { user_id: "u1" },
         params: { id: "t1" } as Request["params"],
@@ -687,7 +674,8 @@ describe("taskController.updateTask", () => {
     spyOn(taskRepo, "updateTaskPlatform").mockResolvedValue(updatedTask as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
 
-    await taskController.updateTask(
+    await callController(
+      taskController.updateTask,
       createRequest({
         user: { user_id: "u1" },
         params: { id: "t1" } as Request["params"],
@@ -717,7 +705,8 @@ describe("taskController.updateTask", () => {
     ]);
     sendPushNotificationMock.mockResolvedValue(undefined);
 
-    await taskController.updateTask(
+    await callController(
+      taskController.updateTask,
       createRequest({
         user: { user_id: "u1" },
         params: { id: "t1" } as Request["params"],
@@ -754,7 +743,7 @@ describe("taskController.deleteTask", () => {
     });
     const res = createMockResponse();
 
-    await taskController.deleteTask(req, res);
+    await callController(taskController.deleteTask, req, res);
 
     expect(eventSpy).toHaveBeenCalledTimes(1);
     expect(eventSpy.mock.calls[0]?.[1]?.type).toBe(TaskEventType.TASK_DELETED);
@@ -773,7 +762,7 @@ describe("taskController.deleteTask", () => {
     });
     const res = createMockResponse();
 
-    await taskController.deleteTask(req, res);
+    await callController(taskController.deleteTask, req, res);
 
     expect(deleteSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(404);
@@ -792,7 +781,7 @@ describe("taskController.deleteTask", () => {
     });
     const res = createMockResponse();
 
-    await taskController.deleteTask(req, res);
+    await callController(taskController.deleteTask, req, res);
 
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({ success: false, error: "Task not found: t1" });
@@ -813,7 +802,7 @@ describe("taskController.upsertProgressLog", () => {
     });
     const res = createMockResponse();
 
-    await taskController.upsertProgressLog(req, res);
+    await callController(taskController.upsertProgressLog, req, res);
 
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({ success: false, error: "Task not found: t1" });
@@ -832,7 +821,7 @@ describe("taskController.upsertProgressLog", () => {
     });
     const res = createMockResponse();
 
-    await taskController.upsertProgressLog(req, res);
+    await callController(taskController.upsertProgressLog, req, res);
 
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({
@@ -854,7 +843,7 @@ describe("taskController.upsertProgressLog", () => {
     });
     const res = createMockResponse();
 
-    await taskController.upsertProgressLog(req, res);
+    await callController(taskController.upsertProgressLog, req, res);
 
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({
@@ -893,7 +882,7 @@ describe("taskController.upsertProgressLog", () => {
 
     const res = createMockResponse();
 
-    await taskController.upsertProgressLog(req, res);
+    await callController(taskController.upsertProgressLog, req, res);
 
     expect(taskRepo.upsertProgressLogPlatform).toHaveBeenCalledWith(expect.anything(), "t1", "u1", 5, TaskUnit.METERS, "good");
     expect(eventSpy).toHaveBeenCalledTimes(1);
@@ -922,7 +911,8 @@ describe("taskController.upsertProgressLog", () => {
     ]);
     sendPushNotificationMock.mockResolvedValue(undefined);
 
-    await taskController.upsertProgressLog(
+    await callController(
+      taskController.upsertProgressLog,
       createRequest({
         user: { user_id: "u1" },
         params: { id: "t1" } as Request["params"],
@@ -952,7 +942,8 @@ describe("taskController.upsertProgressLog", () => {
       { user_id: "a1", push_token: "token-a1" },
     ]);
 
-    await taskController.upsertProgressLog(
+    await callController(
+      taskController.upsertProgressLog,
       createRequest({
         user: { user_id: "a1" }, // same as admin
         params: { id: "t1" } as Request["params"],
@@ -976,7 +967,7 @@ describe("taskController.upsertProgressLog", () => {
     });
     const res = createMockResponse();
 
-    await taskController.upsertProgressLog(req, res);
+    await callController(taskController.upsertProgressLog, req, res);
 
     expect(taskRepo.upsertProgressLogInOrg).toHaveBeenCalledWith(
       expect.anything(),

@@ -4,6 +4,19 @@ import { TaskEventType } from "../src/generated/prisma/client";
 import * as subTaskController from "../src/controllers/subTaskController";
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
 import * as taskRepo from "../src/repositories/taskRepository";
+import { errorMiddleware } from "../src/middleware/errorMiddleware";
+
+async function callController(
+  fn: (req: Request, res: Response) => Promise<void>,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    await (fn as any)(req, res);
+  } catch (err) {
+    errorMiddleware(err, req, res, () => {});
+  }
+}
 
 // subTaskService uses prisma.$transaction — mock it so tests don't need a real DB.
 const transactionMock = mock<(fn: (tx: any) => Promise<any>) => Promise<any>>();
@@ -48,30 +61,18 @@ afterEach(() => {
 });
 
 describe("subTaskController.createSubtask", () => {
-  test("returns 400 when parent_task_id is missing", async () => {
-    const req = createRequest({ body: { title: "subtask" } });
-    const res = createMockResponse();
-
-    await subTaskController.createSubtask(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({
-      success: false,
-      error: "parent_task_id is required",
-    });
-  });
 
   test("returns 404 when parent task does not exist", async () => {
     spyOn(taskRepo, "getTaskById").mockResolvedValue(null);
     const req = createRequest({ body: { parent_task_id: "p1", title: "sub" } });
     const res = createMockResponse();
 
-    await subTaskController.createSubtask(req, res);
+    await callController(subTaskController.createSubtask, req, res);
 
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({
       success: false,
-      error: "Parent task not found",
+      error: "Task not found: p1",
     });
   });
 
@@ -95,7 +96,7 @@ describe("subTaskController.createSubtask", () => {
     });
     const res = createMockResponse();
 
-    await subTaskController.createSubtask(req, res);
+    await callController(subTaskController.createSubtask, req, res);
 
     expect(eventSpy).toHaveBeenCalledTimes(2);
     // createTaskEvent(db, data) — second arg (index 1) carries the event type

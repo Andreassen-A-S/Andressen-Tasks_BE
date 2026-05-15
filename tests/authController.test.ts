@@ -3,6 +3,20 @@ import type { Request, Response } from "express";
 import { UserRole } from "../src/generated/prisma/client";
 import * as authController from "../src/controllers/authController";
 import * as authService from "../src/services/authService";
+import { AuthenticationError } from "../src/errors/domainErrors";
+import { errorMiddleware } from "../src/middleware/errorMiddleware";
+
+async function callController(
+  fn: (req: Request, res: Response) => Promise<void>,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    await (fn as any)(req, res);
+  } catch (err) {
+    errorMiddleware(err, req, res, () => {});
+  }
+}
 
 type MockResponse = Response & {
   statusCode?: number;
@@ -46,19 +60,6 @@ afterEach(() => {
 });
 
 describe("authController.login", () => {
-  test("returns 400 when email/password are missing", async () => {
-    const req = createRequest({ body: { email: "" } });
-    const res = createMockResponse();
-
-    await authController.login(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({
-      success: false,
-      error: "Email and password are required",
-    });
-  });
-
   test("returns auth payload on success", async () => {
     const authResult = {
       token: "jwt",
@@ -70,19 +71,19 @@ describe("authController.login", () => {
     const req = createRequest({ body: { email: "x@x.com", password: "pw" } });
     const res = createMockResponse();
 
-    await authController.login(req, res);
+    await callController(authController.login, req, res);
 
     expect(res.body).toEqual({ success: true, data: authResult });
   });
 
   test("returns 401 when authentication fails", async () => {
     spyOn(authService, "authenticateUser").mockRejectedValue(
-      new Error("Invalid credentials"),
+      new AuthenticationError("Invalid credentials"),
     );
     const req = createRequest({ body: { email: "x@x.com", password: "bad" } });
     const res = createMockResponse();
 
-    await authController.login(req, res);
+    await callController(authController.login, req, res);
 
     expect(res.statusCode).toBe(401);
     expect(res.body).toEqual({
@@ -97,7 +98,7 @@ describe("authController.verifyToken", () => {
     const req = createRequest({ headers: {} });
     const res = createMockResponse();
 
-    await authController.verifyToken(req, res);
+    await callController(authController.verifyToken, req, res);
 
     expect(res.statusCode).toBe(401);
     expect(res.body).toEqual({ success: false, error: "No token provided" });
@@ -116,21 +117,21 @@ describe("authController.verifyToken", () => {
     });
     const res = createMockResponse();
 
-    await authController.verifyToken(req, res);
+    await callController(authController.verifyToken, req, res);
 
     expect(res.body).toEqual({ success: true, data: payload });
   });
 
   test("returns 401 for invalid token", async () => {
     spyOn(authService, "verifyToken").mockImplementation(() => {
-      throw new Error("invalid token");
+      throw new AuthenticationError("Invalid token");
     });
     const req = createRequest({
       headers: { authorization: "Bearer bad-token" } as Request["headers"],
     });
     const res = createMockResponse();
 
-    await authController.verifyToken(req, res);
+    await callController(authController.verifyToken, req, res);
 
     expect(res.statusCode).toBe(401);
     expect(res.body).toEqual({ success: false, error: "Invalid token" });

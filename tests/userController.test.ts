@@ -3,6 +3,20 @@ import type { Request, Response } from "express";
 import * as userController from "../src/controllers/userController";
 import * as userRepo from "../src/repositories/userRepository";
 import { UserRole } from "../src/generated/prisma/client";
+import { UserNotFoundError } from "../src/errors/domainErrors";
+import { errorMiddleware } from "../src/middleware/errorMiddleware";
+
+async function callController(
+  fn: (req: Request, res: Response) => Promise<void>,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    await (fn as any)(req, res);
+  } catch (err) {
+    errorMiddleware(err, req, res, () => {});
+  }
+}
 
 type MockResponse = Response & {
   statusCode?: number;
@@ -46,7 +60,7 @@ describe("userController.listUsers", () => {
     const req = createRequest({ user: { user_id: "u1", role: UserRole.USER, organization_id: null } });
     const res = createMockResponse();
 
-    await userController.listUsers(req, res);
+    await callController(userController.listUsers, req, res);
 
     expect(res.body).toEqual({ success: true, data: users });
   });
@@ -56,7 +70,7 @@ describe("userController.listUsers", () => {
     const req = createRequest({ user: undefined });
     const res = createMockResponse();
 
-    await userController.listUsers(req, res);
+    await callController(userController.listUsers, req, res);
 
     expect(repoSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(401);
@@ -73,7 +87,7 @@ describe("userController.getUser", () => {
     });
     const res = createMockResponse();
 
-    await userController.getUser(req, res);
+    await callController(userController.getUser, req, res);
 
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({ success: false, error: "User not found" });
@@ -84,7 +98,7 @@ describe("userController.getUser", () => {
     const req = createRequest({ user: undefined, params: { id: "u1" } as Request["params"] });
     const res = createMockResponse();
 
-    await userController.getUser(req, res);
+    await callController(userController.getUser, req, res);
 
     expect(repoSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(401);
@@ -102,7 +116,7 @@ describe("userController.createUser", () => {
     });
     const res = createMockResponse();
 
-    await userController.createUser(req, res);
+    await callController(userController.createUser, req, res);
 
     expect(createSpy).toHaveBeenCalledWith({
       name: undefined,
@@ -125,7 +139,7 @@ describe("userController.createUser", () => {
     });
     const res = createMockResponse();
 
-    await userController.createUser(req, res);
+    await callController(userController.createUser, req, res);
 
     expect(createSpy).toHaveBeenCalledWith({
       name: undefined,
@@ -146,7 +160,7 @@ describe("userController.createUser", () => {
     });
     const res = createMockResponse();
 
-    await userController.createUser(req, res);
+    await callController(userController.createUser, req, res);
 
     expect(createSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(400);
@@ -161,7 +175,7 @@ describe("userController.createUser", () => {
     });
     const res = createMockResponse();
 
-    await userController.createUser(req, res);
+    await callController(userController.createUser, req, res);
 
     expect(createSpy).toHaveBeenCalledWith({
       name: undefined,
@@ -182,7 +196,7 @@ describe("userController.createUser", () => {
     });
     const res = createMockResponse();
 
-    await userController.createUser(req, res);
+    await callController(userController.createUser, req, res);
 
     expect(repoSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(403);
@@ -201,7 +215,7 @@ describe("userController.updateUser", () => {
     });
     const res = createMockResponse();
 
-    await userController.updateUser(req, res);
+    await callController(userController.updateUser, req, res);
 
     expect(updateSpy).toHaveBeenCalledWith("u1", "org1", { name: "Updated" });
     expect(res.body).toEqual({ success: true, data: user });
@@ -218,14 +232,14 @@ describe("userController.updateUser", () => {
     });
     const res = createMockResponse();
 
-    await userController.updateUser(req, res);
+    await callController(userController.updateUser, req, res);
 
     expect(updateSpy).toHaveBeenCalledWith("u2", "org1", { name: "Updated" });
     expect(res.body).toEqual({ success: true, data: user });
   });
 
   test("admin from org A cannot update user from org B", async () => {
-    const updateSpy = spyOn(userRepo, "updateUserInOrg").mockRejectedValue(new Error("User not found"));
+    const updateSpy = spyOn(userRepo, "updateUserInOrg").mockRejectedValue(new UserNotFoundError("user-org-b"));
     const req = createRequest({
       user: { user_id: "admin-a", role: UserRole.ADMIN, organization_id: "org-a" },
       effectiveOrgId: "org-a",
@@ -234,11 +248,11 @@ describe("userController.updateUser", () => {
     });
     const res = createMockResponse();
 
-    await userController.updateUser(req, res);
+    await callController(userController.updateUser, req, res);
 
     expect(updateSpy).toHaveBeenCalledWith("user-org-b", "org-a", { name: "Hacked" });
     expect(res.statusCode).toBe(404);
-    expect(res.body).toEqual({ success: false, error: "User not found or update failed" });
+    expect(res.body).toEqual({ success: false, error: "User not found: user-org-b" });
   });
 
   test("superadmin with org context is scoped to that organization on update", async () => {
@@ -252,7 +266,7 @@ describe("userController.updateUser", () => {
     });
     const res = createMockResponse();
 
-    await userController.updateUser(req, res);
+    await callController(userController.updateUser, req, res);
 
     expect(updateSpy).toHaveBeenCalledWith("u2", "org-a", { name: "Updated" });
     expect(res.body).toEqual({ success: true, data: user });
@@ -269,7 +283,7 @@ describe("userController.updateUser", () => {
     });
     const res = createMockResponse();
 
-    await userController.updateUser(req, res);
+    await callController(userController.updateUser, req, res);
 
     expect(updateSpy).toHaveBeenCalledWith("u2", { name: "Updated" });
     expect(res.body).toEqual({ success: true, data: user });
@@ -284,7 +298,7 @@ describe("userController.updateUser", () => {
     });
     const res = createMockResponse();
 
-    await userController.updateUser(req, res);
+    await callController(userController.updateUser, req, res);
 
     expect(repoSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(403);
@@ -302,7 +316,7 @@ describe("userController.deleteUser", () => {
     });
     const res = createMockResponse();
 
-    await userController.deleteUser(req, res);
+    await callController(userController.deleteUser, req, res);
 
     expect(deleteSpy).toHaveBeenCalledWith("u1", "org1");
     expect(res.statusCode).toBe(204);
@@ -316,7 +330,7 @@ describe("userController.deleteUser", () => {
     });
     const res = createMockResponse();
 
-    await userController.deleteUser(req, res);
+    await callController(userController.deleteUser, req, res);
 
     expect(repoSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(403);
@@ -324,21 +338,21 @@ describe("userController.deleteUser", () => {
   });
 
   test("returns 404 when delete fails", async () => {
-    spyOn(userRepo, "deleteUserInOrg").mockRejectedValue(new Error("missing"));
+    spyOn(userRepo, "deleteUserInOrg").mockRejectedValue(new UserNotFoundError("u1"));
     const req = createRequest({
       user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
       params: { id: "u1" } as Request["params"],
     });
     const res = createMockResponse();
 
-    await userController.deleteUser(req, res);
+    await callController(userController.deleteUser, req, res);
 
     expect(res.statusCode).toBe(404);
-    expect(res.body).toEqual({ success: false, error: "User not found" });
+    expect(res.body).toEqual({ success: false, error: "User not found: u1" });
   });
 
   test("admin from org A cannot delete user from org B", async () => {
-    const deleteSpy = spyOn(userRepo, "deleteUserInOrg").mockRejectedValue(new Error("User not found"));
+    const deleteSpy = spyOn(userRepo, "deleteUserInOrg").mockRejectedValue(new UserNotFoundError("user-org-b"));
     const req = createRequest({
       user: { user_id: "admin-a", role: UserRole.ADMIN, organization_id: "org-a" },
       effectiveOrgId: "org-a",
@@ -346,11 +360,11 @@ describe("userController.deleteUser", () => {
     });
     const res = createMockResponse();
 
-    await userController.deleteUser(req, res);
+    await callController(userController.deleteUser, req, res);
 
     expect(deleteSpy).toHaveBeenCalledWith("user-org-b", "org-a");
     expect(res.statusCode).toBe(404);
-    expect(res.body).toEqual({ success: false, error: "User not found" });
+    expect(res.body).toEqual({ success: false, error: "User not found: user-org-b" });
   });
 
   test("superadmin without org context can delete globally", async () => {
@@ -362,7 +376,7 @@ describe("userController.deleteUser", () => {
     });
     const res = createMockResponse();
 
-    await userController.deleteUser(req, res);
+    await callController(userController.deleteUser, req, res);
 
     expect(deleteSpy).toHaveBeenCalledWith("u1");
     expect(res.statusCode).toBe(204);

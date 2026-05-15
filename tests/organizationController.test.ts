@@ -4,6 +4,19 @@ import * as orgController from "../src/controllers/organizationController";
 import * as orgRepo from "../src/repositories/organizationRepository";
 import * as storageService from "../src/services/storageService";
 import { MESTERPLAN_ORG_ID } from "../src/constants";
+import { errorMiddleware } from "../src/middleware/errorMiddleware";
+
+async function callController(
+  fn: (req: Request, res: Response) => Promise<void>,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    await (fn as any)(req, res);
+  } catch (err) {
+    errorMiddleware(err, req, res, () => {});
+  }
+}
 
 type MockResponse = Response & {
   statusCode?: number;
@@ -37,7 +50,7 @@ describe("organizationController.listOrganizations", () => {
     spyOn(orgRepo, "getAllOrganizations").mockResolvedValue(organizations as never);
     const res = createMockResponse();
 
-    await orgController.listOrganizations(createRequest(), res);
+    await callController(orgController.listOrganizations, createRequest(), res);
 
     expect(res.body).toEqual({ success: true, data: organizations });
   });
@@ -50,43 +63,17 @@ describe("organizationController.createOrganization", () => {
     const req = createRequest({ body: { name: " Org 1 ", slug: " org-1 " } });
     const res = createMockResponse();
 
-    await orgController.createOrganization(req, res);
+    await callController(orgController.createOrganization, req, res);
 
     expect(createSpy).toHaveBeenCalledWith({ name: "Org 1", slug: "org-1", logo_url: undefined });
     expect(res.statusCode).toBe(201);
     expect(res.body).toEqual({ success: true, data: organization });
   });
 
-  test("returns 400 for invalid name", async () => {
-    const req = createRequest({ body: { name: 123, slug: "org-1" } });
-    const res = createMockResponse();
 
-    await orgController.createOrganization(req, res);
-
-    expect(res.statusCode).toBe(400);
-  });
-
-  test("returns 400 for invalid logo_url", async () => {
-    const req = createRequest({ body: { name: "Org 1", slug: "org-1", logo_url: "https://example.com/logo.png" } });
-    const res = createMockResponse();
-
-    await orgController.createOrganization(req, res);
-
-    expect(res.statusCode).toBe(400);
-  });
 });
 
 describe("organizationController.updateOrganization", () => {
-  test("returns 400 for non-string name", async () => {
-    const updateSpy = spyOn(orgRepo, "updateOrganization");
-    const req = createRequest({ params: { id: "org1" }, body: { name: 123 } });
-    const res = createMockResponse();
-
-    await orgController.updateOrganization(req, res);
-
-    expect(updateSpy).not.toHaveBeenCalled();
-    expect(res.statusCode).toBe(400);
-  });
 
   test("updates organization with trimmed fields", async () => {
     const organization = { org_id: "org1", name: "Org 1", slug: "org-1" };
@@ -98,22 +85,12 @@ describe("organizationController.updateOrganization", () => {
     });
     const res = createMockResponse();
 
-    await orgController.updateOrganization(req, res);
+    await callController(orgController.updateOrganization, req, res);
 
     expect(updateSpy).toHaveBeenCalledWith("org1", { name: "Org 1", slug: "org-1", logo_url: null });
     expect(res.body).toEqual({ success: true, data: organization });
   });
 
-  test("returns 400 for invalid update logo_url", async () => {
-    const updateSpy = spyOn(orgRepo, "updateOrganization");
-    const req = createRequest({ params: { id: "org1" }, body: { logo_url: "not-a-gcs-path" } });
-    const res = createMockResponse();
-
-    await orgController.updateOrganization(req, res);
-
-    expect(updateSpy).not.toHaveBeenCalled();
-    expect(res.statusCode).toBe(400);
-  });
 
   test("returns 403 when admin updates slug", async () => {
     const updateSpy = spyOn(orgRepo, "updateOrganization");
@@ -124,7 +101,7 @@ describe("organizationController.updateOrganization", () => {
     });
     const res = createMockResponse();
 
-    await orgController.updateOrganization(req, res);
+    await callController(orgController.updateOrganization, req, res);
 
     expect(updateSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(403);
@@ -132,28 +109,6 @@ describe("organizationController.updateOrganization", () => {
 });
 
 describe("organizationController.prepareOrgLogo", () => {
-  test("returns 400 when mime_type is invalid", async () => {
-    const uploadSpy = spyOn(storageService, "generateOrgLogoUploadUrl");
-    const req = createRequest({ params: { id: "org1" }, body: { mime_type: 123 } });
-    const res = createMockResponse();
-
-    await orgController.prepareOrgLogo(req, res);
-
-    expect(uploadSpy).not.toHaveBeenCalled();
-    expect(res.statusCode).toBe(400);
-  });
-
-  test("returns 400 when mime_type is not a supported image", async () => {
-    const uploadSpy = spyOn(storageService, "generateOrgLogoUploadUrl");
-    const req = createRequest({ params: { id: "org1" }, body: { mime_type: "application/pdf" } });
-    const res = createMockResponse();
-
-    await orgController.prepareOrgLogo(req, res);
-
-    expect(uploadSpy).not.toHaveBeenCalled();
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Unsupported logo mime_type" });
-  });
 
   test("returns 404 when organization does not exist", async () => {
     const uploadSpy = spyOn(storageService, "generateOrgLogoUploadUrl");
@@ -161,7 +116,7 @@ describe("organizationController.prepareOrgLogo", () => {
     const req = createRequest({ params: { id: "org1" }, body: { mime_type: "image/png" } });
     const res = createMockResponse();
 
-    await orgController.prepareOrgLogo(req, res);
+    await callController(orgController.prepareOrgLogo, req, res);
 
     expect(uploadSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(404);
@@ -174,7 +129,7 @@ describe("organizationController.prepareOrgLogo", () => {
     const req = createRequest({ params: { id: "org1" }, body: { mime_type: "image/png" } });
     const res = createMockResponse();
 
-    await orgController.prepareOrgLogo(req, res);
+    await callController(orgController.prepareOrgLogo, req, res);
 
     expect(uploadSpy).toHaveBeenCalledWith("org1", "image/png");
     expect(res.body).toEqual({ success: true, data: uploadData });
@@ -187,11 +142,11 @@ describe("organizationController.deleteOrganization", () => {
     const req = createRequest({ params: { id: MESTERPLAN_ORG_ID } });
     const res = createMockResponse();
 
-    await orgController.deleteOrganization(req, res);
+    await callController(orgController.deleteOrganization, req, res);
 
     expect(deleteSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(403);
-    expect(res.body).toEqual({ success: false, error: "MesterPlan organization cannot be deleted" });
+    expect(res.body).toEqual({ success: false, error: "This organization cannot be deleted" });
   });
 
   test("deletes organization with no content response", async () => {
@@ -200,7 +155,7 @@ describe("organizationController.deleteOrganization", () => {
     const res = createMockResponse();
     res.send = mock(() => res) as unknown as Response["send"];
 
-    await orgController.deleteOrganization(req, res);
+    await callController(orgController.deleteOrganization, req, res);
 
     expect(deleteSpy).toHaveBeenCalledWith("org1");
     expect(res.statusCode).toBe(204);

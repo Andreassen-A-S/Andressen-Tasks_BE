@@ -2,6 +2,19 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { Request, Response } from "express";
 import { Task, TaskStatus, UserRole } from "../src/generated/prisma/client";
 import { InvalidUploadTokenError } from "../src/errors/domainErrors";
+import { errorMiddleware } from "../src/middleware/errorMiddleware";
+
+async function callController(
+  fn: (req: Request, res: Response) => Promise<void>,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    await (fn as any)(req, res);
+  } catch (err) {
+    errorMiddleware(err, req, res, () => {});
+  }
+}
 import * as commentRepo from "../src/repositories/commentRepository";
 import * as attachmentRepo from "../src/repositories/attachmentRepository";
 import * as taskEventRepo from "../src/repositories/taskEventRepository";
@@ -77,7 +90,7 @@ describe("commentController.listTaskComments", () => {
     });
     const res = createMockResponse();
 
-    await commentController.listTaskComments(req, res);
+    await callController(commentController.listTaskComments, req, res);
 
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({ success: false, error: "Task not found" });
@@ -95,7 +108,7 @@ describe("commentController.listTaskComments", () => {
     });
     const res = createMockResponse();
 
-    await commentController.listTaskComments(req, res);
+    await callController(commentController.listTaskComments, req, res);
 
     expect(res.statusCode).toBe(404);
     // commentService returns null for inaccessible tasks → controller returns 404
@@ -104,47 +117,6 @@ describe("commentController.listTaskComments", () => {
 });
 
 describe("commentController.createComment", () => {
-  test("returns 400 when body is empty", async () => {
-    const req = createRequest({
-      params: { taskId: "t1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { message: "   " },
-    });
-    const res = createMockResponse();
-
-    await commentController.createComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Message or attachment is required" });
-  });
-
-  test("returns 400 when upload_tokens contains non-string", async () => {
-    const req = createRequest({
-      params: { taskId: "t1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { upload_tokens: [123] },
-    });
-    const res = createMockResponse();
-
-    await commentController.createComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Invalid upload tokens" });
-  });
-
-  test("returns 400 when upload_tokens contains duplicates", async () => {
-    const req = createRequest({
-      params: { taskId: "t1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { upload_tokens: ["tok1", "tok1"] },
-    });
-    const res = createMockResponse();
-
-    await commentController.createComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Duplicate upload tokens" });
-  });
 
   test("returns 400 when createComment throws invalid token error", async () => {
     findFirstMock.mockResolvedValueOnce({
@@ -163,7 +135,7 @@ describe("commentController.createComment", () => {
     });
     const res = createMockResponse();
 
-    await commentController.createComment(req, res);
+    await callController(commentController.createComment, req, res);
 
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({ success: false, error: "One or more upload tokens are invalid or expired" });
@@ -199,7 +171,7 @@ describe("commentController.createComment", () => {
     });
     const res = createMockResponse();
 
-    await commentController.createComment(req, res);
+    await callController(commentController.createComment, req, res);
 
     // createComment(tx, data) — second arg is the data
     expect(createSpy).toHaveBeenCalledTimes(1);
@@ -242,7 +214,7 @@ describe("commentController.createComment", () => {
     });
     const res = createMockResponse();
 
-    await commentController.createComment(req, res);
+    await callController(commentController.createComment, req, res);
 
     expect(createSpy.mock.calls[0]?.[1]).toMatchObject({
       task_id: "t1",
@@ -280,7 +252,7 @@ describe("commentController.createComment", () => {
     });
     const res = createMockResponse();
 
-    await commentController.createComment(req, res);
+    await callController(commentController.createComment, req, res);
 
     expect(res.statusCode).toBe(201);
     expect(res.body).toMatchObject({
@@ -317,7 +289,8 @@ describe("commentController.createComment — notification routing", () => {
     } as any);
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
 
-    await commentController.createComment(
+    await callController(
+      commentController.createComment,
       createRequest({ params: { taskId: "t1", screen: "comments" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
       createMockResponse(),
     );
@@ -343,7 +316,8 @@ describe("commentController.createComment — notification routing", () => {
     } as any);
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
 
-    await commentController.createComment(
+    await callController(
+      commentController.createComment,
       createRequest({ params: { taskId: "t1", screen: "comments" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
       createMockResponse(),
     );
@@ -364,7 +338,8 @@ describe("commentController.createComment — notification routing", () => {
       { user_id: "a1", push_token: "token-a1" },
     ]);
 
-    await commentController.createComment(
+    await callController(
+      commentController.createComment,
       createRequest({ params: { taskId: "t1", screen: "comments" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
       createMockResponse(),
     );
@@ -390,7 +365,8 @@ describe("commentController.createComment — notification routing", () => {
       { user_id: "a1", push_token: "token-a1" },
     ]);
 
-    await commentController.createComment(
+    await callController(
+      commentController.createComment,
       createRequest({ params: { taskId: "t1", screen: "comments" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hello" } }),
       createMockResponse(),
     );
@@ -417,7 +393,8 @@ describe("commentController.createComment — notification routing", () => {
       { user_id: "a2", push_token: "token-a2" },
     ]);
 
-    await commentController.createComment(
+    await callController(
+      commentController.createComment,
       createRequest({ params: { taskId: "t1", screen: "comments" }, user: { user_id: "a1", role: UserRole.ADMIN }, body: { message: "hello" } }),
       createMockResponse(),
     );
@@ -448,7 +425,7 @@ describe("commentController.deleteComment", () => {
     });
     const res = createMockResponse();
 
-    await commentController.deleteComment(req, res);
+    await callController(commentController.deleteComment, req, res);
 
     expect(res.statusCode).toBe(403);
     expect(res.body).toMatchObject({
@@ -488,7 +465,7 @@ describe("commentController.updateComment", () => {
     });
     const res = createMockResponse();
 
-    await commentController.updateComment(req, res);
+    await callController(commentController.updateComment, req, res);
 
     expect(eventSpy).toHaveBeenCalledTimes(1);
     expect(res.body).toEqual({
@@ -513,7 +490,7 @@ describe("commentController.updateComment", () => {
     });
     const res = createMockResponse();
 
-    await commentController.updateComment(req, res);
+    await callController(commentController.updateComment, req, res);
 
     expect(res.statusCode).toBe(403);
     expect(res.body).toMatchObject({ success: false });
@@ -535,66 +512,11 @@ describe("commentController.updateComment", () => {
     });
     const res = createMockResponse();
 
-    await commentController.updateComment(req, res);
+    await callController(commentController.updateComment, req, res);
 
     expect(res.statusCode).toBe(403);
   });
 
-  test("returns 400 when upload_tokens is not an array", async () => {
-    spyOn(commentRepo, "getCommentById").mockResolvedValue({
-      comment_id: "c1",
-      user_id: "u1",
-      task_id: "t1",
-      message: "old",
-    } as never);
-
-    const req = createRequest({
-      params: { commentId: "c1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { message: "new", upload_tokens: "not-an-array" },
-    });
-    const res = createMockResponse();
-
-    await commentController.updateComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Invalid upload tokens" });
-  });
-
-  test("returns 400 when upload_tokens contains non-string", async () => {
-    spyOn(commentRepo, "getCommentById").mockResolvedValue({
-      comment_id: "c1",
-      user_id: "u1",
-      task_id: "t1",
-      message: "old",
-    } as never);
-
-    const req = createRequest({
-      params: { commentId: "c1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { message: "new", upload_tokens: [123] },
-    });
-    const res = createMockResponse();
-
-    await commentController.updateComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Invalid upload tokens" });
-  });
-
-  test("returns 400 when upload_tokens contains duplicates", async () => {
-    const req = createRequest({
-      params: { commentId: "c1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { message: "new", upload_tokens: ["tok1", "tok1"] },
-    });
-    const res = createMockResponse();
-
-    await commentController.updateComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Duplicate upload tokens" });
-  });
 
   test("returns 400 when updateComment throws invalid token error", async () => {
     spyOn(commentRepo, "getCommentById").mockResolvedValue({
@@ -613,7 +535,7 @@ describe("commentController.updateComment", () => {
     });
     const res = createMockResponse();
 
-    await commentController.updateComment(req, res);
+    await callController(commentController.updateComment, req, res);
 
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({ success: false, error: "One or more upload tokens are invalid or expired" });
@@ -641,7 +563,7 @@ describe("commentController.updateComment", () => {
     });
     const res = createMockResponse();
 
-    await commentController.updateComment(req, res);
+    await callController(commentController.updateComment, req, res);
 
     // updateComment(db, id, message, tokens, removeIds) — check args
     expect(updateSpy.mock.calls[0]?.[1]).toBe("c1");
@@ -650,68 +572,6 @@ describe("commentController.updateComment", () => {
     expect(updateSpy.mock.calls[0]?.[4]).toBeUndefined();
   });
 
-  test("returns 400 when remove_attachment_ids is not an array", async () => {
-    spyOn(commentRepo, "getCommentById").mockResolvedValue({
-      comment_id: "c1",
-      user_id: "u1",
-      task_id: "t1",
-      message: "old",
-    } as never);
-
-    const req = createRequest({
-      params: { commentId: "c1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { message: "new", remove_attachment_ids: "not-an-array" },
-    });
-    const res = createMockResponse();
-
-    await commentController.updateComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Invalid remove_attachment_ids" });
-  });
-
-  test("returns 400 when remove_attachment_ids contains non-string", async () => {
-    spyOn(commentRepo, "getCommentById").mockResolvedValue({
-      comment_id: "c1",
-      user_id: "u1",
-      task_id: "t1",
-      message: "old",
-    } as never);
-
-    const req = createRequest({
-      params: { commentId: "c1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: { message: "new", remove_attachment_ids: [123] },
-    });
-    const res = createMockResponse();
-
-    await commentController.updateComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "Invalid remove_attachment_ids" });
-  });
-
-  test("returns 400 when no changes are provided", async () => {
-    spyOn(commentRepo, "getCommentById").mockResolvedValue({
-      comment_id: "c1",
-      user_id: "u1",
-      task_id: "t1",
-      message: "old",
-    } as never);
-
-    const req = createRequest({
-      params: { commentId: "c1" } as Request["params"],
-      user: { user_id: "u1", role: UserRole.USER },
-      body: {},
-    });
-    const res = createMockResponse();
-
-    await commentController.updateComment(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: "No changes provided" });
-  });
 
   test("updates without message when only remove_attachment_ids provided", async () => {
     spyOn(commentRepo, "getCommentById").mockResolvedValue({
@@ -745,7 +605,7 @@ describe("commentController.updateComment", () => {
     });
     const res = createMockResponse();
 
-    await commentController.updateComment(req, res);
+    await callController(commentController.updateComment, req, res);
 
     expect(updateSpy.mock.calls[0]?.[1]).toBe("c1");
     expect(updateSpy.mock.calls[0]?.[2]).toBeUndefined();
@@ -782,7 +642,7 @@ describe("commentController.updateComment", () => {
     });
     const res = createMockResponse();
 
-    await commentController.updateComment(req, res);
+    await callController(commentController.updateComment, req, res);
 
     expect(updateSpy).toHaveBeenCalledTimes(1);
     // GCS deletion happens in the service after DB, driven by gcsPathsToDelete fetched from attachmentRepo

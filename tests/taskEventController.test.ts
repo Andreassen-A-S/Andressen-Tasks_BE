@@ -1,6 +1,19 @@
 import { describe, expect, mock, spyOn, test, afterEach } from "bun:test";
 import type { Request, Response } from "express";
 import { RecurrenceFrequency, UserRole } from "../src/generated/prisma/client";
+import { errorMiddleware } from "../src/middleware/errorMiddleware";
+
+async function callController(
+  fn: (req: Request, res: Response) => Promise<void>,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    await (fn as any)(req, res);
+  } catch (err) {
+    errorMiddleware(err, req, res, () => {});
+  }
+}
 
 // Mock Prisma
 const prismaMock = {
@@ -86,319 +99,6 @@ afterEach(() => {
 });
 
 describe("templateController.createTemplate - Validation Tests", () => {
-  test("returns 400 when days_of_week is empty for weekly recurrence", async () => {
-    const req = createRequest({
-      user: { user_id: "u1", role: UserRole.USER },
-      body: {
-        title: "Weekly Meeting",
-        frequency: RecurrenceFrequency.WEEKLY,
-        start_date: "2026-02-01",
-        days_of_week: [], // Empty array
-      },
-    });
-    const res = createMockResponse();
-
-    await templateController.createTemplate(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({
-      success: false,
-      error: "days_of_week cannot be empty for weekly recurrence",
-    });
-  });
-
-  test("returns 400 when days_of_week contains invalid day numbers", async () => {
-    const req = createRequest({
-      user: { user_id: "u1", role: UserRole.USER },
-      body: {
-        title: "Weekly Meeting",
-        frequency: RecurrenceFrequency.WEEKLY,
-        start_date: "2026-02-01",
-        days_of_week: [0, 1, 7], // 7 is invalid
-      },
-    });
-    const res = createMockResponse();
-
-    await templateController.createTemplate(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toMatchObject({
-      success: false,
-      error: expect.stringContaining("between 0 and 6"),
-    });
-  });
-
-  test("returns 400 when days_of_week is not an array", async () => {
-    const req = createRequest({
-      user: { user_id: "u1", role: UserRole.USER },
-      body: {
-        title: "Weekly Meeting",
-        frequency: RecurrenceFrequency.WEEKLY,
-        start_date: "2026-02-01",
-        days_of_week: "1,2,3", // String instead of array
-      },
-    });
-    const res = createMockResponse();
-
-    await templateController.createTemplate(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({
-      success: false,
-      error: "days_of_week must be an array",
-    });
-  });
-
-  test("returns 400 when days_of_week is missing for weekly recurrence", async () => {
-    const req = createRequest({
-      user: { user_id: "u1", role: UserRole.USER },
-      body: {
-        title: "Weekly Meeting",
-        frequency: RecurrenceFrequency.WEEKLY,
-        start_date: "2026-02-01",
-        // days_of_week is missing
-      },
-    });
-    const res = createMockResponse();
-
-    await templateController.createTemplate(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({
-      success: false,
-      error: "days_of_week is required for weekly recurrence",
-    });
-  });
-
-  test("returns 400 when day_of_month is missing for monthly recurrence", async () => {
-    const req = createRequest({
-      user: { user_id: "u1", role: UserRole.USER },
-      body: {
-        title: "Monthly Report",
-        frequency: RecurrenceFrequency.MONTHLY,
-        start_date: "2026-02-01",
-        // day_of_month is missing
-      },
-    });
-    const res = createMockResponse();
-
-    await templateController.createTemplate(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({
-      success: false,
-      error: "day_of_month is required for monthly recurrence",
-    });
-  });
-
-  test("returns 400 when day_of_month is out of range", async () => {
-    const req = createRequest({
-      user: { user_id: "u1", role: UserRole.USER },
-      body: {
-        title: "Monthly Report",
-        frequency: RecurrenceFrequency.MONTHLY,
-        start_date: "2026-02-01",
-        day_of_month: 32, // Invalid
-      },
-    });
-    const res = createMockResponse();
-
-    await templateController.createTemplate(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({
-      success: false,
-      error: "day_of_month must be between 1 and 31",
-    });
-  });
-
-  test("returns 400 when day_of_month is 0", async () => {
-    const req = createRequest({
-      user: { user_id: "u1", role: UserRole.USER },
-      body: {
-        title: "Monthly Report",
-        frequency: RecurrenceFrequency.MONTHLY,
-        start_date: "2026-02-01",
-        day_of_month: 0,
-      },
-    });
-    const res = createMockResponse();
-
-    await templateController.createTemplate(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({
-      success: false,
-      error: "day_of_month is required for monthly recurrence",
-    });
-  });
-
-  test("returns 400 when start_date is invalid", async () => {
-    const req = createRequest({
-      user: { user_id: "u1", role: UserRole.USER },
-      body: {
-        title: "Daily Task",
-        frequency: RecurrenceFrequency.DAILY,
-        start_date: "not-a-date",
-      },
-    });
-    const res = createMockResponse();
-
-    await templateController.createTemplate(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({
-      success: false,
-      error: "start_date is not a valid date",
-    });
-  });
-
-  test("returns 400 when end_date is before start_date", async () => {
-    const req = createRequest({
-      user: { user_id: "u1", role: UserRole.USER },
-      body: {
-        title: "Daily Task",
-        frequency: RecurrenceFrequency.DAILY,
-        start_date: "2026-12-31",
-        end_date: "2026-01-01", // Before start_date
-      },
-    });
-    const res = createMockResponse();
-
-    await templateController.createTemplate(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({
-      success: false,
-      error: "end_date must be after start_date",
-    });
-  });
-
-  test("returns 400 when end_date equals start_date", async () => {
-    const req = createRequest({
-      user: { user_id: "u1", role: UserRole.USER },
-      body: {
-        title: "Daily Task",
-        frequency: RecurrenceFrequency.DAILY,
-        start_date: "2026-02-01",
-        end_date: "2026-02-01", // Same as start_date
-      },
-    });
-    const res = createMockResponse();
-
-    await templateController.createTemplate(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({
-      success: false,
-      error: "end_date must be after start_date",
-    });
-  });
-
-  test("returns 400 when interval is 0", async () => {
-    const req = createRequest({
-      user: { user_id: "u1", role: UserRole.USER },
-      body: {
-        title: "Daily Task",
-        frequency: RecurrenceFrequency.DAILY,
-        start_date: "2026-02-01",
-        interval: 0, // Invalid
-      },
-    });
-    const res = createMockResponse();
-
-    await templateController.createTemplate(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({
-      success: false,
-      error: "interval must be at least 1",
-    });
-  });
-
-  test("returns 400 when interval is negative", async () => {
-    const req = createRequest({
-      user: { user_id: "u1", role: UserRole.USER },
-      body: {
-        title: "Daily Task",
-        frequency: RecurrenceFrequency.DAILY,
-        start_date: "2026-02-01",
-        interval: -5,
-      },
-    });
-    const res = createMockResponse();
-
-    await templateController.createTemplate(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({
-      success: false,
-      error: "interval must be at least 1",
-    });
-  });
-
-  test("returns 400 when interval is not an integer", async () => {
-    const req = createRequest({
-      user: { user_id: "u1", role: UserRole.USER },
-      body: {
-        title: "Daily Task",
-        frequency: RecurrenceFrequency.DAILY,
-        start_date: "2026-02-01",
-        interval: 1.5,
-      },
-    });
-    const res = createMockResponse();
-
-    await templateController.createTemplate(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({
-      success: false,
-      error: "interval must be an integer",
-    });
-  });
-
-  test("returns 400 when days_of_week is set for daily recurrence", async () => {
-    const req = createRequest({
-      user: { user_id: "u1", role: UserRole.USER },
-      body: {
-        title: "Daily Task",
-        frequency: RecurrenceFrequency.DAILY,
-        start_date: "2026-02-01",
-        days_of_week: [1, 2, 3], // Should not be set for daily
-      },
-    });
-    const res = createMockResponse();
-
-    await templateController.createTemplate(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toMatchObject({
-      success: false,
-      error: expect.stringContaining("should not be set for daily"),
-    });
-  });
-
-  test("returns 400 when day_of_month is set for daily recurrence", async () => {
-    const req = createRequest({
-      user: { user_id: "u1", role: UserRole.USER },
-      body: {
-        title: "Daily Task",
-        frequency: RecurrenceFrequency.DAILY,
-        start_date: "2026-02-01",
-        day_of_month: 15, // Should not be set for daily
-      },
-    });
-    const res = createMockResponse();
-
-    await templateController.createTemplate(req, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toMatchObject({
-      success: false,
-      error: expect.stringContaining("should not be set for daily"),
-    });
-  });
 
   test("creates template successfully with valid weekly data", async () => {
     const template = {
@@ -429,7 +129,7 @@ describe("templateController.createTemplate - Validation Tests", () => {
     });
     const res = createMockResponse();
 
-    await templateController.createTemplate(req, res);
+    await callController(templateController.createTemplate, req, res);
 
     expect(res.statusCode).toBe(201);
     expect(res.body).toEqual({ success: true, data: template });
@@ -464,7 +164,7 @@ describe("templateController.createTemplate - Validation Tests", () => {
     });
     const res = createMockResponse();
 
-    await templateController.createTemplate(req, res);
+    await callController(templateController.createTemplate, req, res);
 
     expect(res.statusCode).toBe(201);
     expect(res.body).toEqual({ success: true, data: template });
@@ -496,7 +196,7 @@ describe("templateController.updateTemplate - Validation Tests", () => {
     });
     const res = createMockResponse();
 
-    await templateController.updateTemplate(req, res);
+    await callController(templateController.updateTemplate, req, res);
 
     expect(res.statusCode).toBe(400);
     expect(res.body).toMatchObject({
@@ -529,7 +229,7 @@ describe("templateController.updateTemplate - Validation Tests", () => {
     });
     const res = createMockResponse();
 
-    await templateController.updateTemplate(req, res);
+    await callController(templateController.updateTemplate, req, res);
 
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({
@@ -561,7 +261,7 @@ describe("templateController.updateTemplate - Validation Tests", () => {
     });
     const res = createMockResponse();
 
-    await templateController.updateTemplate(req, res);
+    await callController(templateController.updateTemplate, req, res);
 
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({

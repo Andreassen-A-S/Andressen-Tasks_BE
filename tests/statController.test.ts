@@ -3,6 +3,20 @@ import type { Request, Response } from "express";
 import { UserRole } from "../src/generated/prisma/client";
 import * as statController from "../src/controllers/statController";
 import { StatsService } from "../src/services/statService";
+import { ValidationError } from "../src/errors/domainErrors";
+import { errorMiddleware } from "../src/middleware/errorMiddleware";
+
+async function callController(
+  fn: (req: Request, res: Response) => Promise<void>,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    await (fn as any)(req, res);
+  } catch (err) {
+    errorMiddleware(err, req, res, () => {});
+  }
+}
 
 type MockResponse = Response & {
   statusCode?: number;
@@ -45,7 +59,7 @@ describe("statController.getMyStats", () => {
     const req = createRequest({ user: undefined });
     const res = createMockResponse();
 
-    await statController.getMyStats(req, res);
+    await callController(statController.getMyStats, req, res);
 
     expect(getUserStatsSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(401);
@@ -74,7 +88,7 @@ describe("statController.getMyStats", () => {
     const req = createRequest({ user: { user_id: "u1", role: UserRole.USER } });
     const res = createMockResponse();
 
-    await statController.getMyStats(req, res);
+    await callController(statController.getMyStats, req, res);
 
     expect(getUserStatsSpy).toHaveBeenCalledWith("u1", null);
     expect(res.body).toEqual({ success: true, data: stats });
@@ -91,7 +105,7 @@ describe("statController.getUserStats", () => {
     });
     const res = createMockResponse();
 
-    await statController.getUserStats(req, res);
+    await callController(statController.getUserStats, req, res);
 
     expect(getUserStatsSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(403);
@@ -126,7 +140,7 @@ describe("statController.getUserStats", () => {
     });
     const res = createMockResponse();
 
-    await statController.getUserStats(req, res);
+    await callController(statController.getUserStats, req, res);
 
     expect(getUserStatsSpy).toHaveBeenCalledWith("u2", null);
     expect(res.body).toEqual({ success: true, data: stats });
@@ -136,7 +150,7 @@ describe("statController.getUserStats", () => {
 describe("statController.getTopPerformers", () => {
   test("returns 400 for invalid limit", async () => {
     spyOn(StatsService.prototype, "getTopPerformers").mockRejectedValue(
-      new Error("Limit must be between 1 and 20"),
+      new ValidationError("Limit must be between 1 and 20"),
     );
 
     const req = createRequest({
@@ -145,7 +159,7 @@ describe("statController.getTopPerformers", () => {
     });
     const res = createMockResponse();
 
-    await statController.getTopPerformers(req, res);
+    await callController(statController.getTopPerformers, req, res);
 
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({
@@ -168,7 +182,7 @@ describe("statController.getDashboardStats", () => {
     });
     const res = createMockResponse();
 
-    await statController.getDashboardStats(req, res);
+    await callController(statController.getDashboardStats, req, res);
 
     expect(getStatsForWindowSpy).toHaveBeenCalledWith(30, null);
     expect(res.body).toEqual({ success: true, data: {} });
@@ -186,7 +200,7 @@ describe("statController.getDashboardStats", () => {
     });
     const res = createMockResponse();
 
-    await statController.getDashboardStats(req, res);
+    await callController(statController.getDashboardStats, req, res);
 
     expect(getStatsForWindowSpy).toHaveBeenCalledWith(30, null);
     expect(res.body).toEqual({ success: true, data: {} });
@@ -194,7 +208,7 @@ describe("statController.getDashboardStats", () => {
 
   test("returns 400 for out-of-range days", async () => {
     spyOn(StatsService.prototype, "getStatsForWindow").mockRejectedValue(
-      new Error("Days must be between 1 and 365"),
+      new ValidationError("Days must be between 1 and 365"),
     );
 
     const req = createRequest({
@@ -203,7 +217,7 @@ describe("statController.getDashboardStats", () => {
     });
     const res = createMockResponse();
 
-    await statController.getDashboardStats(req, res);
+    await callController(statController.getDashboardStats, req, res);
 
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({
