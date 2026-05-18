@@ -19,7 +19,7 @@ export async function requireOrgAccess(req: Request, _res: Response, next: NextF
 
   const org = await prisma.organization.findUnique({
     where: { org_id: ctx.actorOrgId },
-    select: { status: true, subscriptionStatus: true, currentPeriodEnd: true },
+    select: { status: true, subscription_status: true, current_period_end: true },
   });
 
   if (!org) return next();
@@ -27,11 +27,11 @@ export async function requireOrgAccess(req: Request, _res: Response, next: NextF
   if (org.status === OrganizationStatus.SUSPENDED) throw new OrganizationSuspendedError();
   if (org.status === OrganizationStatus.INACTIVE) throw new OrganizationInactiveError();
 
-  if (org.subscriptionStatus === SubscriptionStatus.EXPIRED) throw new SubscriptionExpiredError();
+  if (org.subscription_status === SubscriptionStatus.EXPIRED) throw new SubscriptionExpiredError();
 
   if (
-    org.subscriptionStatus === SubscriptionStatus.CANCELED &&
-    (!org.currentPeriodEnd || org.currentPeriodEnd < new Date())
+    org.subscription_status === SubscriptionStatus.CANCELED &&
+    (!org.current_period_end || org.current_period_end < new Date())
   ) {
     throw new SubscriptionExpiredError();
   }

@@ -111,8 +111,8 @@ model Organization {
   slug                String             @unique
   logo_url            String?            @db.Text
   status              OrganizationStatus @default(ACTIVE)
-  subscriptionStatus  SubscriptionStatus @default(TRIALING)
-  currentPeriodEnd    DateTime?
+  subscription_status SubscriptionStatus @default(TRIALING)
+  current_period_end  DateTime?
   created_at          DateTime           @default(now())
   updated_at          DateTime           @updatedAt
 

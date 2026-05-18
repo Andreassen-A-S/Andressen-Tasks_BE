@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { Request, Response, NextFunction } from "express";
 import { OrganizationStatus, SubscriptionStatus, UserRole } from "../src/generated/prisma/client";
 import {
@@ -36,6 +36,8 @@ async function run(req: Request): Promise<{ next: boolean; error: unknown }> {
 }
 
 describe("requireOrgAccess", () => {
+  afterEach(() => findUniqueMock.mockClear());
+
   test("bypasses check when request has no user (unauthenticated)", async () => {
     const { next, error } = await run({ ...makeReq(), user: undefined } as any);
     expect(next).toBe(true);
@@ -66,8 +68,8 @@ describe("requireOrgAccess", () => {
   test("allows access when org is ACTIVE and subscription is ACTIVE", async () => {
     findUniqueMock.mockResolvedValueOnce({
       status: OrganizationStatus.ACTIVE,
-      subscriptionStatus: SubscriptionStatus.ACTIVE,
-      currentPeriodEnd: null,
+      subscription_status: SubscriptionStatus.ACTIVE,
+      current_period_end: null,
     });
     const { next, error } = await run(makeReq());
     expect(next).toBe(true);
@@ -77,8 +79,8 @@ describe("requireOrgAccess", () => {
   test("allows access when subscription is TRIALING", async () => {
     findUniqueMock.mockResolvedValueOnce({
       status: OrganizationStatus.ACTIVE,
-      subscriptionStatus: SubscriptionStatus.TRIALING,
-      currentPeriodEnd: null,
+      subscription_status: SubscriptionStatus.TRIALING,
+      current_period_end: null,
     });
     const { next, error } = await run(makeReq());
     expect(next).toBe(true);
@@ -88,8 +90,8 @@ describe("requireOrgAccess", () => {
   test("allows access when subscription is PAST_DUE", async () => {
     findUniqueMock.mockResolvedValueOnce({
       status: OrganizationStatus.ACTIVE,
-      subscriptionStatus: SubscriptionStatus.PAST_DUE,
-      currentPeriodEnd: null,
+      subscription_status: SubscriptionStatus.PAST_DUE,
+      current_period_end: null,
     });
     const { next, error } = await run(makeReq());
     expect(next).toBe(true);
@@ -99,8 +101,8 @@ describe("requireOrgAccess", () => {
   test("allows access when subscription is CANCELED but period has not ended", async () => {
     findUniqueMock.mockResolvedValueOnce({
       status: OrganizationStatus.ACTIVE,
-      subscriptionStatus: SubscriptionStatus.CANCELED,
-      currentPeriodEnd: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      subscription_status: SubscriptionStatus.CANCELED,
+      current_period_end: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
     const { next, error } = await run(makeReq());
     expect(next).toBe(true);
@@ -110,8 +112,8 @@ describe("requireOrgAccess", () => {
   test("throws OrganizationSuspendedError when org is SUSPENDED", async () => {
     findUniqueMock.mockResolvedValueOnce({
       status: OrganizationStatus.SUSPENDED,
-      subscriptionStatus: SubscriptionStatus.ACTIVE,
-      currentPeriodEnd: null,
+      subscription_status: SubscriptionStatus.ACTIVE,
+      current_period_end: null,
     });
     await expect(run(makeReq())).rejects.toBeInstanceOf(OrganizationSuspendedError);
   });
@@ -119,8 +121,8 @@ describe("requireOrgAccess", () => {
   test("throws OrganizationInactiveError when org is INACTIVE", async () => {
     findUniqueMock.mockResolvedValueOnce({
       status: OrganizationStatus.INACTIVE,
-      subscriptionStatus: SubscriptionStatus.ACTIVE,
-      currentPeriodEnd: null,
+      subscription_status: SubscriptionStatus.ACTIVE,
+      current_period_end: null,
     });
     await expect(run(makeReq())).rejects.toBeInstanceOf(OrganizationInactiveError);
   });
@@ -128,8 +130,8 @@ describe("requireOrgAccess", () => {
   test("throws SubscriptionExpiredError when subscription is EXPIRED", async () => {
     findUniqueMock.mockResolvedValueOnce({
       status: OrganizationStatus.ACTIVE,
-      subscriptionStatus: SubscriptionStatus.EXPIRED,
-      currentPeriodEnd: null,
+      subscription_status: SubscriptionStatus.EXPIRED,
+      current_period_end: null,
     });
     await expect(run(makeReq())).rejects.toBeInstanceOf(SubscriptionExpiredError);
   });
@@ -137,17 +139,17 @@ describe("requireOrgAccess", () => {
   test("throws SubscriptionExpiredError when CANCELED and period has ended", async () => {
     findUniqueMock.mockResolvedValueOnce({
       status: OrganizationStatus.ACTIVE,
-      subscriptionStatus: SubscriptionStatus.CANCELED,
-      currentPeriodEnd: new Date(Date.now() - 1000),
+      subscription_status: SubscriptionStatus.CANCELED,
+      current_period_end: new Date(Date.now() - 1000),
     });
     await expect(run(makeReq())).rejects.toBeInstanceOf(SubscriptionExpiredError);
   });
 
-  test("throws SubscriptionExpiredError when CANCELED and no currentPeriodEnd", async () => {
+  test("throws SubscriptionExpiredError when CANCELED and no current_period_end", async () => {
     findUniqueMock.mockResolvedValueOnce({
       status: OrganizationStatus.ACTIVE,
-      subscriptionStatus: SubscriptionStatus.CANCELED,
-      currentPeriodEnd: null,
+      subscription_status: SubscriptionStatus.CANCELED,
+      current_period_end: null,
     });
     await expect(run(makeReq())).rejects.toBeInstanceOf(SubscriptionExpiredError);
   });
