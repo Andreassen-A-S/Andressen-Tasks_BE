@@ -201,6 +201,31 @@ export class AuthenticationError extends AppError {
   }
 }
 
+// Thrown when the organization is manually suspended by a platform admin.
+export class OrganizationSuspendedError extends AppError {
+  constructor() {
+    super(403, "Organization is suspended");
+    this.name = "OrganizationSuspendedError";
+  }
+}
+
+// Thrown when the organization has been marked inactive (decommissioned).
+export class OrganizationInactiveError extends AppError {
+  constructor() {
+    super(403, "Organization is inactive");
+    this.name = "OrganizationInactiveError";
+  }
+}
+
+// Thrown when the organization's subscription has expired or a canceled subscription's
+// access period has ended.
+export class SubscriptionExpiredError extends AppError {
+  constructor() {
+    super(403, "Subscription has expired");
+    this.name = "SubscriptionExpiredError";
+  }
+}
+
 // Thrown when a caller passes an out-of-range or otherwise invalid parameter value.
 // When produced by the Zod validate middleware, carries field-level errors in `fields`.
 export class ValidationError extends AppError {

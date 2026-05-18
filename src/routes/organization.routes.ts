@@ -4,10 +4,11 @@ import { authenticateToken, requireSuperAdmin, requireAdminOrSuperAdmin } from "
 import { validate } from "../middleware/validateMiddleware";
 import { createOrganizationSchema, updateOrganizationSchema, prepareOrgLogoSchema } from "../schemas/organizationSchemas";
 import { asyncHandler } from "../middleware/errorMiddleware";
+import { requireOrgAccess } from "../middleware/orgAccess";
 
 const router = Router();
 
-router.use(authenticateToken);
+router.use(authenticateToken, asyncHandler(requireOrgAccess));
 
 // Super admin only
 router.get("/", requireSuperAdmin, asyncHandler(orgController.listOrganizations));
