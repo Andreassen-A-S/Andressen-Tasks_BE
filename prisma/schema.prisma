@@ -68,6 +68,20 @@ enum UserRole {
   SUPER_ADMIN
 }
 
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
 enum TaskEventType {
   TASK_CREATED
   TASK_UPDATED
@@ -92,12 +106,15 @@ enum TaskEventType {
 }
 
 model Organization {
-  org_id     String   @id @default(uuid())
-  name       String
-  slug       String   @unique
-  logo_url   String?  @db.Text
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  org_id              String             @id @default(uuid())
+  name                String
+  slug                String             @unique
+  logo_url            String?            @db.Text
+  status              OrganizationStatus @default(ACTIVE)
+  subscriptionStatus  SubscriptionStatus @default(TRIALING)
+  currentPeriodEnd    DateTime?
+  created_at          DateTime           @default(now())
+  updated_at          DateTime           @updatedAt
 
   users    User[]
   projects Project[]

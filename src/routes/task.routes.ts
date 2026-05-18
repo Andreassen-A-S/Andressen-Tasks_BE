@@ -6,22 +6,24 @@ import { validate } from "../middleware/validateMiddleware";
 import { createTaskSchema, upsertProgressLogSchema } from "../schemas/taskSchemas";
 import { createSubtaskSchema } from "../schemas/subTaskSchemas";
 import { asyncHandler } from "../middleware/errorMiddleware";
+import { requireOrgAccess } from "../middleware/orgAccess";
 
 const router = Router();
 
-router.get("/", authenticateToken, asyncHandler(taskController.listTasks));
-router.post("/", authenticateToken, validate(createTaskSchema), asyncHandler(taskController.createTask));
-router.get("/:id", authenticateToken, asyncHandler(taskController.getTask));
-router.patch("/:id", authenticateToken, asyncHandler(taskController.updateTask));
-router.delete("/:id", authenticateToken, asyncHandler(taskController.deleteTask));
+router.use(authenticateToken, asyncHandler(requireOrgAccess));
+
+router.get("/", asyncHandler(taskController.listTasks));
+router.post("/", validate(createTaskSchema), asyncHandler(taskController.createTask));
+router.get("/:id", asyncHandler(taskController.getTask));
+router.patch("/:id", asyncHandler(taskController.updateTask));
+router.delete("/:id", asyncHandler(taskController.deleteTask));
 
 router.post(
   "/:id/progress",
-  authenticateToken,
   validate(upsertProgressLogSchema),
   asyncHandler(taskController.upsertProgressLog),
 );
 
-router.post("/subtasks", authenticateToken, validate(createSubtaskSchema), asyncHandler(subtaskController.createSubtask));
+router.post("/subtasks", validate(createSubtaskSchema), asyncHandler(subtaskController.createSubtask));
 
 export default router;
