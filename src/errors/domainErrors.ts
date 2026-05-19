@@ -226,6 +226,14 @@ export class SubscriptionExpiredError extends AppError {
   }
 }
 
+// Thrown when an authenticated user's account has been terminated.
+export class UserTerminatedError extends AppError {
+  constructor() {
+    super(403, "User account has been terminated");
+    this.name = "UserTerminatedError";
+  }
+}
+
 // Thrown when a caller passes an out-of-range or otherwise invalid parameter value.
 // When produced by the Zod validate middleware, carries field-level errors in `fields`.
 export class ValidationError extends AppError {

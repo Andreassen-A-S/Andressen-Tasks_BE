@@ -1,16 +1,23 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { Request, Response, NextFunction } from "express";
-import { OrganizationStatus, SubscriptionStatus, UserRole } from "../src/generated/prisma/client";
+import { OrganizationStatus, SubscriptionStatus, UserRole, UserStatus } from "../src/generated/prisma/client";
 import {
   OrganizationSuspendedError,
   OrganizationInactiveError,
   SubscriptionExpiredError,
+  UserTerminatedError,
 } from "../src/errors/domainErrors";
 
+const userFindUniqueMock = mock<(...args: any[]) => Promise<any>>(() =>
+  Promise.resolve({ status: UserStatus.ACTIVE }),
+);
 const findUniqueMock = mock<(...args: any[]) => Promise<any>>(() => Promise.resolve(null));
 
 mock.module("../src/db/prisma", () => ({
-  prisma: { organization: { findUnique: findUniqueMock } },
+  prisma: {
+    user: { findUnique: userFindUniqueMock },
+    organization: { findUnique: findUniqueMock },
+  },
 }));
 
 const { requireOrgAccess } = await import("../src/middleware/orgAccess");
@@ -36,7 +43,10 @@ async function run(req: Request): Promise<{ next: boolean; error: unknown }> {
 }
 
 describe("requireOrgAccess", () => {
-  afterEach(() => findUniqueMock.mockClear());
+  afterEach(() => {
+    userFindUniqueMock.mockClear();
+    findUniqueMock.mockClear();
+  });
 
   test("bypasses check when request has no user (unauthenticated)", async () => {
     const { next, error } = await run({ ...makeReq(), user: undefined } as any);
@@ -45,18 +55,23 @@ describe("requireOrgAccess", () => {
     expect(findUniqueMock).not.toHaveBeenCalled();
   });
 
-  test("bypasses check for SUPER_ADMIN", async () => {
+  test("bypasses org check for SUPER_ADMIN", async () => {
     const req = makeReq({ user: { user_id: "sa", role: UserRole.SUPER_ADMIN, organization_id: "org1" } });
     const { next } = await run(req);
     expect(next).toBe(true);
     expect(findUniqueMock).not.toHaveBeenCalled();
   });
 
-  test("bypasses check when user has no organization", async () => {
+  test("bypasses org check when user has no organization", async () => {
     const req = makeReq({ user: { user_id: "u1", role: UserRole.USER, organization_id: null } });
     const { next } = await run(req);
     expect(next).toBe(true);
     expect(findUniqueMock).not.toHaveBeenCalled();
+  });
+
+  test("throws UserTerminatedError when user is TERMINATED", async () => {
+    userFindUniqueMock.mockResolvedValueOnce({ status: UserStatus.TERMINATED });
+    await expect(run(makeReq())).rejects.toBeInstanceOf(UserTerminatedError);
   });
 
   test("bypasses check when org is not found", async () => {

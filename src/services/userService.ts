@@ -85,6 +85,11 @@ export async function updateUser(ctx: RequestContext, targetId: string, body: Up
     throw new ForbiddenUserOperationError();
   }
 
+  // Only admins can change a user's status.
+  if (body.status !== undefined && ctx.actorRole !== UserRole.ADMIN && ctx.actorRole !== UserRole.SUPER_ADMIN) {
+    throw new ForbiddenUserOperationError();
+  }
+
   const scopeOrgId = resolveMutationOrgScope(ctx);
   return scopeOrgId
     ? userRepo.updateUserInOrg(targetId, scopeOrgId, body)

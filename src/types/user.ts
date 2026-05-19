@@ -1,4 +1,4 @@
-import type { UserRole } from "../generated/prisma/client";
+import type { UserRole, UserStatus } from "../generated/prisma/client";
 
 export interface SafeUser {
   user_id: string;
@@ -6,6 +6,7 @@ export interface SafeUser {
   email: string;
   position: string | null;
   role: UserRole;
+  status: UserStatus;
   organization_id: string | null;
   created_at: Date;
   updated_at: Date;
@@ -16,6 +17,7 @@ export interface UpdateUserInput {
   email?: string;
   password?: string;
   role?: UserRole;
+  status?: UserStatus;
   position?: string;
 }
 
@@ -33,6 +35,7 @@ export const userSelect = {
   name: true,
   email: true,
   role: true,
+  status: true,
   position: true,
   organization_id: true,
   created_at: true,
