@@ -9,7 +9,6 @@ export const updateUserSchema = z.object({
   position: z.string().optional(),
   role: z.nativeEnum(UserRole).optional(),
   status: z.nativeEnum(UserStatus).optional(),
-  organization_id: z.string().uuid().optional(),
 });
 
 export const registerPushTokenSchema = z.object({

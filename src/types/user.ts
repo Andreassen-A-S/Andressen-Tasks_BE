@@ -19,7 +19,6 @@ export interface UpdateUserInput {
   role?: UserRole;
   status?: UserStatus;
   position?: string;
-  organization_id?: string;
 }
 
 export interface CreateUserInput {
