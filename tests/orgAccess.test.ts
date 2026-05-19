@@ -74,6 +74,11 @@ describe("requireOrgAccess", () => {
     await expect(run(makeReq())).rejects.toBeInstanceOf(UserTerminatedError);
   });
 
+  test("throws UserTerminatedError when user no longer exists in the database", async () => {
+    userFindUniqueMock.mockResolvedValueOnce(null);
+    await expect(run(makeReq())).rejects.toBeInstanceOf(UserTerminatedError);
+  });
+
   test("bypasses check when org is not found", async () => {
     findUniqueMock.mockResolvedValueOnce(null);
     const { next } = await run(makeReq());

@@ -32,7 +32,7 @@ export async function requireOrgAccess(req: Request, _res: Response, next: NextF
       : Promise.resolve(null),
   ]);
 
-  if (user?.status === UserStatus.TERMINATED) throw new UserTerminatedError();
+  if (!user || user.status === UserStatus.TERMINATED) throw new UserTerminatedError();
 
   // Super-admins and users with no organization bypass org/subscription checks.
   if (!org) return next();
