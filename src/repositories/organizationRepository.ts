@@ -36,7 +36,7 @@ export async function getAllOrganizations() {
   return Promise.all(orgs.map(withSignedLogo));
 }
 
-export async function getOrganizationById(id: string): Promise<Organization | null> {
+export async function getOrganizationById(id: string) {
   const org = await prisma.organization.findUnique({
     where: { org_id: id },
     include: { _count: { select: { users: true, projects: true } } },

@@ -7,7 +7,7 @@ declare module "express-serve-static-core" {
       email: string;
       role: UserRole;
       name: string | null;
-      organization_id: string | null;
+      organization_id: string;
     };
     effectiveOrgId: string | null;
   }
