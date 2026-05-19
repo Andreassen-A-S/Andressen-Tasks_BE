@@ -68,6 +68,11 @@ enum UserRole {
   SUPER_ADMIN
 }
 
+enum UserStatus {
+  ACTIVE
+  TERMINATED
+}
+
 enum OrganizationStatus {
   ACTIVE
   SUSPENDED
@@ -128,6 +133,7 @@ model User {
   email           String        @unique
   password        String
   role            UserRole      @default(USER)
+  status          UserStatus    @default(ACTIVE)
   position        String?
   push_token      String?       @unique
   organization_id String?

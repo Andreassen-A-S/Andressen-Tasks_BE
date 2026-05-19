@@ -5,23 +5,36 @@ import {
   OrganizationSuspendedError,
   OrganizationInactiveError,
   SubscriptionExpiredError,
+  UserTerminatedError,
 } from "../errors/domainErrors";
-import { OrganizationStatus, SubscriptionStatus } from "../generated/prisma/client";
+import { OrganizationStatus, SubscriptionStatus, UserStatus } from "../generated/prisma/client";
 
 export async function requireOrgAccess(req: Request, _res: Response, next: NextFunction) {
   const ctx = getRequestContext(req);
 
-  // Unauthenticated requests and super-admins bypass org/subscription checks.
-  if (!ctx || ctx.isSuperAdmin) return next();
+  // Unauthenticated requests bypass all checks.
+  if (!ctx) return next();
 
-  // Users with no organization are handled by downstream service guards.
-  if (!ctx.actorOrgId) return next();
+  const needsOrgCheck = !ctx.isSuperAdmin && !!ctx.actorOrgId;
 
-  const org = await prisma.organization.findUnique({
-    where: { org_id: ctx.actorOrgId },
-    select: { status: true, subscription_status: true, current_period_end: true },
-  });
+  // Run user and org lookups in parallel; org lookup is skipped for super-admins
+  // and users with no organization.
+  const [user, org] = await Promise.all([
+    prisma.user.findUnique({
+      where: { user_id: ctx.actorUserId },
+      select: { status: true },
+    }),
+    needsOrgCheck
+      ? prisma.organization.findUnique({
+          where: { org_id: ctx.actorOrgId! },
+          select: { status: true, subscription_status: true, current_period_end: true },
+        })
+      : Promise.resolve(null),
+  ]);
 
+  if (!user || user.status === UserStatus.TERMINATED) throw new UserTerminatedError();
+
+  // Super-admins and users with no organization bypass org/subscription checks.
   if (!org) return next();
 
   if (org.status === OrganizationStatus.SUSPENDED) throw new OrganizationSuspendedError();

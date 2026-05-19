@@ -2,7 +2,8 @@ import jwt from "jsonwebtoken";
 import * as authRepo from "../repositories/authRepository";
 import type { LoginRequest, JWTPayload } from "../types/auth";
 import { comparePassword } from "../helper/helpers";
-import { AuthenticationError } from "../errors/domainErrors";
+import { AuthenticationError, UserTerminatedError } from "../errors/domainErrors";
+import { UserStatus } from "../generated/prisma/client";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN;
@@ -26,6 +27,8 @@ export async function authenticateUser(credentials: LoginRequest) {
   if (!user || !isPasswordValid) {
     throw new AuthenticationError("Invalid credentials");
   }
+
+  if (user.status === UserStatus.TERMINATED) throw new UserTerminatedError();
 
   // Validate JWT configuration - use type assertion to help TypeScript
   const secret = JWT_SECRET;

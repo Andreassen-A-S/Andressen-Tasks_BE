@@ -85,6 +85,19 @@ export async function updateUser(ctx: RequestContext, targetId: string, body: Up
     throw new ForbiddenUserOperationError();
   }
 
+  // Only admins can change a user's role or status; role changes follow the same
+  // escalation rules as user creation (SYSTEM and out-of-bounds roles are rejected).
+  if (body.role !== undefined) {
+    if (ctx.actorRole !== UserRole.ADMIN && ctx.actorRole !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenUserOperationError();
+    }
+    body.role = resolveCreateUserRole(ctx.actorRole, body.role);
+  }
+
+  if (body.status !== undefined && ctx.actorRole !== UserRole.ADMIN && ctx.actorRole !== UserRole.SUPER_ADMIN) {
+    throw new ForbiddenUserOperationError();
+  }
+
   const scopeOrgId = resolveMutationOrgScope(ctx);
   return scopeOrgId
     ? userRepo.updateUserInOrg(targetId, scopeOrgId, body)

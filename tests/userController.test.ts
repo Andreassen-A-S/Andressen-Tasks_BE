@@ -2,7 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { Request, Response } from "express";
 import * as userController from "../src/controllers/userController";
 import * as userRepo from "../src/repositories/userRepository";
-import { UserRole } from "../src/generated/prisma/client";
+import { UserRole, UserStatus } from "../src/generated/prisma/client";
 import { UserNotFoundError } from "../src/errors/domainErrors";
 import { errorMiddleware } from "../src/middleware/errorMiddleware";
 
@@ -303,6 +303,56 @@ describe("userController.updateUser", () => {
     expect(repoSpy).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(403);
     expect(res.body).toEqual({ success: false, error: "Forbidden" });
+  });
+
+  test("returns 403 when non-admin tries to set status on themselves", async () => {
+    const repoSpy = spyOn(userRepo, "updateUserInOrg");
+    const req = createRequest({
+      user: { user_id: "u1", role: UserRole.USER, organization_id: "org1" },
+      effectiveOrgId: "org1",
+      params: { id: "u1" } as Request["params"],
+      body: { status: UserStatus.TERMINATED },
+    });
+    const res = createMockResponse();
+
+    await callController(userController.updateUser, req, res);
+
+    expect(repoSpy).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
+  });
+
+  test("allows admin to set user status", async () => {
+    const user = { user_id: "u1", status: UserStatus.TERMINATED };
+    const updateSpy = spyOn(userRepo, "updateUserInOrg").mockResolvedValue(user as never);
+    const req = createRequest({
+      user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
+      effectiveOrgId: "org1",
+      params: { id: "u1" } as Request["params"],
+      body: { status: UserStatus.TERMINATED },
+    });
+    const res = createMockResponse();
+
+    await callController(userController.updateUser, req, res);
+
+    expect(updateSpy).toHaveBeenCalledWith("u1", "org1", { status: UserStatus.TERMINATED });
+    expect(res.body).toEqual({ success: true, data: user });
+  });
+
+  test("allows superadmin to set user status", async () => {
+    const user = { user_id: "u1", status: UserStatus.TERMINATED };
+    const updateSpy = spyOn(userRepo, "updateUserPlatform").mockResolvedValue(user as never);
+    const req = createRequest({
+      user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
+      effectiveOrgId: null,
+      params: { id: "u1" } as Request["params"],
+      body: { status: UserStatus.TERMINATED },
+    });
+    const res = createMockResponse();
+
+    await callController(userController.updateUser, req, res);
+
+    expect(updateSpy).toHaveBeenCalledWith("u1", { status: UserStatus.TERMINATED });
+    expect(res.body).toEqual({ success: true, data: user });
   });
 });
 

@@ -3,7 +3,7 @@ import type { Request, Response } from "express";
 import { UserRole } from "../src/generated/prisma/client";
 import * as authController from "../src/controllers/authController";
 import * as authService from "../src/services/authService";
-import { AuthenticationError } from "../src/errors/domainErrors";
+import { AuthenticationError, UserTerminatedError } from "../src/errors/domainErrors";
 import { errorMiddleware } from "../src/middleware/errorMiddleware";
 
 async function callController(
@@ -89,6 +89,20 @@ describe("authController.login", () => {
     expect(res.body).toEqual({
       success: false,
       error: "Invalid credentials",
+    });
+  });
+
+  test("returns 403 when user is terminated", async () => {
+    spyOn(authService, "authenticateUser").mockRejectedValue(new UserTerminatedError());
+    const req = createRequest({ body: { email: "x@x.com", password: "pw" } });
+    const res = createMockResponse();
+
+    await callController(authController.login, req, res);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toEqual({
+      success: false,
+      error: "User account has been terminated",
     });
   });
 });
