@@ -15,6 +15,7 @@ import statRoutes from "./routes/stat.routes";
 import projectRoutes from "./routes/project.routes";
 import attachmentRoutes from "./routes/attachment.routes";
 import organizationRoutes from "./routes/organization.routes";
+import positionRoutes from "./routes/position.routes";
 import { initScheduler } from "./services/schedulerService";
 import { errorMiddleware } from "./middleware/errorMiddleware";
 
@@ -102,6 +103,7 @@ app.use("/api/stats", statRoutes);
 app.use("/api/projects", projectRoutes);
 app.use("/api/organizations", organizationRoutes);
 app.use("/api/attachments", attachmentRoutes);
+app.use("/api/positions", positionRoutes);
 
 // 404
 app.use((_req, res) => {
