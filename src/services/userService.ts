@@ -67,7 +67,7 @@ export async function createUser(ctx: RequestContext, body: CreateUserInput) {
     name: body.name,
     email: body.email,
     password: body.password,
-    position: body.position,
+    position_id: body.position_id,
     role,
     organization_id,
   });

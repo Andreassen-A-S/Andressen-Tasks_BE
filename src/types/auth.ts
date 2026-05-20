@@ -12,7 +12,7 @@ export interface LoginResponse {
       name: string | null;
       email: string;
       role: string;
-      position: string | null;
+      position_id: string | null;
       organization_id: string;
     };
   };
