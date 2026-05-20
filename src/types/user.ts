@@ -7,7 +7,7 @@ export interface SafeUser {
   position: string | null;
   role: UserRole;
   status: UserStatus;
-  organization_id: string | null;
+  organization_id: string;
   created_at: Date;
   updated_at: Date;
 }

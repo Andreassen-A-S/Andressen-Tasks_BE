@@ -52,15 +52,12 @@ export async function createUser(ctx: RequestContext, body: CreateUserInput) {
   }
 
   const role = resolveCreateUserRole(ctx.actorRole, body.role);
-  let organization_id: string | null;
+  let organization_id: string;
 
   if (ctx.actorRole === UserRole.SUPER_ADMIN) {
-    organization_id =
-      typeof body.organization_id === "string" && body.organization_id.trim() !== ""
-        ? body.organization_id.trim()
-        : null;
-    // Super-admin must supply organization_id; missing means a bad request (400).
-    if (!organization_id) throw new RequiredOrganizationIdError();
+    const trimmed = typeof body.organization_id === "string" ? body.organization_id.trim() : "";
+    if (!trimmed) throw new RequiredOrganizationIdError();
+    organization_id = trimmed;
   } else {
     if (!ctx.actorOrgId) throw new MissingOrganizationError();
     organization_id = ctx.actorOrgId;

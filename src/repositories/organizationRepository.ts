@@ -31,13 +31,16 @@ export function isOrgLogoPath(value: string): boolean {
 export async function getAllOrganizations() {
   const orgs = await prisma.organization.findMany({
     orderBy: { created_at: "asc" },
-    include: { _count: { select: { users: true } } },
+    include: { _count: { select: { users: true, projects: true } } },
   });
   return Promise.all(orgs.map(withSignedLogo));
 }
 
-export async function getOrganizationById(id: string): Promise<Organization | null> {
-  const org = await prisma.organization.findUnique({ where: { org_id: id } });
+export async function getOrganizationById(id: string) {
+  const org = await prisma.organization.findUnique({
+    where: { org_id: id },
+    include: { _count: { select: { users: true, projects: true } } },
+  });
   if (!org) return null;
   return withSignedLogo(org);
 }
