@@ -23,10 +23,12 @@ export async function createPosition(ctx: RequestContext, name: string) {
 
 export async function updatePosition(ctx: RequestContext, positionId: string, name: string) {
   requireAdminRole(ctx);
+  if (!ctx.effectiveOrgId) throw new MissingOrganizationError();
   return positionRepo.updatePosition(positionId, ctx.effectiveOrgId, name);
 }
 
 export async function deletePosition(ctx: RequestContext, positionId: string) {
   requireAdminRole(ctx);
+  if (!ctx.effectiveOrgId) throw new MissingOrganizationError();
   return positionRepo.deletePosition(positionId, ctx.effectiveOrgId);
 }

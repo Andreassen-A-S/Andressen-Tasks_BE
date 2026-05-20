@@ -122,7 +122,7 @@ describe("userController.createUser", () => {
       name: undefined,
       email: "a@a.com",
       password: "x",
-      position: undefined,
+      position_id: undefined,
       role: UserRole.USER,
       organization_id: "org1",
     });
@@ -145,7 +145,7 @@ describe("userController.createUser", () => {
       name: undefined,
       email: "a@a.com",
       password: "x",
-      position: undefined,
+      position_id: undefined,
       role: UserRole.USER,
       organization_id: "org1",
     });
@@ -181,7 +181,7 @@ describe("userController.createUser", () => {
       name: undefined,
       email: "a@a.com",
       password: "x",
-      position: undefined,
+      position_id: undefined,
       role: UserRole.SUPER_ADMIN,
       organization_id: "org1",
     });

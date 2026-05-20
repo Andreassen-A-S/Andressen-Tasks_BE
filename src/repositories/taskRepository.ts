@@ -9,6 +9,7 @@ import {
 } from "../generated/prisma/client";
 import type { CreateTaskInput, UpdateTaskInput } from "../types/task";
 import type { DbClient } from "../types/db";
+import { userSelect } from "../types/user";
 import { appDayBounds } from "../utils/dateUtils";
 import {
   TaskNotFoundError,
@@ -155,14 +156,7 @@ export async function createTaskWithAssignments(
     include: {
       assignments: {
         include: {
-          user: {
-            select: {
-              user_id: true,
-              name: true,
-              email: true,
-              position: true,
-            },
-          },
+          user: { select: userSelect },
         },
       },
     },
@@ -276,7 +270,7 @@ async function updateTaskScoped(
     include: {
       assignments: {
         include: {
-          user: { select: { user_id: true, name: true, email: true, position: true } },
+          user: { select: userSelect },
         },
       },
       project: { select: { name: true, color: true } },

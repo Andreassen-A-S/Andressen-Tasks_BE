@@ -104,7 +104,7 @@ export async function updateUser(ctx: RequestContext, targetId: string, body: Up
 
   const scopeOrgId = resolveMutationOrgScope(ctx);
 
-  if (body.position_id && scopeOrgId) {
+  if (body.position_id) {
     const pos = await positionRepo.getPositionById(body.position_id, scopeOrgId);
     if (!pos) throw new PositionNotFoundError(body.position_id);
   }
