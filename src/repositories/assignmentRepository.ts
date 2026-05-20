@@ -7,23 +7,16 @@ import type {
 import type { TaskAssignment } from "../generated/prisma/client";
 import { AssignmentNotFoundError, AssignmentCrossOrganizationError, DuplicateAssignmentError } from "../errors/domainErrors";
 import type { DbClient } from "../types/db";
+import { userSelect } from "../types/user";
 
 // Re-export for backward compatibility with imports from this module.
 export { AssignmentNotFoundError, AssignmentCrossOrganizationError } from "../errors/domainErrors";
-
-const userPositionSelect = {
-  user_id: true,
-  name: true,
-  email: true,
-  position_id: true,
-  position: { select: { position_id: true, name: true } },
-} as const;
 
 export async function getAllAssignments(orgId: string | null): Promise<TaskAssignment[]> {
   return prisma.taskAssignment.findMany({
     where: orgId ? { task: { project: { organization_id: orgId } } } : undefined,
     include: {
-      user: { select: userPositionSelect },
+      user: { select: userSelect },
       task: {
         select: {
           task_id: true,
@@ -79,7 +72,7 @@ export async function assignTaskToUser(
     data,
     include: {
       task: { select: { task_id: true, title: true } },
-      user: { select: userPositionSelect },
+      user: { select: userSelect },
     },
   });
 }
@@ -94,7 +87,7 @@ export async function getTaskAssignments(
       ...(orgId ? { task: { project: { organization_id: orgId } } } : {}),
     },
     include: {
-      user: { select: userPositionSelect },
+      user: { select: userSelect },
     },
   });
 }
@@ -109,7 +102,7 @@ export async function getAssignmentById(
       ...(orgId ? { task: { project: { organization_id: orgId } } } : {}),
     },
     include: {
-      user: { select: userPositionSelect },
+      user: { select: userSelect },
       task: {
         select: {
           task_id: true,
@@ -159,7 +152,7 @@ export async function updateAssignment(
     where: { assignment_id: existing.assignment_id },
     data,
     include: {
-      user: { select: userPositionSelect },
+      user: { select: userSelect },
       task: {
         select: {
           task_id: true,

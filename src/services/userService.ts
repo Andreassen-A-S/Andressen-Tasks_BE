@@ -1,11 +1,13 @@
 import { UserRole } from "../generated/prisma/client";
 import * as userRepo from "../repositories/userRepository";
+import * as positionRepo from "../repositories/positionRepository";
 import type { CreateUserInput, UpdateUserInput } from "../types/user";
 import type { RequestContext } from "../types/requestContext";
 import {
   ForbiddenUserOperationError,
   InvalidUserRoleError,
   MissingOrganizationError,
+  PositionNotFoundError,
   RequiredOrganizationIdError,
 } from "../errors/domainErrors";
 
@@ -63,6 +65,11 @@ export async function createUser(ctx: RequestContext, body: CreateUserInput) {
     organization_id = ctx.actorOrgId;
   }
 
+  if (body.position_id) {
+    const pos = await positionRepo.getPositionById(body.position_id, organization_id);
+    if (!pos) throw new PositionNotFoundError(body.position_id);
+  }
+
   return userRepo.createUser({
     name: body.name,
     email: body.email,
@@ -96,6 +103,12 @@ export async function updateUser(ctx: RequestContext, targetId: string, body: Up
   }
 
   const scopeOrgId = resolveMutationOrgScope(ctx);
+
+  if (body.position_id && scopeOrgId) {
+    const pos = await positionRepo.getPositionById(body.position_id, scopeOrgId);
+    if (!pos) throw new PositionNotFoundError(body.position_id);
+  }
+
   return scopeOrgId
     ? userRepo.updateUserInOrg(targetId, scopeOrgId, body)
     : userRepo.updateUserPlatform(targetId, body);
