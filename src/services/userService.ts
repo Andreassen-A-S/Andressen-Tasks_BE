@@ -9,6 +9,7 @@ import {
   MissingOrganizationError,
   PositionNotFoundError,
   RequiredOrganizationIdError,
+  UserNotFoundError,
 } from "../errors/domainErrors";
 
 // Re-export error classes for backward compatibility with controllers that import from this module.
@@ -105,7 +106,15 @@ export async function updateUser(ctx: RequestContext, targetId: string, body: Up
   const scopeOrgId = resolveMutationOrgScope(ctx);
 
   if (body.position_id) {
-    const pos = await positionRepo.getPositionById(body.position_id, scopeOrgId);
+    // For platform-scoped super-admin (scopeOrgId === null), resolve the target user's
+    // actual org so we don't allow cross-org position assignment.
+    let positionOrgId: string | null = scopeOrgId;
+    if (!positionOrgId) {
+      const targetUser = await userRepo.getUserById(targetId, null);
+      if (!targetUser) throw new UserNotFoundError(targetId);
+      positionOrgId = targetUser.organization_id;
+    }
+    const pos = await positionRepo.getPositionById(body.position_id, positionOrgId);
     if (!pos) throw new PositionNotFoundError(body.position_id);
   }
 

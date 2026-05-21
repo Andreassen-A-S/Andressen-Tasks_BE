@@ -138,7 +138,7 @@ model Position {
   organization    Organization @relation(fields: [organization_id], references: [org_id], onDelete: Cascade)
   users           User[]
 
-  @@index([organization_id])
+  @@unique([organization_id, name])
   @@map("positions")
 }
 

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { Request, Response } from "express";
 import * as userController from "../src/controllers/userController";
 import * as userRepo from "../src/repositories/userRepository";
+import * as positionRepo from "../src/repositories/positionRepository";
 import { UserRole, UserStatus } from "../src/generated/prisma/client";
 import { UserNotFoundError } from "../src/errors/domainErrors";
 import { errorMiddleware } from "../src/middleware/errorMiddleware";
@@ -353,6 +354,23 @@ describe("userController.updateUser", () => {
 
     expect(updateSpy).toHaveBeenCalledWith("u1", { status: UserStatus.TERMINATED });
     expect(res.body).toEqual({ success: true, data: user });
+  });
+
+  test("superadmin without org context cannot assign user to position from another org", async () => {
+    spyOn(userRepo, "getUserById").mockResolvedValue({ user_id: "u1", organization_id: "org-a" } as never);
+    spyOn(positionRepo, "getPositionById").mockResolvedValue(null);
+    const req = createRequest({
+      user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
+      effectiveOrgId: null,
+      params: { id: "u1" } as Request["params"],
+      body: { position_id: "pos-from-org-b" },
+    });
+    const res = createMockResponse();
+
+    await callController(userController.updateUser, req, res);
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toEqual({ success: false, error: "Position not found: pos-from-org-b" });
   });
 });
 
