@@ -70,21 +70,21 @@ describe("positionRepository organization boundaries", () => {
     expect(result).toBeNull();
   });
 
-  test("updatePosition throws PositionNotFoundError when outside org scope", async () => {
+  test("updatePositionInOrg throws PositionNotFoundError when outside org scope", async () => {
     positionFindFirstMock.mockResolvedValue(null);
 
-    await expect(positionRepo.updatePosition("p-org-b", "org-a", "Renamed")).rejects.toThrow(
+    await expect(positionRepo.updatePositionInOrg("p-org-b", "org-a", "Renamed")).rejects.toThrow(
       "Position not found: p-org-b",
     );
 
     expect(positionUpdateMock).not.toHaveBeenCalled();
   });
 
-  test("updatePosition scopes lookup by org before updating", async () => {
+  test("updatePositionInOrg scopes lookup by org before updating", async () => {
     positionFindFirstMock.mockResolvedValue({ position_id: "p1" });
     positionUpdateMock.mockResolvedValue({ position_id: "p1", name: "Elektriker" });
 
-    await positionRepo.updatePosition("p1", "org-a", "Elektriker");
+    await positionRepo.updatePositionInOrg("p1", "org-a", "Elektriker");
 
     expect(positionFindFirstMock).toHaveBeenCalledWith({
       where: { position_id: "p1", organization_id: "org-a" },
@@ -95,21 +95,21 @@ describe("positionRepository organization boundaries", () => {
     });
   });
 
-  test("deletePosition throws PositionNotFoundError when outside org scope", async () => {
+  test("deletePositionInOrg throws PositionNotFoundError when outside org scope", async () => {
     positionFindFirstMock.mockResolvedValue(null);
 
-    await expect(positionRepo.deletePosition("p-org-b", "org-a")).rejects.toThrow(
+    await expect(positionRepo.deletePositionInOrg("p-org-b", "org-a")).rejects.toThrow(
       "Position not found: p-org-b",
     );
 
     expect(positionDeleteMock).not.toHaveBeenCalled();
   });
 
-  test("deletePosition scopes lookup by org before deleting", async () => {
+  test("deletePositionInOrg scopes lookup by org before deleting", async () => {
     positionFindFirstMock.mockResolvedValue({ position_id: "p1" });
     positionDeleteMock.mockResolvedValue(undefined);
 
-    await positionRepo.deletePosition("p1", "org-a");
+    await positionRepo.deletePositionInOrg("p1", "org-a");
 
     expect(positionFindFirstMock).toHaveBeenCalledWith({
       where: { position_id: "p1", organization_id: "org-a" },
