@@ -3,7 +3,7 @@ import type { RequestContext } from "../types/requestContext";
 import { UserRole } from "../generated/prisma/client";
 import { ForbiddenUserOperationError, MissingOrganizationError } from "../errors/domainErrors";
 
-export { PositionNotFoundError } from "../repositories/positionRepository";
+export { PositionNotFoundError } from "../errors/domainErrors";
 
 function requireAdminRole(ctx: RequestContext) {
   if (ctx.actorRole !== UserRole.ADMIN && ctx.actorRole !== UserRole.SUPER_ADMIN) {
