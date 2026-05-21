@@ -57,7 +57,7 @@ export async function authenticateUser(credentials: LoginRequest) {
       name: user.name,
       email: user.email,
       role: user.role,
-      position: user.position,
+      position_id: user.position_id,
       organization_id: user.organization_id,
     },
   };

@@ -1,12 +1,15 @@
 import { UserRole } from "../generated/prisma/client";
 import * as userRepo from "../repositories/userRepository";
+import * as positionRepo from "../repositories/positionRepository";
 import type { CreateUserInput, UpdateUserInput } from "../types/user";
 import type { RequestContext } from "../types/requestContext";
 import {
   ForbiddenUserOperationError,
   InvalidUserRoleError,
   MissingOrganizationError,
+  PositionNotFoundError,
   RequiredOrganizationIdError,
+  UserNotFoundError,
 } from "../errors/domainErrors";
 
 // Re-export error classes for backward compatibility with controllers that import from this module.
@@ -44,7 +47,9 @@ export async function getUser(ctx: RequestContext, userId: string) {
 }
 
 // Creates a user in the org determined by the actor's role.
-// Admins always create within their own org; super-admins must supply organization_id.
+// Admins always create within their own org.
+// Super-admins with active org context are scoped to that org.
+// Super-admins without org context must supply organization_id in the body.
 // Role escalation above the actor's own role is rejected.
 export async function createUser(ctx: RequestContext, body: CreateUserInput) {
   if (ctx.actorRole !== UserRole.ADMIN && ctx.actorRole !== UserRole.SUPER_ADMIN) {
@@ -55,19 +60,28 @@ export async function createUser(ctx: RequestContext, body: CreateUserInput) {
   let organization_id: string;
 
   if (ctx.actorRole === UserRole.SUPER_ADMIN) {
-    const trimmed = typeof body.organization_id === "string" ? body.organization_id.trim() : "";
-    if (!trimmed) throw new RequiredOrganizationIdError();
-    organization_id = trimmed;
+    if (ctx.effectiveOrgId) {
+      organization_id = ctx.effectiveOrgId;
+    } else {
+      const trimmed = typeof body.organization_id === "string" ? body.organization_id.trim() : "";
+      if (!trimmed) throw new RequiredOrganizationIdError();
+      organization_id = trimmed;
+    }
   } else {
     if (!ctx.actorOrgId) throw new MissingOrganizationError();
     organization_id = ctx.actorOrgId;
+  }
+
+  if (body.position_id) {
+    const pos = await positionRepo.getPositionById(body.position_id, organization_id);
+    if (!pos) throw new PositionNotFoundError(body.position_id);
   }
 
   return userRepo.createUser({
     name: body.name,
     email: body.email,
     password: body.password,
-    position: body.position,
+    position_id: body.position_id,
     role,
     organization_id,
   });
@@ -96,6 +110,20 @@ export async function updateUser(ctx: RequestContext, targetId: string, body: Up
   }
 
   const scopeOrgId = resolveMutationOrgScope(ctx);
+
+  if (body.position_id) {
+    // For platform-scoped super-admin (scopeOrgId === null), resolve the target user's
+    // actual org so we don't allow cross-org position assignment.
+    let positionOrgId: string | null = scopeOrgId;
+    if (!positionOrgId) {
+      const targetUser = await userRepo.getUserById(targetId, null);
+      if (!targetUser) throw new UserNotFoundError(targetId);
+      positionOrgId = targetUser.organization_id;
+    }
+    const pos = await positionRepo.getPositionById(body.position_id, positionOrgId);
+    if (!pos) throw new PositionNotFoundError(body.position_id);
+  }
+
   return scopeOrgId
     ? userRepo.updateUserInOrg(targetId, scopeOrgId, body)
     : userRepo.updateUserPlatform(targetId, body);

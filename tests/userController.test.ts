@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { Request, Response } from "express";
 import * as userController from "../src/controllers/userController";
 import * as userRepo from "../src/repositories/userRepository";
+import * as positionRepo from "../src/repositories/positionRepository";
 import { UserRole, UserStatus } from "../src/generated/prisma/client";
 import { UserNotFoundError } from "../src/errors/domainErrors";
 import { errorMiddleware } from "../src/middleware/errorMiddleware";
@@ -122,7 +123,7 @@ describe("userController.createUser", () => {
       name: undefined,
       email: "a@a.com",
       password: "x",
-      position: undefined,
+      position_id: undefined,
       role: UserRole.USER,
       organization_id: "org1",
     });
@@ -145,11 +146,41 @@ describe("userController.createUser", () => {
       name: undefined,
       email: "a@a.com",
       password: "x",
-      position: undefined,
+      position_id: undefined,
       role: UserRole.USER,
       organization_id: "org1",
     });
     expect(res.statusCode).toBe(201);
+  });
+
+  test("superadmin with org context creates user in effective org, ignoring body organization_id", async () => {
+    const user = { user_id: "u1", email: "a@a.com" };
+    const createSpy = spyOn(userRepo, "createUser").mockResolvedValue(user as never);
+    const req = createRequest({
+      user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
+      effectiveOrgId: "org-a",
+      body: { email: "a@a.com", password: "x", organization_id: "org-b" },
+    });
+    const res = createMockResponse();
+
+    await callController(userController.createUser, req, res);
+
+    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({ organization_id: "org-a" }));
+    expect(res.statusCode).toBe(201);
+  });
+
+  test("superadmin without org context returns 400 when organization_id is missing", async () => {
+    const createSpy = spyOn(userRepo, "createUser");
+    const req = createRequest({
+      user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
+      body: { email: "a@a.com", password: "x" },
+    });
+    const res = createMockResponse();
+
+    await callController(userController.createUser, req, res);
+
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
   });
 
   test("does not allow admin to create superadmin", async () => {
@@ -181,7 +212,7 @@ describe("userController.createUser", () => {
       name: undefined,
       email: "a@a.com",
       password: "x",
-      position: undefined,
+      position_id: undefined,
       role: UserRole.SUPER_ADMIN,
       organization_id: "org1",
     });
@@ -353,6 +384,23 @@ describe("userController.updateUser", () => {
 
     expect(updateSpy).toHaveBeenCalledWith("u1", { status: UserStatus.TERMINATED });
     expect(res.body).toEqual({ success: true, data: user });
+  });
+
+  test("superadmin without org context cannot assign user to position from another org", async () => {
+    spyOn(userRepo, "getUserById").mockResolvedValue({ user_id: "u1", organization_id: "org-a" } as never);
+    spyOn(positionRepo, "getPositionById").mockResolvedValue(null);
+    const req = createRequest({
+      user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
+      effectiveOrgId: null,
+      params: { id: "u1" } as Request["params"],
+      body: { position_id: "pos-from-org-b" },
+    });
+    const res = createMockResponse();
+
+    await callController(userController.updateUser, req, res);
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toEqual({ success: false, error: "Position not found: pos-from-org-b" });
   });
 });
 

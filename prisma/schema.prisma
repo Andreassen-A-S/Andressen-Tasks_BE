@@ -121,10 +121,25 @@ model Organization {
   created_at          DateTime           @default(now())
   updated_at          DateTime           @updatedAt
 
-  users    User[]
-  projects Project[]
+  users     User[]
+  projects  Project[]
+  positions Position[]
 
   @@map("organizations")
+}
+
+model Position {
+  position_id     String       @id @default(uuid())
+  name            String
+  organization_id String
+  created_at      DateTime     @default(now())
+  updated_at      DateTime     @updatedAt
+
+  organization    Organization @relation(fields: [organization_id], references: [org_id], onDelete: Cascade)
+  users           User[]
+
+  @@unique([organization_id, name])
+  @@map("positions")
 }
 
 model User {
@@ -134,7 +149,7 @@ model User {
   password        String
   role            UserRole      @default(USER)
   status          UserStatus    @default(ACTIVE)
-  position        String?
+  position_id     String?
   push_token      String?       @unique
   organization_id String
   created_at      DateTime      @default(now())
@@ -142,6 +157,7 @@ model User {
 
   // Relations
   organization    Organization  @relation(fields: [organization_id], references: [org_id], onDelete: Cascade)
+  position        Position?     @relation(fields: [position_id], references: [position_id], onDelete: SetNull)
   taskComments    TaskComment[]
   createdProjects Project[]     @relation("ProjectCreator")
   createdTasks    Task[]        @relation("TaskCreator")

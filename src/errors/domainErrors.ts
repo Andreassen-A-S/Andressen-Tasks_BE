@@ -1,6 +1,14 @@
 import { TaskStatus } from "../generated/prisma/client";
 import { AppError } from "./AppError";
 
+// Thrown when a position is not found, or is outside the caller's org scope.
+export class PositionNotFoundError extends AppError {
+  constructor(id: string) {
+    super(404, `Position not found: ${id}`);
+    this.name = "PositionNotFoundError";
+  }
+}
+
 // Thrown when a task is not found, or is outside the caller's org scope.
 // Org-scoped reads treat out-of-scope tasks as not-found to avoid leaking existence.
 export class TaskNotFoundError extends AppError {
@@ -166,6 +174,14 @@ export class AttachmentAccessError extends AppError {
   constructor() {
     super(403, "You do not have access to this task");
     this.name = "AttachmentAccessError";
+  }
+}
+
+// Thrown when a position with the same name already exists in the organization.
+export class DuplicatePositionError extends AppError {
+  constructor() {
+    super(409, "A position with this name already exists in the organization");
+    this.name = "DuplicatePositionError";
   }
 }
 

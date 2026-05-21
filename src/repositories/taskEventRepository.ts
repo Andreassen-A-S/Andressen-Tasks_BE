@@ -2,6 +2,7 @@ import { prisma } from "../db/prisma";
 import type { Prisma } from "../generated/prisma/client";
 import { AttachmentStatus } from "../generated/prisma/client";
 import type { DbClient } from "../types/db";
+import { userSelect } from "../types/user";
 
 export async function createTaskEvent(db: DbClient, data: Prisma.TaskEventCreateInput) {
   return (db as any).taskEvent.create({ data });
@@ -12,9 +13,7 @@ export async function getTaskEventsByTaskId(taskId: string) {
     where: { task_id: taskId },
     orderBy: { created_at: "asc" }, // GitHub-style: oldest -> newest
     include: {
-      actor: {
-        select: { user_id: true, name: true, email: true, position: true },
-      },
+      actor: { select: userSelect },
       comment: {
         include: {
           attachments: {
@@ -36,23 +35,14 @@ export async function getTaskEventsByTaskId(taskId: string) {
       },
       assignment: {
         include: {
-          user: {
-            select: { user_id: true, name: true, email: true, position: true },
-          },
+          user: { select: userSelect },
         },
       },
       progress: {
         include: {
           assignment: {
             include: {
-              user: {
-                select: {
-                  user_id: true,
-                  name: true,
-                  email: true,
-                  position: true,
-                },
-              },
+              user: { select: userSelect },
             },
           },
         },
