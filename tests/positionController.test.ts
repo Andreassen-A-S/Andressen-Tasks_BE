@@ -3,7 +3,7 @@ import type { Request, Response } from "express";
 import * as positionController from "../src/controllers/positionController";
 import * as positionRepo from "../src/repositories/positionRepository";
 import { UserRole } from "../src/generated/prisma/client";
-import { PositionNotFoundError } from "../src/errors/domainErrors";
+import { DuplicatePositionError, PositionNotFoundError } from "../src/errors/domainErrors";
 import { errorMiddleware } from "../src/middleware/errorMiddleware";
 
 async function callController(
@@ -106,6 +106,41 @@ describe("positionController.createPosition", () => {
     expect(res.statusCode).toBe(201);
   });
 
+  test("returns 409 when position name already exists in the org", async () => {
+    spyOn(positionRepo, "createPosition").mockRejectedValue(new DuplicatePositionError());
+    const req = createRequest({
+      user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
+      effectiveOrgId: "org1",
+      body: { name: "Murer" },
+    });
+    const res = createMockResponse();
+
+    await callController(positionController.createPosition, req, res);
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toEqual({
+      success: false,
+      error: "A position with this name already exists in the organization",
+    });
+  });
+
+  test("same position name in different org is allowed", async () => {
+    const position = { position_id: "p2", name: "Murer", organization_id: "org2" };
+    const createSpy = spyOn(positionRepo, "createPosition").mockResolvedValue(position as never);
+    const req = createRequest({
+      user: { user_id: "admin2", role: UserRole.ADMIN, organization_id: "org2" },
+      effectiveOrgId: "org2",
+      body: { name: "Murer" },
+    });
+    const res = createMockResponse();
+
+    await callController(positionController.createPosition, req, res);
+
+    expect(createSpy).toHaveBeenCalledWith("org2", "Murer");
+    expect(res.statusCode).toBe(201);
+    expect(res.body).toEqual({ success: true, data: position });
+  });
+
   test("returns 403 when USER", async () => {
     const repoSpy = spyOn(positionRepo, "createPosition");
     const req = createRequest({
@@ -152,7 +187,7 @@ describe("positionController.createPosition", () => {
 describe("positionController.updatePosition", () => {
   test("updates position when admin", async () => {
     const position = { position_id: "p1", name: "Elektriker" };
-    const updateSpy = spyOn(positionRepo, "updatePosition").mockResolvedValue(position as never);
+    const updateSpy = spyOn(positionRepo, "updatePositionInOrg").mockResolvedValue(position as never);
     const req = createRequest({
       user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
       effectiveOrgId: "org1",
@@ -168,7 +203,7 @@ describe("positionController.updatePosition", () => {
   });
 
   test("returns 404 when position not found", async () => {
-    spyOn(positionRepo, "updatePosition").mockRejectedValue(new PositionNotFoundError("p1"));
+    spyOn(positionRepo, "updatePositionInOrg").mockRejectedValue(new PositionNotFoundError("p1"));
     const req = createRequest({
       user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
       effectiveOrgId: "org1",
@@ -183,8 +218,23 @@ describe("positionController.updatePosition", () => {
     expect(res.body).toEqual({ success: false, error: "Position not found: p1" });
   });
 
+  test("returns 409 when renaming to a name that already exists in the org", async () => {
+    spyOn(positionRepo, "updatePositionInOrg").mockRejectedValue(new DuplicatePositionError());
+    const req = createRequest({
+      user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
+      effectiveOrgId: "org1",
+      params: { id: "p1" } as Request["params"],
+      body: { name: "Murer" },
+    });
+    const res = createMockResponse();
+
+    await callController(positionController.updatePosition, req, res);
+
+    expect(res.statusCode).toBe(409);
+  });
+
   test("returns 403 when USER", async () => {
-    const repoSpy = spyOn(positionRepo, "updatePosition");
+    const repoSpy = spyOn(positionRepo, "updatePositionInOrg");
     const req = createRequest({
       user: { user_id: "u1", role: UserRole.USER, organization_id: "org1" },
       effectiveOrgId: "org1",
@@ -200,7 +250,7 @@ describe("positionController.updatePosition", () => {
   });
 
   test("returns 400 when id is missing", async () => {
-    const repoSpy = spyOn(positionRepo, "updatePosition");
+    const repoSpy = spyOn(positionRepo, "updatePositionInOrg");
     const req = createRequest({
       user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
       effectiveOrgId: "org1",
@@ -216,7 +266,7 @@ describe("positionController.updatePosition", () => {
   });
 
   test("returns 401 when unauthenticated", async () => {
-    const repoSpy = spyOn(positionRepo, "updatePosition");
+    const repoSpy = spyOn(positionRepo, "updatePositionInOrg");
     const req = createRequest({
       user: undefined,
       params: { id: "p1" } as Request["params"],
@@ -233,7 +283,7 @@ describe("positionController.updatePosition", () => {
 
 describe("positionController.deletePosition", () => {
   test("deletes position when admin", async () => {
-    const deleteSpy = spyOn(positionRepo, "deletePosition").mockResolvedValue(undefined as never);
+    const deleteSpy = spyOn(positionRepo, "deletePositionInOrg").mockResolvedValue(undefined as never);
     const req = createRequest({
       user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
       effectiveOrgId: "org1",
@@ -248,7 +298,7 @@ describe("positionController.deletePosition", () => {
   });
 
   test("returns 404 when position not found", async () => {
-    spyOn(positionRepo, "deletePosition").mockRejectedValue(new PositionNotFoundError("p1"));
+    spyOn(positionRepo, "deletePositionInOrg").mockRejectedValue(new PositionNotFoundError("p1"));
     const req = createRequest({
       user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
       effectiveOrgId: "org1",
@@ -263,7 +313,7 @@ describe("positionController.deletePosition", () => {
   });
 
   test("returns 403 when USER", async () => {
-    const repoSpy = spyOn(positionRepo, "deletePosition");
+    const repoSpy = spyOn(positionRepo, "deletePositionInOrg");
     const req = createRequest({
       user: { user_id: "u1", role: UserRole.USER, organization_id: "org1" },
       effectiveOrgId: "org1",
@@ -278,7 +328,7 @@ describe("positionController.deletePosition", () => {
   });
 
   test("admin from org A cannot delete position from org B", async () => {
-    const deleteSpy = spyOn(positionRepo, "deletePosition").mockRejectedValue(
+    const deleteSpy = spyOn(positionRepo, "deletePositionInOrg").mockRejectedValue(
       new PositionNotFoundError("p-org-b"),
     );
     const req = createRequest({
@@ -295,7 +345,7 @@ describe("positionController.deletePosition", () => {
   });
 
   test("returns 401 when unauthenticated", async () => {
-    const repoSpy = spyOn(positionRepo, "deletePosition");
+    const repoSpy = spyOn(positionRepo, "deletePositionInOrg");
     const req = createRequest({
       user: undefined,
       params: { id: "p1" } as Request["params"],

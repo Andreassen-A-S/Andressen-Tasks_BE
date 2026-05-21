@@ -3,7 +3,7 @@ import type { RequestContext } from "../types/requestContext";
 import { UserRole } from "../generated/prisma/client";
 import { ForbiddenUserOperationError, MissingOrganizationError } from "../errors/domainErrors";
 
-export { PositionNotFoundError } from "../errors/domainErrors";
+export { DuplicatePositionError, PositionNotFoundError } from "../errors/domainErrors";
 
 function requireAdminRole(ctx: RequestContext) {
   if (ctx.actorRole !== UserRole.ADMIN && ctx.actorRole !== UserRole.SUPER_ADMIN) {
@@ -24,11 +24,11 @@ export async function createPosition(ctx: RequestContext, name: string) {
 export async function updatePosition(ctx: RequestContext, positionId: string, name: string) {
   requireAdminRole(ctx);
   if (!ctx.effectiveOrgId) throw new MissingOrganizationError();
-  return positionRepo.updatePosition(positionId, ctx.effectiveOrgId, name);
+  return positionRepo.updatePositionInOrg(positionId, ctx.effectiveOrgId, name);
 }
 
 export async function deletePosition(ctx: RequestContext, positionId: string) {
   requireAdminRole(ctx);
   if (!ctx.effectiveOrgId) throw new MissingOrganizationError();
-  return positionRepo.deletePosition(positionId, ctx.effectiveOrgId);
+  return positionRepo.deletePositionInOrg(positionId, ctx.effectiveOrgId);
 }

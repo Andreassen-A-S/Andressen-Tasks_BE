@@ -177,6 +177,14 @@ export class AttachmentAccessError extends AppError {
   }
 }
 
+// Thrown when a position with the same name already exists in the organization.
+export class DuplicatePositionError extends AppError {
+  constructor() {
+    super(409, "A position with this name already exists in the organization");
+    this.name = "DuplicatePositionError";
+  }
+}
+
 // Thrown when a user is already assigned to the target task.
 export class DuplicateAssignmentError extends AppError {
   constructor() {
