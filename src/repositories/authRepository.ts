@@ -14,5 +14,5 @@ export async function getUserById(userId: string): Promise<SafeUser | null> {
   return prisma.user.findUnique({
     where: { user_id: userId },
     select: userSelect,
-  }) as Promise<SafeUser | null>;
+  });
 }
