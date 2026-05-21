@@ -153,6 +153,36 @@ describe("userController.createUser", () => {
     expect(res.statusCode).toBe(201);
   });
 
+  test("superadmin with org context creates user in effective org, ignoring body organization_id", async () => {
+    const user = { user_id: "u1", email: "a@a.com" };
+    const createSpy = spyOn(userRepo, "createUser").mockResolvedValue(user as never);
+    const req = createRequest({
+      user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
+      effectiveOrgId: "org-a",
+      body: { email: "a@a.com", password: "x", organization_id: "org-b" },
+    });
+    const res = createMockResponse();
+
+    await callController(userController.createUser, req, res);
+
+    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({ organization_id: "org-a" }));
+    expect(res.statusCode).toBe(201);
+  });
+
+  test("superadmin without org context returns 400 when organization_id is missing", async () => {
+    const createSpy = spyOn(userRepo, "createUser");
+    const req = createRequest({
+      user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
+      body: { email: "a@a.com", password: "x" },
+    });
+    const res = createMockResponse();
+
+    await callController(userController.createUser, req, res);
+
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
+  });
+
   test("does not allow admin to create superadmin", async () => {
     const createSpy = spyOn(userRepo, "createUser");
     const req = createRequest({

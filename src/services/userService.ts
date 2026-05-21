@@ -47,7 +47,9 @@ export async function getUser(ctx: RequestContext, userId: string) {
 }
 
 // Creates a user in the org determined by the actor's role.
-// Admins always create within their own org; super-admins must supply organization_id.
+// Admins always create within their own org.
+// Super-admins with active org context are scoped to that org.
+// Super-admins without org context must supply organization_id in the body.
 // Role escalation above the actor's own role is rejected.
 export async function createUser(ctx: RequestContext, body: CreateUserInput) {
   if (ctx.actorRole !== UserRole.ADMIN && ctx.actorRole !== UserRole.SUPER_ADMIN) {
@@ -58,9 +60,13 @@ export async function createUser(ctx: RequestContext, body: CreateUserInput) {
   let organization_id: string;
 
   if (ctx.actorRole === UserRole.SUPER_ADMIN) {
-    const trimmed = typeof body.organization_id === "string" ? body.organization_id.trim() : "";
-    if (!trimmed) throw new RequiredOrganizationIdError();
-    organization_id = trimmed;
+    if (ctx.effectiveOrgId) {
+      organization_id = ctx.effectiveOrgId;
+    } else {
+      const trimmed = typeof body.organization_id === "string" ? body.organization_id.trim() : "";
+      if (!trimmed) throw new RequiredOrganizationIdError();
+      organization_id = trimmed;
+    }
   } else {
     if (!ctx.actorOrgId) throw new MissingOrganizationError();
     organization_id = ctx.actorOrgId;
