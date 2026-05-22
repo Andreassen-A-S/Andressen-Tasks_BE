@@ -106,6 +106,15 @@ export async function getTaskById(id: string, orgId: string | null) {
 // Creates
 // ---------------------------------------------------------------------------
 
+export async function allocateNextTaskNumberForProject(db: DbClient, projectId: string): Promise<number> {
+  const counter = await (db as any).projectTaskCounter.upsert({
+    where: { project_id: projectId },
+    create: { project_id: projectId, last_number: 1 },
+    update: { last_number: { increment: 1 } },
+  });
+  return counter.last_number;
+}
+
 // Services own the transaction; db is the tx client passed from the service.
 export async function createTaskWithAssignments(
   db: DbClient,
@@ -126,15 +135,11 @@ export async function createTaskWithAssignments(
     if (!parent) throw new CrossOrganizationReferenceError("Parent task not found in organization.");
   }
 
-  const counter = await (db as any).orgTaskCounter.upsert({
-    where: { org_id: projectOrgId },
-    create: { org_id: projectOrgId, last_number: 1 },
-    update: { last_number: { increment: 1 } },
-  });
+  const number = await allocateNextTaskNumberForProject(db, data.project_id);
 
   const task = await (db as any).task.create({
     data: {
-      number: counter.last_number,
+      number,
       title: data.title,
       description: data.description,
       priority: data.priority,
