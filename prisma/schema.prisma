@@ -121,9 +121,9 @@ model Organization {
   created_at          DateTime           @default(now())
   updated_at          DateTime           @updatedAt
 
-  users     User[]
-  projects  Project[]
-  positions Position[]
+  users        User[]
+  projects     Project[]
+  positions    Position[]
 
   @@map("organizations")
 }
@@ -258,14 +258,24 @@ model Project {
   organization       Organization            @relation(fields: [organization_id], references: [org_id], onDelete: Cascade)
   tasks              Task[]
   recurringTemplates RecurringTaskTemplate[]
+  taskCounter        ProjectTaskCounter?
 
   @@index([created_by])
   @@index([organization_id])
   @@map("projects")
 }
 
+model ProjectTaskCounter {
+  project_id  String  @id
+  last_number Int     @default(0)
+  project     Project @relation(fields: [project_id], references: [project_id], onDelete: Cascade)
+
+  @@map("project_task_counters")
+}
+
 model Task {
   task_id              String       @id @default(uuid())
+  number               Int
   project_id           String
   created_by           String
   title                String
@@ -301,6 +311,7 @@ model Task {
   events               TaskEvent[]
   recurring_template   RecurringTaskTemplate? @relation("RecurringTemplateTasks", fields: [recurring_template_id], references: [id], onDelete: Cascade)  // Add onDelete
 
+  @@unique([project_id, number])
   @@unique([recurring_template_id, occurrence_date])
   @@index([project_id])
   @@index([created_by])

@@ -74,7 +74,10 @@ export async function getAllTasks(orgId: string | null) {
   const tasks = await prisma.task.findMany({
     where: orgId ? { project: { organization_id: orgId } } : undefined,
     orderBy: { created_at: "desc" },
-    include: { assignments: { select: { user_id: true } } },
+    include: {
+      assignments: { select: { user_id: true } },
+      project: { select: { name: true, color: true } },
+    },
   });
   return tasks.map(({ assignments, ...task }) => ({
     ...task,
@@ -91,6 +94,7 @@ export async function getTaskById(id: string, orgId: string | null) {
     include: {
       project: { select: { name: true, color: true } },
       assignments: { select: { user_id: true } },
+      creator: { select: { name: true, role: true } },
     },
   });
   if (!task) return null;
@@ -101,6 +105,29 @@ export async function getTaskById(id: string, orgId: string | null) {
 // ---------------------------------------------------------------------------
 // Creates
 // ---------------------------------------------------------------------------
+
+export async function allocateNextTaskNumberForProject(db: DbClient, projectId: string): Promise<number> {
+  const counter = await (db as any).projectTaskCounter.upsert({
+    where: { project_id: projectId },
+    create: { project_id: projectId, last_number: 1 },
+    update: { last_number: { increment: 1 } },
+  });
+  return counter.last_number;
+}
+
+export async function allocateTaskNumbersForProject(
+  db: DbClient,
+  projectId: string,
+  count: number,
+): Promise<number[]> {
+  const counter = await (db as any).projectTaskCounter.upsert({
+    where: { project_id: projectId },
+    create: { project_id: projectId, last_number: count },
+    update: { last_number: { increment: count } },
+  });
+  const start = counter.last_number - count + 1;
+  return Array.from({ length: count }, (_, i) => start + i);
+}
 
 // Services own the transaction; db is the tx client passed from the service.
 export async function createTaskWithAssignments(
@@ -122,8 +149,11 @@ export async function createTaskWithAssignments(
     if (!parent) throw new CrossOrganizationReferenceError("Parent task not found in organization.");
   }
 
+  const number = await allocateNextTaskNumberForProject(db, data.project_id);
+
   const task = await (db as any).task.create({
     data: {
+      number,
       title: data.title,
       description: data.description,
       priority: data.priority,
@@ -205,6 +235,11 @@ async function updateTaskScoped(
 
   await assertUsersInOrg(db, assigned_users, targetProjectOrgId);
 
+  const isProjectChange = data.project_id != null && data.project_id !== existingTask.project_id;
+  const newNumber = isProjectChange
+    ? await allocateNextTaskNumberForProject(db, data.project_id!)
+    : undefined;
+
   const finalStatus = data.status ?? existingTask.status;
   const completionTimestamp = new Date();
 
@@ -213,6 +248,7 @@ async function updateTaskScoped(
 
   const updateData: Prisma.TaskUpdateInput = {
     ...taskUpdateData,
+    ...(newNumber !== undefined ? { number: newNumber } : {}),
     ...(data.status === TaskStatus.DONE
       ? userId ? { completed_by: userId, completed_at: completionTimestamp } : {}
       : data.status !== undefined && !preserveCompletion

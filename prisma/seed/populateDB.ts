@@ -120,7 +120,12 @@ async function main() {
 
     // Helpers
     async function createTask(data: any, actorId: string) {
-      const task = await tx.task.create({ data });
+      const counter = await tx.projectTaskCounter.upsert({
+        where: { project_id: data.project_id },
+        create: { project_id: data.project_id, last_number: 1 },
+        update: { last_number: { increment: 1 } },
+      });
+      const task = await tx.task.create({ data: { ...data, number: counter.last_number } });
       await tx.taskEvent.create({
         data: {
           task_id: task.task_id,

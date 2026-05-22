@@ -9,6 +9,7 @@ import {
 import { appDateKey } from "../utils/dateUtils";
 import { prisma } from "../db/prisma";
 import * as templateRepository from "../repositories/templateRepository";
+import { allocateTaskNumbersForProject } from "../repositories/taskRepository";
 import { ValidationError } from "../errors/domainErrors";
 import {
   RecurrenceFrequency,
@@ -249,9 +250,13 @@ export class RecurringTaskService {
       return;
     }
 
+    // Allocate a contiguous block of numbers for all occurrences in one write
+    const numbers = await allocateTaskNumbersForProject(tx, template.project_id, occurrences.length);
+
     // Batch create all instances
-    const taskData = occurrences.map((occurrenceDate) => {
+    const taskData = occurrences.map((occurrenceDate, i) => {
       return {
+        number: numbers[i]!,
         title: template.title,
         description: template.description || "",
         priority: template.priority,
