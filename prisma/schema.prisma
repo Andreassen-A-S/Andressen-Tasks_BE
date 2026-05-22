@@ -275,7 +275,7 @@ model ProjectTaskCounter {
 
 model Task {
   task_id              String       @id @default(uuid())
-  number               Int          @default(0)
+  number               Int
   project_id           String
   created_by           String
   title                String
