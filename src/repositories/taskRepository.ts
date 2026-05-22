@@ -115,6 +115,20 @@ export async function allocateNextTaskNumberForProject(db: DbClient, projectId: 
   return counter.last_number;
 }
 
+export async function allocateTaskNumbersForProject(
+  db: DbClient,
+  projectId: string,
+  count: number,
+): Promise<number[]> {
+  const counter = await (db as any).projectTaskCounter.upsert({
+    where: { project_id: projectId },
+    create: { project_id: projectId, last_number: count },
+    update: { last_number: { increment: count } },
+  });
+  const start = counter.last_number - count + 1;
+  return Array.from({ length: count }, (_, i) => start + i);
+}
+
 // Services own the transaction; db is the tx client passed from the service.
 export async function createTaskWithAssignments(
   db: DbClient,
