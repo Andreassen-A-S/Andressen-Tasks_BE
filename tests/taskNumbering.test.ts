@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { TaskPriority, TaskStatus } from "../src/generated/prisma/client";
+import {
+  RecurrenceFrequency,
+  TaskGoalType,
+  TaskPriority,
+  TaskStatus,
+  TaskUnit,
+} from "../src/generated/prisma/client";
 
-const transactionMock = mock<(...args: any[]) => Promise<any>>();
+const transactionMock = mock<(fn: (tx: any) => Promise<any>) => Promise<any>>();
 
 mock.module("../src/db/prisma", () => ({
   prisma: {
@@ -11,6 +17,7 @@ mock.module("../src/db/prisma", () => ({
 }));
 
 const taskRepo = await import("../src/repositories/taskRepository");
+const { RecurringTaskService } = await import("../src/services/recurringTaskService");
 
 afterEach(() => {
   mock.restore();
@@ -159,7 +166,7 @@ describe("createTaskWithAssignments", () => {
     const upsertMock = mock(() => Promise.resolve({ last_number: 1 }));
     const db = makeDb({
       task: {
-        findFirst: mock(() => Promise.resolve(null)), // no parent lookup needed
+        findFirst: mock(() => Promise.resolve(null)),
         create: createMock,
         findUnique: mock(() =>
           Promise.resolve({ task_id: "task-new", assignments: [], project: {} })
@@ -230,11 +237,100 @@ describe("updateTaskPlatform - project reassignment", () => {
     expect(upsertMock).not.toHaveBeenCalled();
   });
 
-  test("duplicate (project_id, number) combination is rejected by the DB unique constraint", () => {
-    // The uniqueness invariant is enforced at DB level via @@unique([project_id, number]).
-    // A duplicate write from the Prisma client throws a P2002 unique constraint error.
-    // This test documents the constraint; integration tests against a real DB would
-    // verify the Prisma error code.
-    expect(true).toBe(true);
+  test("Prisma schema enforces @@unique([project_id, number]) on tasks", () => {
+    const schema = require("fs").readFileSync(
+      require("path").join(__dirname, "../prisma/schema.prisma"),
+      "utf-8",
+    );
+    expect(schema).toContain("@@unique([project_id, number])");
+  });
+});
+
+describe("RecurringTaskService - task numbering", () => {
+  const dailyTemplate = {
+    id: "template-a",
+    title: "Daily task",
+    description: "",
+    project_id: "project-a",
+    created_by: "user-a",
+    frequency: RecurrenceFrequency.DAILY,
+    interval: 1,
+    start_date: new Date("2026-01-01T00:00:00.000Z"),
+    end_date: null,
+    days_of_week: null,
+    day_of_month: null,
+    priority: TaskPriority.MEDIUM,
+    unit: TaskUnit.NONE,
+    goal_type: TaskGoalType.OPEN,
+    target_quantity: null,
+    is_active: true,
+  };
+
+  function makeTx(overrides: Record<string, any> = {}) {
+    return {
+      recurringTaskTemplate: {
+        findUnique: mock(() => Promise.resolve(dailyTemplate)),
+      },
+      task: {
+        findMany: mock(() => Promise.resolve([])),
+        createMany: mock(() => Promise.resolve({ count: 0 })),
+      },
+      recurringTaskTemplateAssignee: {
+        findMany: mock(() => Promise.resolve([])),
+      },
+      taskAssignment: {
+        createMany: mock(() => Promise.resolve({ count: 0 })),
+      },
+      taskEvent: {
+        createMany: mock(() => Promise.resolve({ count: 0 })),
+      },
+      projectTaskCounter: {
+        // count=2 → last_number=2, so allocator returns [1, 2]
+        upsert: mock(() => Promise.resolve({ last_number: 2 })),
+      },
+      ...overrides,
+    };
+  }
+
+  test("generated tasks receive ordered non-zero numbers in createMany payload", async () => {
+    const tx = makeTx();
+    transactionMock.mockImplementation((fn) => fn(tx));
+
+    await new RecurringTaskService().generateInstances("template-a", 2);
+
+    expect(tx.task.createMany).toHaveBeenCalledTimes(1);
+    const { data } = (tx.task.createMany as ReturnType<typeof mock>).mock.calls[0][0] as {
+      data: Array<{ number: number }>;
+    };
+    expect(data).toHaveLength(2);
+    expect(data[0].number).toBe(1);
+    expect(data[1].number).toBe(2);
+    expect(data.every((t) => t.number > 0)).toBe(true);
+  });
+
+  test("numbers are assigned in occurrence-date order", async () => {
+    const tx = makeTx();
+    transactionMock.mockImplementation((fn) => fn(tx));
+
+    await new RecurringTaskService().generateInstances("template-a", 2);
+
+    const { data } = (tx.task.createMany as ReturnType<typeof mock>).mock.calls[0][0] as {
+      data: Array<{ number: number; deadline: Date }>;
+    };
+    expect(data[0].deadline.getTime()).toBeLessThan(data[1].deadline.getTime());
+    expect(data[0].number).toBeLessThan(data[1].number);
+  });
+
+  test("skips generation when template is inactive", async () => {
+    const tx = makeTx({
+      recurringTaskTemplate: {
+        findUnique: mock(() => Promise.resolve({ ...dailyTemplate, is_active: false })),
+      },
+    });
+    transactionMock.mockImplementation((fn) => fn(tx));
+
+    await new RecurringTaskService().generateInstances("template-a", 2);
+
+    expect(tx.task.createMany).not.toHaveBeenCalled();
   });
 });
