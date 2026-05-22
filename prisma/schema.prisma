@@ -121,9 +121,10 @@ model Organization {
   created_at          DateTime           @default(now())
   updated_at          DateTime           @updatedAt
 
-  users     User[]
-  projects  Project[]
-  positions Position[]
+  users        User[]
+  projects     Project[]
+  positions    Position[]
+  taskCounters OrgTaskCounter[]
 
   @@map("organizations")
 }
@@ -264,8 +265,17 @@ model Project {
   @@map("projects")
 }
 
+model OrgTaskCounter {
+  org_id      String       @id
+  last_number Int          @default(0)
+  organization Organization @relation(fields: [org_id], references: [org_id], onDelete: Cascade)
+
+  @@map("org_task_counters")
+}
+
 model Task {
   task_id              String       @id @default(uuid())
+  number               Int          @default(0)
   project_id           String
   created_by           String
   title                String

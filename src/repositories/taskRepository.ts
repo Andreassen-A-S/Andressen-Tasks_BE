@@ -74,7 +74,10 @@ export async function getAllTasks(orgId: string | null) {
   const tasks = await prisma.task.findMany({
     where: orgId ? { project: { organization_id: orgId } } : undefined,
     orderBy: { created_at: "desc" },
-    include: { assignments: { select: { user_id: true } } },
+    include: {
+      assignments: { select: { user_id: true } },
+      project: { select: { name: true, color: true } },
+    },
   });
   return tasks.map(({ assignments, ...task }) => ({
     ...task,
@@ -91,6 +94,7 @@ export async function getTaskById(id: string, orgId: string | null) {
     include: {
       project: { select: { name: true, color: true } },
       assignments: { select: { user_id: true } },
+      creator: { select: { name: true, role: true } },
     },
   });
   if (!task) return null;
@@ -122,8 +126,15 @@ export async function createTaskWithAssignments(
     if (!parent) throw new CrossOrganizationReferenceError("Parent task not found in organization.");
   }
 
+  const counter = await (db as any).orgTaskCounter.upsert({
+    where: { org_id: projectOrgId },
+    create: { org_id: projectOrgId, last_number: 1 },
+    update: { last_number: { increment: 1 } },
+  });
+
   const task = await (db as any).task.create({
     data: {
+      number: counter.last_number,
       title: data.title,
       description: data.description,
       priority: data.priority,

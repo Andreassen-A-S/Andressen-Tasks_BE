@@ -50,6 +50,11 @@ export const userSelect = {
     },
   },
   organization_id: true,
+  organization: {
+    select: {
+      name: true,
+    },
+  },
   created_at: true,
   updated_at: true,
 };
