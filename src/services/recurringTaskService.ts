@@ -256,7 +256,7 @@ export class RecurringTaskService {
     // Batch create all instances
     const taskData = occurrences.map((occurrenceDate, i) => {
       return {
-        number: numbers[i],
+        number: numbers[i]!,
         title: template.title,
         description: template.description || "",
         priority: template.priority,
