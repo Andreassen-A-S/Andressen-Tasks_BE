@@ -221,6 +221,11 @@ async function updateTaskScoped(
 
   await assertUsersInOrg(db, assigned_users, targetProjectOrgId);
 
+  const isProjectChange = data.project_id != null && data.project_id !== existingTask.project_id;
+  const newNumber = isProjectChange
+    ? await allocateNextTaskNumberForProject(db, data.project_id!)
+    : undefined;
+
   const finalStatus = data.status ?? existingTask.status;
   const completionTimestamp = new Date();
 
@@ -229,6 +234,7 @@ async function updateTaskScoped(
 
   const updateData: Prisma.TaskUpdateInput = {
     ...taskUpdateData,
+    ...(newNumber !== undefined ? { number: newNumber } : {}),
     ...(data.status === TaskStatus.DONE
       ? userId ? { completed_by: userId, completed_at: completionTimestamp } : {}
       : data.status !== undefined && !preserveCompletion
