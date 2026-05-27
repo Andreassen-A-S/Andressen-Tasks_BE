@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma";
+import { signUserProfilePicture } from "./userRepository";
 import {
   type Task,
   type Prisma,
@@ -99,7 +100,11 @@ export async function getTaskById(id: string, orgId: string | null) {
   });
   if (!task) return null;
   const { assignments, ...rest } = task;
-  return { ...rest, assigned_users: assignments.map((a) => a.user_id) };
+  return {
+    ...rest,
+    assigned_users: assignments.map((a) => a.user_id),
+    creator: rest.creator ? await signUserProfilePicture(rest.creator) : rest.creator,
+  };
 }
 
 // ---------------------------------------------------------------------------

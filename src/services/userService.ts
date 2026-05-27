@@ -1,7 +1,7 @@
 import { UserRole } from "../generated/prisma/client";
 import * as userRepo from "../repositories/userRepository";
 import * as positionRepo from "../repositories/positionRepository";
-import { generateUserProfilePictureUploadUrl, getPublicUrl } from "./storageService";
+import { generateUserProfilePictureUploadUrl } from "./storageService";
 import type { CreateUserInput, UpdateUserInput } from "../types/user";
 import type { RequestContext } from "../types/requestContext";
 import {
@@ -159,5 +159,5 @@ export async function prepareProfilePictureUpload(ctx: RequestContext, userId: s
   }
 
   const { uploadUrl, gcsPath } = await generateUserProfilePictureUploadUrl(userId, mimeType);
-  return { upload_url: uploadUrl, url: getPublicUrl(gcsPath) };
+  return { upload_url: uploadUrl, gcs_path: gcsPath };
 }

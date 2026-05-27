@@ -2,6 +2,7 @@ import { prisma } from "../db/prisma";
 import { Prisma, UserRole } from "../generated/prisma/client";
 import type { User } from "../generated/prisma/client";
 import { hashPassword } from "../helper/helpers";
+import { generateSignedReadUrl } from "../services/storageService";
 import {
   userSelect,
   type CreateUserInput,
@@ -10,8 +11,17 @@ import {
 } from "../types/user";
 import { UserNotFoundError } from "../errors/domainErrors";
 
+export function isUserProfilePicturePath(value: string): boolean {
+  return /^users\/[^/]+\/profile\.(jpe?g|png|webp|heic)$/i.test(value);
+}
+
+export async function signUserProfilePicture<T extends { profile_picture_url?: string | null }>(obj: T): Promise<T> {
+  if (!obj.profile_picture_url || !isUserProfilePicturePath(obj.profile_picture_url)) return obj;
+  return { ...obj, profile_picture_url: await generateSignedReadUrl(obj.profile_picture_url) };
+}
+
 export async function getAllUsers(orgId: string | null): Promise<SafeUser[]> {
-  return prisma.user.findMany({
+  const users = await prisma.user.findMany({
     where: {
       role: { not: UserRole.SYSTEM },
       ...(orgId ? { organization_id: orgId } : {}),
@@ -19,10 +29,11 @@ export async function getAllUsers(orgId: string | null): Promise<SafeUser[]> {
     select: userSelect,
     orderBy: { created_at: "desc" },
   });
+  return Promise.all(users.map(signUserProfilePicture));
 }
 
 export async function getUserById(id: string, orgId: string | null): Promise<SafeUser | null> {
-  return prisma.user.findFirst({
+  const user = await prisma.user.findFirst({
     where: {
       user_id: id,
       role: { not: UserRole.SYSTEM },
@@ -30,6 +41,8 @@ export async function getUserById(id: string, orgId: string | null): Promise<Saf
     },
     select: userSelect,
   });
+  if (!user) return null;
+  return signUserProfilePicture(user);
 }
 
 // Creates a new user in the organization. Password is hashed before persisting.
@@ -37,13 +50,14 @@ export async function getUserById(id: string, orgId: string | null): Promise<Saf
 export async function createUser(data: CreateUserInput) {
   const hashedPassword = await hashPassword(data.password);
 
-  return prisma.user.create({
+  const user = await prisma.user.create({
     data: {
       ...data,
       password: hashedPassword,
     },
     select: userSelect,
   });
+  return signUserProfilePicture(user);
 }
 
 async function updateUserScoped(
@@ -64,11 +78,12 @@ async function updateUserScoped(
   if (data.password) {
     data.password = await hashPassword(data.password);
   }
-  return prisma.user.update({
+  const user = await prisma.user.update({
     where: { user_id: id },
     data,
     select: userSelect,
   });
+  return signUserProfilePicture(user);
 }
 
 // Org-scoped user update. Validates that the user belongs to the specified org

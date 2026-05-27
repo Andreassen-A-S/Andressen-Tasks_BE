@@ -19,7 +19,7 @@ export const updateUserSchema = z.object({
   position_id: z.string().uuid().nullable().optional(),
   role: z.nativeEnum(UserRole).optional(),
   status: z.nativeEnum(UserStatus).optional(),
-  profile_picture_url: z.string().url().nullable().optional(),
+  profile_picture_url: z.string().nullable().optional(),
 });
 
 export const prepareProfilePictureSchema = z.object({
