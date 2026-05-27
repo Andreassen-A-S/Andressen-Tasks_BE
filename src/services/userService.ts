@@ -1,6 +1,7 @@
 import { UserRole } from "../generated/prisma/client";
 import * as userRepo from "../repositories/userRepository";
 import * as positionRepo from "../repositories/positionRepository";
+import { generateUserProfilePictureUploadUrl, getPublicUrl } from "./storageService";
 import type { CreateUserInput, UpdateUserInput } from "../types/user";
 import type { RequestContext } from "../types/requestContext";
 import {
@@ -144,4 +145,19 @@ export async function deleteUser(ctx: RequestContext, targetId: string) {
 // Validates token format; passes null to deregister.
 export async function registerPushToken(userId: string, pushToken: string | null) {
   await userRepo.updatePushToken(userId, pushToken);
+}
+
+// Generates a signed GCS upload URL for the user's profile picture.
+// Only the user themselves or an admin/super-admin may request this.
+export async function prepareProfilePictureUpload(ctx: RequestContext, userId: string, mimeType: string) {
+  if (
+    ctx.actorUserId !== userId &&
+    ctx.actorRole !== UserRole.ADMIN &&
+    ctx.actorRole !== UserRole.SUPER_ADMIN
+  ) {
+    throw new ForbiddenUserOperationError();
+  }
+
+  const { uploadUrl, gcsPath } = await generateUserProfilePictureUploadUrl(userId, mimeType);
+  return { upload_url: uploadUrl, url: getPublicUrl(gcsPath) };
 }

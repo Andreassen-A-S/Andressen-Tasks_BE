@@ -97,6 +97,25 @@ export async function generateOrgLogoUploadUrl(
   return { uploadUrl, gcsPath };
 }
 
+export async function generateUserProfilePictureUploadUrl(
+  userId: string,
+  mimeType: string,
+): Promise<{ uploadUrl: string; gcsPath: string }> {
+  const config = ALLOWED_MIME_TYPES[mimeType];
+  if (!config || !mimeType.startsWith("image/")) {
+    throw new Error(`Unsupported mime type: ${mimeType}`);
+  }
+  const gcsPath = `users/${userId}/profile.${config.ext}`;
+  const file = getStorage().bucket(getBucketName()).file(gcsPath);
+  const [uploadUrl] = await file.getSignedUrl({
+    version: "v4",
+    action: "write",
+    expires: Date.now() + 15 * 60 * 1000,
+    contentType: mimeType,
+  });
+  return { uploadUrl, gcsPath };
+}
+
 export async function deleteFile(gcsPath: string): Promise<void> {
   await getStorage()
     .bucket(getBucketName())

@@ -4,7 +4,7 @@ import { confirmAttachments } from "./attachmentRepository";
 import type { DbClient } from "../types/db";
 
 const COMMENT_INCLUDE = {
-  author: { select: { user_id: true, name: true, email: true } },
+  author: { select: { user_id: true, name: true, email: true, profile_picture_url: true } },
   attachments: {
     where: { status: AttachmentStatus.CONFIRMED },
     orderBy: { created_at: "asc" as const },

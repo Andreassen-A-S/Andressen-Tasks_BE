@@ -1,3 +1,5 @@
+import type { SafeUser } from "./user";
+
 export interface LoginRequest {
   email: string;
   password: string;
@@ -7,14 +9,7 @@ export interface LoginResponse {
   success: boolean;
   data?: {
     token: string;
-    user: {
-      user_id: string;
-      name: string | null;
-      email: string;
-      role: string;
-      position_id: string | null;
-      organization_id: string;
-    };
+    user: SafeUser | null;
   };
   error?: string;
 }

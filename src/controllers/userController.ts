@@ -47,3 +47,11 @@ export async function deleteUser(req: Request, res: Response) {
   await userService.deleteUser(ctx, req.params.id as string);
   res.status(204).send();
 }
+
+export async function prepareProfilePicture(req: Request, res: Response) {
+  const ctx = getRequestContext(req);
+  if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
+  const { mime_type } = req.body;
+  const result = await userService.prepareProfilePictureUpload(ctx, req.params.id as string, mime_type);
+  return res.json({ success: true, data: result });
+}

@@ -13,6 +13,7 @@ export interface SafeUser {
   position: PositionSummary | null;
   role: UserRole;
   status: UserStatus;
+  profile_picture_url: string | null;
   organization_id: string;
   created_at: Date;
   updated_at: Date;
@@ -25,6 +26,7 @@ export interface UpdateUserInput {
   role?: UserRole;
   status?: UserStatus;
   position_id?: string | null;
+  profile_picture_url?: string | null;
 }
 
 export interface CreateUserInput {
@@ -49,6 +51,7 @@ export const userSelect = {
       name: true,
     },
   },
+  profile_picture_url: true,
   organization_id: true,
   organization: {
     select: {

@@ -143,17 +143,18 @@ model Position {
 }
 
 model User {
-  user_id         String        @id @default(uuid())
-  name            String?
-  email           String        @unique
-  password        String
-  role            UserRole      @default(USER)
-  status          UserStatus    @default(ACTIVE)
-  position_id     String?
-  push_token      String?       @unique
-  organization_id String
-  created_at      DateTime      @default(now())
-  updated_at      DateTime      @updatedAt
+  user_id             String        @id @default(uuid())
+  name                String?
+  email               String        @unique
+  password            String
+  role                UserRole      @default(USER)
+  status              UserStatus    @default(ACTIVE)
+  position_id         String?
+  push_token          String?       @unique
+  profile_picture_url String?       @db.Text
+  organization_id     String
+  created_at          DateTime      @default(now())
+  updated_at          DateTime      @updatedAt
 
   // Relations
   organization    Organization  @relation(fields: [organization_id], references: [org_id], onDelete: Cascade)
