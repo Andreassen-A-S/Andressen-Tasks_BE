@@ -162,7 +162,8 @@ export async function prepareProfilePictureUpload(ctx: RequestContext, userId: s
     throw new ForbiddenUserOperationError();
   }
 
-  const target = await userRepo.getUserById(userId, ctx.effectiveOrgId);
+  const lookupOrgId = userId === ctx.actorUserId ? null : ctx.effectiveOrgId;
+  const target = await userRepo.getUserById(userId, lookupOrgId);
   if (!target) throw new UserNotFoundError(userId);
 
   const mimeConfig = ALLOWED_MIME_TYPES[mimeType];

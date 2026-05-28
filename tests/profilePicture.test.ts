@@ -95,6 +95,22 @@ describe("prepareProfilePicture — authorization", () => {
     expect(res.body).toEqual({ success: true, data: { upload_url: FAKE_UPLOAD_RESULT.uploadUrl, gcs_path: FAKE_UPLOAD_RESULT.gcsPath } });
   });
 
+  test("scoped super-admin can prepare their own profile picture regardless of effective org", async () => {
+    userFindFirstMock.mockResolvedValue({ user_id: "super1", organization_id: null });
+    const req = createRequest({
+      user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
+      effectiveOrgId: "org-a",
+      params: { id: "super1" },
+      body: { mime_type: "image/jpeg", file_size: 1024 },
+    });
+    const res = createMockResponse();
+
+    await callController(userController.prepareProfilePicture, req, res);
+
+    expect(generateUserProfilePictureUploadUrlMock).toHaveBeenCalledWith("super1", "image/jpeg");
+    expect(res.body).toMatchObject({ success: true });
+  });
+
   test("deleted user with stale JWT cannot prepare their own profile picture", async () => {
     userFindFirstMock.mockResolvedValue(null);
     const req = createRequest({
