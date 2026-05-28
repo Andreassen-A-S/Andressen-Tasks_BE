@@ -1,10 +1,11 @@
 import { prisma } from "../db/prisma";
 import { AttachmentStatus } from "../generated/prisma/client";
 import { confirmAttachments } from "./attachmentRepository";
+import { signUserProfilePicture } from "./userRepository";
 import type { DbClient } from "../types/db";
 
 const COMMENT_INCLUDE = {
-  author: { select: { user_id: true, name: true, email: true } },
+  author: { select: { user_id: true, name: true, email: true, profile_picture_url: true } },
   attachments: {
     where: { status: AttachmentStatus.CONFIRMED },
     orderBy: { created_at: "asc" as const },
@@ -12,11 +13,12 @@ const COMMENT_INCLUDE = {
 } as const;
 
 export async function getCommentsByTaskId(taskId: string) {
-  return prisma.taskComment.findMany({
+  const comments = await prisma.taskComment.findMany({
     where: { task_id: taskId },
     include: COMMENT_INCLUDE,
     orderBy: { created_at: "asc" },
   });
+  return Promise.all(comments.map(async (c) => ({ ...c, author: await signUserProfilePicture(c.author) })));
 }
 
 // Accepts a DbClient so the caller (service) can include this in its own transaction.
@@ -37,17 +39,20 @@ export async function createComment(
     await confirmAttachments(db, upload_tokens, comment.comment_id, data.user_id, data.task_id);
   }
 
-  return (db as any).taskComment.findUniqueOrThrow({
+  const created = await (db as any).taskComment.findUniqueOrThrow({
     where: { comment_id: comment.comment_id },
     include: COMMENT_INCLUDE,
   });
+  return { ...created, author: await signUserProfilePicture(created.author) };
 }
 
 export async function getCommentById(commentId: string) {
-  return prisma.taskComment.findUnique({
+  const comment = await prisma.taskComment.findUnique({
     where: { comment_id: commentId },
     include: COMMENT_INCLUDE,
   });
+  if (!comment) return null;
+  return { ...comment, author: await signUserProfilePicture(comment.author) };
 }
 
 // Accepts a DbClient so the caller (service) can include this in its own transaction.

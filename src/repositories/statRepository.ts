@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma";
+import { signUserProfilePicture } from "./userRepository";
 import {
   TaskStatus,
   TaskPriority,
@@ -330,10 +331,10 @@ export async function getTopPerformersForWindow(
   const userIds = performers.map((p) => p.completed_by!);
   const users = await client.user.findMany({
     where: { user_id: { in: userIds } },
-    select: { user_id: true, name: true, email: true },
+    select: { user_id: true, name: true, email: true, profile_picture_url: true },
   });
 
-  return performers.map((p) => {
+  const mapped = performers.map((p) => {
     const user = users.find((u) => u.user_id === p.completed_by!);
     return {
       user_id: p.completed_by,
@@ -341,8 +342,10 @@ export async function getTopPerformersForWindow(
       email: user?.email || "",
       completed_count: p._count.task_id,
       total_quantity: p._sum.current_quantity || 0,
+      profile_picture_url: user?.profile_picture_url ?? null,
     };
   });
+  return Promise.all(mapped.map(signUserProfilePicture));
 }
 
 /**

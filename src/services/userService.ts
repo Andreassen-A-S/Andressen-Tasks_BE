@@ -1,15 +1,18 @@
 import { UserRole } from "../generated/prisma/client";
 import * as userRepo from "../repositories/userRepository";
 import * as positionRepo from "../repositories/positionRepository";
+import { generateUserProfilePictureUploadUrl, ALLOWED_MIME_TYPES } from "./storageService";
 import type { CreateUserInput, UpdateUserInput } from "../types/user";
 import type { RequestContext } from "../types/requestContext";
 import {
   ForbiddenUserOperationError,
   InvalidUserRoleError,
   MissingOrganizationError,
+  PayloadTooLargeError,
   PositionNotFoundError,
   RequiredOrganizationIdError,
   UserNotFoundError,
+  ValidationError,
 } from "../errors/domainErrors";
 
 // Re-export error classes for backward compatibility with controllers that import from this module.
@@ -43,7 +46,8 @@ export async function listUsers(ctx: RequestContext) {
 }
 
 export async function getUser(ctx: RequestContext, userId: string) {
-  return userRepo.getUserById(userId, ctx.effectiveOrgId);
+  const scopedOrgId = userId === ctx.actorUserId ? null : ctx.effectiveOrgId;
+  return userRepo.getUserById(userId, scopedOrgId);
 }
 
 // Creates a user in the org determined by the actor's role.
@@ -144,4 +148,30 @@ export async function deleteUser(ctx: RequestContext, targetId: string) {
 // Validates token format; passes null to deregister.
 export async function registerPushToken(userId: string, pushToken: string | null) {
   await userRepo.updatePushToken(userId, pushToken);
+}
+
+// Generates a signed GCS upload URL for the user's profile picture.
+// Only the user themselves or an admin/super-admin may request this.
+// Admins and scoped super-admins are additionally scoped to their effective org.
+export async function prepareProfilePictureUpload(ctx: RequestContext, userId: string, mimeType: string, fileSize: number) {
+  if (
+    ctx.actorUserId !== userId &&
+    ctx.actorRole !== UserRole.ADMIN &&
+    ctx.actorRole !== UserRole.SUPER_ADMIN
+  ) {
+    throw new ForbiddenUserOperationError();
+  }
+
+  const lookupOrgId = userId === ctx.actorUserId ? null : ctx.effectiveOrgId;
+  const target = await userRepo.getUserById(userId, lookupOrgId);
+  if (!target) throw new UserNotFoundError(userId);
+
+  const mimeConfig = ALLOWED_MIME_TYPES[mimeType];
+  if (!mimeConfig) throw new ValidationError("Unsupported profile picture mime_type");
+  if (fileSize > mimeConfig.maxBytes) {
+    throw new PayloadTooLargeError(`File exceeds maximum size of ${mimeConfig.maxBytes / (1024 * 1024)} MB`);
+  }
+
+  const { uploadUrl, gcsPath } = await generateUserProfilePictureUploadUrl(userId, mimeType);
+  return { upload_url: uploadUrl, gcs_path: gcsPath };
 }

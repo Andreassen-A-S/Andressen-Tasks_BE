@@ -8,12 +8,18 @@ import type { TaskAssignment } from "../generated/prisma/client";
 import { AssignmentNotFoundError, AssignmentCrossOrganizationError, DuplicateAssignmentError } from "../errors/domainErrors";
 import type { DbClient } from "../types/db";
 import { userSelect } from "../types/user";
+import { signUserProfilePicture } from "./userRepository";
+
+async function signAssignmentUser<T extends { user?: any }>(a: T): Promise<T> {
+  if (!a.user) return a;
+  return { ...a, user: await signUserProfilePicture(a.user) };
+}
 
 // Re-export for backward compatibility with imports from this module.
 export { AssignmentNotFoundError, AssignmentCrossOrganizationError } from "../errors/domainErrors";
 
 export async function getAllAssignments(orgId: string | null): Promise<TaskAssignment[]> {
-  return prisma.taskAssignment.findMany({
+  const assignments = await prisma.taskAssignment.findMany({
     where: orgId ? { task: { project: { organization_id: orgId } } } : undefined,
     include: {
       user: { select: userSelect },
@@ -30,6 +36,7 @@ export async function getAllAssignments(orgId: string | null): Promise<TaskAssig
     },
     orderBy: { assigned_at: "desc" },
   });
+  return Promise.all(assignments.map(signAssignmentUser));
 }
 
 export async function assignTaskToUser(
@@ -68,20 +75,21 @@ export async function assignTaskToUser(
     throw new DuplicateAssignmentError();
   }
 
-  return prisma.taskAssignment.create({
+  const assignment = await prisma.taskAssignment.create({
     data,
     include: {
       task: { select: { task_id: true, title: true } },
       user: { select: userSelect },
     },
   });
+  return signAssignmentUser(assignment);
 }
 
 export async function getTaskAssignments(
   taskId: string,
   orgId: string | null,
 ): Promise<TaskAssignment[]> {
-  return prisma.taskAssignment.findMany({
+  const assignments = await prisma.taskAssignment.findMany({
     where: {
       task_id: taskId,
       ...(orgId ? { task: { project: { organization_id: orgId } } } : {}),
@@ -90,13 +98,14 @@ export async function getTaskAssignments(
       user: { select: userSelect },
     },
   });
+  return Promise.all(assignments.map(signAssignmentUser));
 }
 
 export async function getAssignmentById(
   assignmentId: string,
   orgId: string | null,
 ): Promise<TaskAssignment | null> {
-  return prisma.taskAssignment.findFirst({
+  const assignment = await prisma.taskAssignment.findFirst({
     where: {
       assignment_id: assignmentId,
       ...(orgId ? { task: { project: { organization_id: orgId } } } : {}),
@@ -115,6 +124,8 @@ export async function getAssignmentById(
       },
     },
   });
+  if (!assignment) return null;
+  return signAssignmentUser(assignment);
 }
 
 export async function getUserAssignments(
@@ -148,7 +159,7 @@ export async function updateAssignment(
   });
   if (!existing) throw new AssignmentNotFoundError(assignmentId);
 
-  return (db as any).taskAssignment.update({
+  const assignment = await (db as any).taskAssignment.update({
     where: { assignment_id: existing.assignment_id },
     data,
     include: {
@@ -165,6 +176,7 @@ export async function updateAssignment(
       },
     },
   });
+  return signAssignmentUser(assignment);
 }
 
 export async function deleteAssignment(

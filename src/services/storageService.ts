@@ -9,6 +9,7 @@ function requireEnv(key: string): string {
 
 let _storage: Storage | null = null;
 let _bucketName: string | null = null;
+let _publicBucketName: string | null = null;
 
 function getStorage(): Storage {
   if (!_storage) {
@@ -29,9 +30,19 @@ function getBucketName(): string {
   return _bucketName;
 }
 
+function getPublicBucketName(): string {
+  if (!_publicBucketName) _publicBucketName = requireEnv("GCS_PUBLIC_BUCKET_NAME");
+  return _publicBucketName;
+}
+
 export function getPublicUrl(gcsPath: string): string {
   const encodedPath = gcsPath.split("/").map(encodeURIComponent).join("/");
   return `https://storage.googleapis.com/${getBucketName()}/${encodedPath}`;
+}
+
+export function getPublicAssetUrl(gcsPath: string): string {
+  const encodedPath = gcsPath.split("/").map(encodeURIComponent).join("/");
+  return `https://storage.googleapis.com/${getPublicBucketName()}/${encodedPath}`;
 }
 
 export const ALLOWED_MIME_TYPES: Record<string, { ext: string; maxBytes: number }> = {
@@ -87,7 +98,26 @@ export async function generateOrgLogoUploadUrl(
     throw new Error(`Unsupported mime type: ${mimeType}`);
   }
   const gcsPath = `orgs/${orgId}/logo.${config.ext}`;
-  const file = getStorage().bucket(getBucketName()).file(gcsPath);
+  const file = getStorage().bucket(getPublicBucketName()).file(gcsPath);
+  const [uploadUrl] = await file.getSignedUrl({
+    version: "v4",
+    action: "write",
+    expires: Date.now() + 15 * 60 * 1000,
+    contentType: mimeType,
+  });
+  return { uploadUrl, gcsPath };
+}
+
+export async function generateUserProfilePictureUploadUrl(
+  userId: string,
+  mimeType: string,
+): Promise<{ uploadUrl: string; gcsPath: string }> {
+  const config = ALLOWED_MIME_TYPES[mimeType];
+  if (!config || !mimeType.startsWith("image/")) {
+    throw new Error(`Unsupported mime type: ${mimeType}`);
+  }
+  const gcsPath = `users/${userId}/profile.${config.ext}`;
+  const file = getStorage().bucket(getPublicBucketName()).file(gcsPath);
   const [uploadUrl] = await file.getSignedUrl({
     version: "v4",
     action: "write",

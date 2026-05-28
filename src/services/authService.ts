@@ -49,18 +49,9 @@ export async function authenticateUser(credentials: LoginRequest) {
     expiresIn: JWT_EXPIRES_IN,
   } as jwt.SignOptions);
 
-  // Return user data (without password) and token
-  return {
-    token,
-    user: {
-      user_id: user.user_id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      position_id: user.position_id,
-      organization_id: user.organization_id,
-    },
-  };
+  const safeUser = await authRepo.getUserById(user.user_id);
+
+  return { token, user: safeUser };
 }
 
 export function verifyToken(token: string): JWTPayload {

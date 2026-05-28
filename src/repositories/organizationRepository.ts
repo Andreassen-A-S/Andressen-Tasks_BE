@@ -1,6 +1,6 @@
 import { prisma } from "../db/prisma";
 import type { Organization } from "../generated/prisma/client";
-import { generateSignedReadUrl } from "../services/storageService";
+import { getPublicAssetUrl } from "../services/storageService";
 import { OrganizationNotFoundError } from "../errors/domainErrors";
 
 // Re-export for backward compatibility with imports from this module.
@@ -18,10 +18,10 @@ export interface UpdateOrganizationInput {
   logo_url?: string | null;
 }
 
-async function withSignedLogo<T extends { logo_url: string | null }>(org: T): Promise<T> {
+function withPublicLogo<T extends { logo_url: string | null }>(org: T): T {
   if (!org.logo_url) return org;
   if (!isOrgLogoPath(org.logo_url)) return org;
-  return { ...org, logo_url: await generateSignedReadUrl(org.logo_url) };
+  return { ...org, logo_url: getPublicAssetUrl(org.logo_url) };
 }
 
 export function isOrgLogoPath(value: string): boolean {
@@ -33,7 +33,7 @@ export async function getAllOrganizations() {
     orderBy: { created_at: "asc" },
     include: { _count: { select: { users: true, projects: true } } },
   });
-  return Promise.all(orgs.map(withSignedLogo));
+  return orgs.map(withPublicLogo);
 }
 
 export async function getOrganizationById(id: string) {
@@ -42,18 +42,18 @@ export async function getOrganizationById(id: string) {
     include: { _count: { select: { users: true, projects: true } } },
   });
   if (!org) return null;
-  return withSignedLogo(org);
+  return withPublicLogo(org);
 }
 
 export async function getOrganizationBySlug(slug: string): Promise<Organization | null> {
   const org = await prisma.organization.findUnique({ where: { slug } });
   if (!org) return null;
-  return withSignedLogo(org);
+  return withPublicLogo(org);
 }
 
 export async function createOrganization(data: CreateOrganizationInput): Promise<Organization> {
   const org = await prisma.organization.create({ data });
-  return withSignedLogo(org);
+  return withPublicLogo(org);
 }
 
 export async function updateOrganization(
@@ -63,7 +63,7 @@ export async function updateOrganization(
   const existing = await prisma.organization.findUnique({ where: { org_id: id } });
   if (!existing) throw new OrganizationNotFoundError(id);
   const org = await prisma.organization.update({ where: { org_id: id }, data });
-  return withSignedLogo(org);
+  return withPublicLogo(org);
 }
 
 export async function deleteOrganization(id: string): Promise<void> {
