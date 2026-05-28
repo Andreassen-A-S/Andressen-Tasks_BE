@@ -44,7 +44,8 @@ export async function listUsers(ctx: RequestContext) {
 }
 
 export async function getUser(ctx: RequestContext, userId: string) {
-  return userRepo.getUserById(userId, ctx.effectiveOrgId);
+  const scopedOrgId = userId === ctx.actorUserId ? null : ctx.effectiveOrgId;
+  return userRepo.getUserById(userId, scopedOrgId);
 }
 
 // Creates a user in the org determined by the actor's role.
@@ -149,7 +150,7 @@ export async function registerPushToken(userId: string, pushToken: string | null
 
 // Generates a signed GCS upload URL for the user's profile picture.
 // Only the user themselves or an admin/super-admin may request this.
-// Admins are additionally scoped to their own org.
+// Admins and scoped super-admins are additionally scoped to their effective org.
 export async function prepareProfilePictureUpload(ctx: RequestContext, userId: string, mimeType: string) {
   if (
     ctx.actorUserId !== userId &&
@@ -159,8 +160,8 @@ export async function prepareProfilePictureUpload(ctx: RequestContext, userId: s
     throw new ForbiddenUserOperationError();
   }
 
-  if (ctx.actorUserId !== userId && ctx.actorRole === UserRole.ADMIN) {
-    const target = await userRepo.getUserById(userId, ctx.actorOrgId);
+  if (ctx.actorUserId !== userId && ctx.effectiveOrgId) {
+    const target = await userRepo.getUserById(userId, ctx.effectiveOrgId);
     if (!target) throw new UserNotFoundError(userId);
   }
 

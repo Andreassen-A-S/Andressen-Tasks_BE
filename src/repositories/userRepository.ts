@@ -9,7 +9,7 @@ import {
   type SafeUser,
   type UpdateUserInput,
 } from "../types/user";
-import { UserNotFoundError } from "../errors/domainErrors";
+import { UserNotFoundError, ValidationError } from "../errors/domainErrors";
 
 export function isUserProfilePicturePath(value: string): boolean {
   return /^users\/[^/]+\/profile\.(jpe?g|png|webp|heic)$/i.test(value);
@@ -78,7 +78,7 @@ async function updateUserScoped(
   if (data.profile_picture_url !== undefined && data.profile_picture_url !== null) {
     const expectedPrefix = `users/${id}/profile.`;
     if (!data.profile_picture_url.startsWith(expectedPrefix) || !isUserProfilePicturePath(data.profile_picture_url)) {
-      throw new Error(`Invalid profile_picture_url for user ${id}`);
+      throw new ValidationError("Invalid profile_picture_url");
     }
   }
   if (data.password) {
