@@ -18,7 +18,6 @@ mock.module("../src/db/prisma", () => ({
 }));
 
 const generateUserProfilePictureUploadUrlMock = mock<(...args: any[]) => Promise<any>>();
-const generateSignedReadUrlMock = mock((path: string) => Promise.resolve(path));
 
 mock.module("../src/services/storageService", () => ({
   ALLOWED_MIME_TYPES: {
@@ -28,7 +27,7 @@ mock.module("../src/services/storageService", () => ({
     "image/heic": { ext: "heic", maxBytes: 10 * 1024 * 1024 },
   },
   generateUserProfilePictureUploadUrl: generateUserProfilePictureUploadUrlMock,
-  generateSignedReadUrl: generateSignedReadUrlMock,
+  getPublicAssetUrl: mock((path: string) => `https://storage.example.com/${path}`),
 }));
 
 mock.module("../src/helper/helpers", () => ({
@@ -71,7 +70,6 @@ afterEach(() => {
   userFindUniqueMock.mockReset();
   userUpdateMock.mockReset();
   generateUserProfilePictureUploadUrlMock.mockReset();
-  generateSignedReadUrlMock.mockReset();
 });
 
 describe("prepareProfilePicture — authorization", () => {
