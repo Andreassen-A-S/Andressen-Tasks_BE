@@ -27,6 +27,7 @@ export const prepareProfilePictureSchema = z.object({
     (v) => v.startsWith("image/") && !!ALLOWED_MIME_TYPES[v],
     { message: "Unsupported profile picture mime_type" },
   ),
+  file_size: z.number().int().nonnegative(),
 });
 
 export const registerPushTokenSchema = z.object({

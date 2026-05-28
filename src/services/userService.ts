@@ -1,13 +1,14 @@
 import { UserRole } from "../generated/prisma/client";
 import * as userRepo from "../repositories/userRepository";
 import * as positionRepo from "../repositories/positionRepository";
-import { generateUserProfilePictureUploadUrl } from "./storageService";
+import { generateUserProfilePictureUploadUrl, ALLOWED_MIME_TYPES } from "./storageService";
 import type { CreateUserInput, UpdateUserInput } from "../types/user";
 import type { RequestContext } from "../types/requestContext";
 import {
   ForbiddenUserOperationError,
   InvalidUserRoleError,
   MissingOrganizationError,
+  PayloadTooLargeError,
   PositionNotFoundError,
   RequiredOrganizationIdError,
   UserNotFoundError,
@@ -151,7 +152,7 @@ export async function registerPushToken(userId: string, pushToken: string | null
 // Generates a signed GCS upload URL for the user's profile picture.
 // Only the user themselves or an admin/super-admin may request this.
 // Admins and scoped super-admins are additionally scoped to their effective org.
-export async function prepareProfilePictureUpload(ctx: RequestContext, userId: string, mimeType: string) {
+export async function prepareProfilePictureUpload(ctx: RequestContext, userId: string, mimeType: string, fileSize: number) {
   if (
     ctx.actorUserId !== userId &&
     ctx.actorRole !== UserRole.ADMIN &&
@@ -163,6 +164,11 @@ export async function prepareProfilePictureUpload(ctx: RequestContext, userId: s
   if (ctx.actorUserId !== userId && ctx.effectiveOrgId) {
     const target = await userRepo.getUserById(userId, ctx.effectiveOrgId);
     if (!target) throw new UserNotFoundError(userId);
+  }
+
+  const mimeConfig = ALLOWED_MIME_TYPES[mimeType];
+  if (fileSize > mimeConfig.maxBytes) {
+    throw new PayloadTooLargeError(`File exceeds maximum size of ${mimeConfig.maxBytes / (1024 * 1024)} MB`);
   }
 
   const { uploadUrl, gcsPath } = await generateUserProfilePictureUploadUrl(userId, mimeType);

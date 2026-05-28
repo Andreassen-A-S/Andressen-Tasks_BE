@@ -51,7 +51,7 @@ export async function deleteUser(req: Request, res: Response) {
 export async function prepareProfilePicture(req: Request, res: Response) {
   const ctx = getRequestContext(req);
   if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
-  const { mime_type } = req.body;
-  const result = await userService.prepareProfilePictureUpload(ctx, req.params.id as string, mime_type);
+  const { mime_type, file_size } = req.body;
+  const result = await userService.prepareProfilePictureUpload(ctx, req.params.id as string, mime_type, file_size);
   return res.json({ success: true, data: result });
 }
