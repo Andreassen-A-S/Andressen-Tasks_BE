@@ -162,10 +162,8 @@ export async function prepareProfilePictureUpload(ctx: RequestContext, userId: s
     throw new ForbiddenUserOperationError();
   }
 
-  if (ctx.actorUserId !== userId) {
-    const target = await userRepo.getUserById(userId, ctx.effectiveOrgId);
-    if (!target) throw new UserNotFoundError(userId);
-  }
+  const target = await userRepo.getUserById(userId, ctx.effectiveOrgId);
+  if (!target) throw new UserNotFoundError(userId);
 
   const mimeConfig = ALLOWED_MIME_TYPES[mimeType];
   if (!mimeConfig) throw new ValidationError("Unsupported profile picture mime_type");

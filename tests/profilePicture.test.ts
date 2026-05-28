@@ -79,7 +79,8 @@ describe("prepareProfilePicture — authorization", () => {
     generateUserProfilePictureUploadUrlMock.mockResolvedValue(FAKE_UPLOAD_RESULT);
   });
 
-  test("user can prepare their own profile picture", async () => {
+  test("user can prepare their own profile picture when they exist in DB", async () => {
+    userFindFirstMock.mockResolvedValue({ user_id: "u1", organization_id: "org1" });
     const req = createRequest({
       user: { user_id: "u1", role: UserRole.USER, organization_id: "org1" },
       effectiveOrgId: "org1",
@@ -92,6 +93,22 @@ describe("prepareProfilePicture — authorization", () => {
 
     expect(generateUserProfilePictureUploadUrlMock).toHaveBeenCalledWith("u1", "image/jpeg");
     expect(res.body).toEqual({ success: true, data: { upload_url: FAKE_UPLOAD_RESULT.uploadUrl, gcs_path: FAKE_UPLOAD_RESULT.gcsPath } });
+  });
+
+  test("deleted user with stale JWT cannot prepare their own profile picture", async () => {
+    userFindFirstMock.mockResolvedValue(null);
+    const req = createRequest({
+      user: { user_id: "deleted-u1", role: UserRole.USER, organization_id: "org1" },
+      effectiveOrgId: "org1",
+      params: { id: "deleted-u1" },
+      body: { mime_type: "image/jpeg", file_size: 1024 },
+    });
+    const res = createMockResponse();
+
+    await callController(userController.prepareProfilePicture, req, res);
+
+    expect(generateUserProfilePictureUploadUrlMock).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(404);
   });
 
   test("user cannot prepare profile picture for another user", async () => {
@@ -191,6 +208,7 @@ describe("prepareProfilePicture — authorization", () => {
   });
 
   test("returns 413 when file exceeds size limit", async () => {
+    userFindFirstMock.mockResolvedValue({ user_id: "u1", organization_id: "org1" });
     const req = createRequest({
       user: { user_id: "u1", role: UserRole.USER, organization_id: "org1" },
       effectiveOrgId: "org1",
