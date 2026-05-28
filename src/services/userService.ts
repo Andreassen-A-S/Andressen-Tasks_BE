@@ -149,6 +149,7 @@ export async function registerPushToken(userId: string, pushToken: string | null
 
 // Generates a signed GCS upload URL for the user's profile picture.
 // Only the user themselves or an admin/super-admin may request this.
+// Admins are additionally scoped to their own org.
 export async function prepareProfilePictureUpload(ctx: RequestContext, userId: string, mimeType: string) {
   if (
     ctx.actorUserId !== userId &&
@@ -156,6 +157,11 @@ export async function prepareProfilePictureUpload(ctx: RequestContext, userId: s
     ctx.actorRole !== UserRole.SUPER_ADMIN
   ) {
     throw new ForbiddenUserOperationError();
+  }
+
+  if (ctx.actorUserId !== userId && ctx.actorRole === UserRole.ADMIN) {
+    const target = await userRepo.getUserById(userId, ctx.actorOrgId);
+    if (!target) throw new UserNotFoundError(userId);
   }
 
   const { uploadUrl, gcsPath } = await generateUserProfilePictureUploadUrl(userId, mimeType);
