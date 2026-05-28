@@ -12,6 +12,7 @@ import {
   PositionNotFoundError,
   RequiredOrganizationIdError,
   UserNotFoundError,
+  ValidationError,
 } from "../errors/domainErrors";
 
 // Re-export error classes for backward compatibility with controllers that import from this module.
@@ -167,6 +168,7 @@ export async function prepareProfilePictureUpload(ctx: RequestContext, userId: s
   }
 
   const mimeConfig = ALLOWED_MIME_TYPES[mimeType];
+  if (!mimeConfig) throw new ValidationError("Unsupported profile picture mime_type");
   if (fileSize > mimeConfig.maxBytes) {
     throw new PayloadTooLargeError(`File exceeds maximum size of ${mimeConfig.maxBytes / (1024 * 1024)} MB`);
   }
