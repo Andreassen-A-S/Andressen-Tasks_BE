@@ -157,7 +157,8 @@ describe("prepareProfilePicture — authorization", () => {
     expect(res.statusCode).toBe(404);
   });
 
-  test("platform super-admin can prepare for any user without org check", async () => {
+  test("platform super-admin can prepare for an existing user across any org", async () => {
+    userFindFirstMock.mockResolvedValue({ user_id: "u-any-org", organization_id: "org-x" });
     const req = createRequest({
       user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
       effectiveOrgId: null,
@@ -168,9 +169,25 @@ describe("prepareProfilePicture — authorization", () => {
 
     await callController(userController.prepareProfilePicture, req, res);
 
-    expect(userFindUniqueMock).not.toHaveBeenCalled();
+    expect(userFindFirstMock).toHaveBeenCalled();
     expect(generateUserProfilePictureUploadUrlMock).toHaveBeenCalledWith("u-any-org", "image/jpeg");
     expect(res.body).toEqual({ success: true, data: { upload_url: FAKE_UPLOAD_RESULT.uploadUrl, gcs_path: FAKE_UPLOAD_RESULT.gcsPath } });
+  });
+
+  test("platform super-admin is denied when user does not exist", async () => {
+    userFindFirstMock.mockResolvedValue(null);
+    const req = createRequest({
+      user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
+      effectiveOrgId: null,
+      params: { id: "ghost-user" },
+      body: { mime_type: "image/jpeg", file_size: 1024 },
+    });
+    const res = createMockResponse();
+
+    await callController(userController.prepareProfilePicture, req, res);
+
+    expect(generateUserProfilePictureUploadUrlMock).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(404);
   });
 
   test("returns 413 when file exceeds size limit", async () => {
