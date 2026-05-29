@@ -10,6 +10,8 @@ export const taskEventDisplay: Record<TaskEventType, TaskEventDisplayTarget> = {
   [TaskEventType.TASK_PRIORITY_CHANGED]:          "timeline",
   [TaskEventType.TASK_PROJECT_CHANGED]:           "timeline",
   [TaskEventType.TASK_STATUS_CHANGED]:            "timeline",
+  [TaskEventType.TASK_GOAL_SET]:                  "timeline",
+  [TaskEventType.TASK_GOAL_REMOVED]:              "timeline",
   [TaskEventType.TASK_DELETED]:                   "audit",
   [TaskEventType.ASSIGNMENT_CREATED]:             "timeline",
   [TaskEventType.ASSIGNMENT_DELETED]:             "timeline",

@@ -1,8 +1,8 @@
 import type {
-  TaskGoalType,
   TaskPriority,
   TaskStatus,
   TaskUnit,
+  TaskGoalType,
 } from "../generated/prisma/client";
 
 export interface UpdateTaskInput {
@@ -13,8 +13,6 @@ export interface UpdateTaskInput {
   deadline?: Date;
   project_id?: string;
   assigned_users?: string[];
-  unit?: TaskUnit;
-  target_quantity?: number;
   start_date?: Date;
 }
 
@@ -29,8 +27,13 @@ export interface CreateTaskInput {
   created_by: string;
   project_id: string;
   assigned_users?: string[];
-  unit?: TaskUnit;
-  target_quantity?: number;
-  goal_type?: TaskGoalType;
-  current_quantity?: number;
+  goal?: {
+    target_quantity: number;
+    unit: TaskUnit;
+  };
+}
+
+export interface CreateGoalInput {
+  target_quantity: number;
+  unit: TaskUnit;
 }

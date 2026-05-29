@@ -296,7 +296,7 @@ describe("taskController.createTask", () => {
 });
 
 describe("taskController.updateTask", () => {
-  test("updates task and logs TASK_UPDATED", async () => {
+  test("updates task and logs field-level events", async () => {
     transactionMock.mockImplementation((fn: any) => fn({}));
     const oldTask = { task_id: "t1", title: "old", assigned_users: ["u1"], project: { name: "P1", color: null } };
     const updatedTask = { task_id: "t1", title: "new", project: { name: "P1", color: null }, assignments: [{ assignment_id: "a1", user_id: "u1" }] };
@@ -315,7 +315,7 @@ describe("taskController.updateTask", () => {
 
     expect(taskRepo.updateTaskPlatform).toHaveBeenCalledWith(expect.anything(), "t1", { title: "new" }, "u1");
     expect(eventSpy).toHaveBeenCalledTimes(1);
-    expect(eventSpy.mock.calls[0]?.[1]?.type).toBe(TaskEventType.TASK_UPDATED);
+    expect(eventSpy.mock.calls[0]?.[1]?.type).toBe(TaskEventType.TASK_TITLE_CHANGED);
     expect(res.body).toEqual({ success: true, data: { task_id: "t1", title: "new", project: { name: "P1", color: null }, assigned_users: ["u1"] } });
   });
 
@@ -425,7 +425,7 @@ describe("taskController.updateTask", () => {
     });
   });
 
-  test("updates assignments and logs assignment diffs + TASK_UPDATED", async () => {
+  test("updates assignments and logs assignment diffs", async () => {
     transactionMock.mockImplementation((fn: any) => fn({}));
     const oldTask = { task_id: "t1", assigned_users: ["u1", "u2"] };
     const updatedTask = {
@@ -451,10 +451,9 @@ describe("taskController.updateTask", () => {
 
     await callController(taskController.updateTask, req, res);
 
-    expect(eventSpy).toHaveBeenCalledTimes(3);
+    expect(eventSpy).toHaveBeenCalledTimes(2);
     expect(eventSpy.mock.calls[0]?.[1]?.type).toBe(TaskEventType.ASSIGNMENT_CREATED);
     expect(eventSpy.mock.calls[1]?.[1]?.type).toBe(TaskEventType.ASSIGNMENT_DELETED);
-    expect(eventSpy.mock.calls[2]?.[1]?.type).toBe(TaskEventType.TASK_UPDATED);
     expect(res.body).toEqual({
       success: true,
       data: { task_id: "t1", project: { name: "P1", color: null }, assigned_users: ["u1", "u3"] },
@@ -860,10 +859,19 @@ describe("taskController.upsertProgressLog", () => {
       unit: TaskUnit.METERS,
     };
 
+    const goal = {
+      goal_id: "g1",
+      task_id: "t1",
+      target_quantity: 100,
+      current_quantity: 5,
+      unit: TaskUnit.METERS,
+      removed_at: null,
+      created_at: new Date("2026-01-01"),
+    };
     const updatedTask = {
       task_id: "t1",
       title: "My Task",
-      current_quantity: 5,
+      goal,
       status: TaskStatus.IN_PROGRESS,
     };
 
@@ -892,7 +900,7 @@ describe("taskController.upsertProgressLog", () => {
       data: {
         progressLog,
         task: {
-          current_quantity: 5,
+          goal,
           status: TaskStatus.IN_PROGRESS,
         },
       },
@@ -903,7 +911,7 @@ describe("taskController.upsertProgressLog", () => {
     transactionMock.mockImplementation((fn: any) => fn({}));
     spyOn(taskRepo, "upsertProgressLogPlatform").mockResolvedValue({
       progressLog: { progress_id: "p1", quantity_done: 5 },
-      updatedTask: { task_id: "t1", title: "My Task", current_quantity: 5, status: TaskStatus.IN_PROGRESS },
+      updatedTask: { task_id: "t1", title: "My Task", goal: null, status: TaskStatus.IN_PROGRESS },
     } as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
@@ -935,7 +943,7 @@ describe("taskController.upsertProgressLog", () => {
     transactionMock.mockImplementation((fn: any) => fn({}));
     spyOn(taskRepo, "upsertProgressLogPlatform").mockResolvedValue({
       progressLog: { progress_id: "p1", quantity_done: 5 },
-      updatedTask: { task_id: "t1", title: "My Task", current_quantity: 5, status: TaskStatus.IN_PROGRESS },
+      updatedTask: { task_id: "t1", title: "My Task", goal: null, status: TaskStatus.IN_PROGRESS },
     } as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([

@@ -1,8 +1,5 @@
 import { prisma } from "../db/prisma";
-import type {
-  CreateTaskAssignmentInput,
-  UpdateTaskAssignmentInput,
-} from "../types/assignment";
+import type { CreateTaskAssignmentInput } from "../types/assignment";
 
 import type { TaskAssignment } from "../generated/prisma/client";
 import { AssignmentNotFoundError, AssignmentCrossOrganizationError, DuplicateAssignmentError } from "../errors/domainErrors";
@@ -144,40 +141,6 @@ export async function getUserAssignments(
   });
 }
 
-export async function updateAssignment(
-  db: DbClient,
-  assignmentId: string,
-  data: UpdateTaskAssignmentInput,
-  effectiveOrgId: string | null,
-): Promise<TaskAssignment> {
-  const existing = await (db as any).taskAssignment.findFirst({
-    where: {
-      assignment_id: assignmentId,
-      ...(effectiveOrgId ? { task: { project: { organization_id: effectiveOrgId } } } : {}),
-    },
-    select: { assignment_id: true },
-  });
-  if (!existing) throw new AssignmentNotFoundError(assignmentId);
-
-  const assignment = await (db as any).taskAssignment.update({
-    where: { assignment_id: existing.assignment_id },
-    data,
-    include: {
-      user: { select: userSelect },
-      task: {
-        select: {
-          task_id: true,
-          title: true,
-          description: true,
-          priority: true,
-          status: true,
-          deadline: true,
-        },
-      },
-    },
-  });
-  return signAssignmentUser(assignment);
-}
 
 export async function deleteAssignment(
   assignmentId: string,

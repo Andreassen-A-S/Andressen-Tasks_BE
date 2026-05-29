@@ -341,8 +341,8 @@ export async function upsertProgressLog(
   return {
     progressLog: result.progressLog,
     task: {
-      current_quantity: result.updatedTask.current_quantity,
       status: result.updatedTask.status,
+      goal: result.updatedTask.goal ?? null,
     },
   };
 }

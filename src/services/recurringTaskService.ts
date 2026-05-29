@@ -264,10 +264,6 @@ export class RecurringTaskService {
         deadline: occurrenceDate,
         start_date: occurrenceDate,
         occurrence_date: occurrenceDate,
-        unit: template.unit,
-        goal_type: template.goal_type,
-        target_quantity: template.target_quantity,
-        current_quantity: 0,
         created_by: template.created_by,
         project_id: template.project_id,
         recurring_template_id: template.id,
@@ -300,6 +296,18 @@ export class RecurringTaskService {
       );
 
       await tx.taskAssignment.createMany({ data: assignmentData });
+    }
+
+    // Create goals for tasks spawned from templates with a goal
+    if (template.goal_type === "FIXED" && template.target_quantity != null) {
+      const goalData = createdTasks.map((task) => ({
+        goal_id: crypto.randomUUID(),
+        task_id: task.task_id,
+        target_quantity: template.target_quantity as number,
+        unit: template.unit,
+        current_quantity: 0,
+      }));
+      await tx.taskGoal.createMany({ data: goalData });
     }
 
     // Batch create events
@@ -563,7 +571,6 @@ export class RecurringTaskService {
         recurring_template_id: templateId,
         occurrence_date: { gte: today },
         status: TaskStatus.PENDING,
-        current_quantity: 0,
       },
     });
 

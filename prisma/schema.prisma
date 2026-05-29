@@ -95,6 +95,8 @@ enum TaskEventType {
   TASK_PRIORITY_CHANGED
   TASK_PROJECT_CHANGED
   TASK_STATUS_CHANGED
+  TASK_GOAL_SET
+  TASK_GOAL_REMOVED
   TASK_DELETED
   ASSIGNMENT_CREATED
   ASSIGNMENT_DELETED
@@ -295,13 +297,11 @@ model Task {
   completed_at         DateTime?
 
   start_date           DateTime @db.Date
-  unit                 TaskUnit     @default(NONE)
-  goal_type            TaskGoalType @default(OPEN)
-  target_quantity      Float?
-  current_quantity     Float        @default(0)
 
   recurring_template_id String?
   occurrence_date       DateTime?
+
+  goals                TaskGoal[]
 
   comments             TaskComment[]
   attachments          TaskAttachment[]
@@ -325,6 +325,23 @@ model Task {
   @@map("tasks")
 }
 
+model TaskGoal {
+  goal_id          String    @id @default(uuid())
+  task_id          String
+  task             Task      @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
+  target_quantity  Float
+  current_quantity Float     @default(0)
+  unit             TaskUnit
+  removed_at       DateTime?
+  created_at       DateTime  @default(now())
+
+  progressLogs     TaskProgressLog[]
+
+  @@index([task_id])
+  @@index([task_id, removed_at])
+  @@map("task_goals")
+}
+
 model TaskAssignment {
   assignment_id String           @id @default(uuid())
   task_id       String
@@ -346,16 +363,19 @@ model TaskAssignment {
 
 model TaskProgressLog {
   progress_id   String         @id @default(uuid())
+  goal_id       String
   assignment_id String
   quantity_done Float
   unit          TaskUnit?
   note          String?        @db.Text
   created_at    DateTime       @default(now())
 
+  goal          TaskGoal       @relation(fields: [goal_id], references: [goal_id], onDelete: Cascade)
   assignment    TaskAssignment @relation(fields: [assignment_id], references: [assignment_id], onDelete: Cascade)
 
   events        TaskEvent[]
 
+  @@index([goal_id])
   @@index([assignment_id])
   @@index([created_at])
   @@map("task_progress_logs")
