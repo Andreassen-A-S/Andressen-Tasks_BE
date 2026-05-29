@@ -136,16 +136,50 @@ export async function updateTask(ctx: RequestContext, taskId: string, updateData
       );
     }
 
-    events.push(
-      taskEventRepo.createTaskEvent(tx, {
-        task: tConnect,
-        actor,
-        type: TaskEventType.TASK_UPDATED,
-        message: "Task updated",
-        before_json: oldTask,
-        after_json: updated,
-      }),
-    );
+    if (updateData.title !== undefined && updateData.title !== oldTask.title) {
+      events.push(taskEventRepo.createTaskEvent(tx, {
+        task: tConnect, actor,
+        type: TaskEventType.TASK_TITLE_CHANGED,
+        before_json: { title: oldTask.title },
+        after_json: { title: updated.title },
+      }));
+    }
+
+    if (updateData.description !== undefined && updateData.description !== oldTask.description) {
+      events.push(taskEventRepo.createTaskEvent(tx, {
+        task: tConnect, actor,
+        type: TaskEventType.TASK_DESCRIPTION_CHANGED,
+        before_json: { description: oldTask.description },
+        after_json: { description: updated.description },
+      }));
+    }
+
+    if (updateData.priority !== undefined && updateData.priority !== oldTask.priority) {
+      events.push(taskEventRepo.createTaskEvent(tx, {
+        task: tConnect, actor,
+        type: TaskEventType.TASK_PRIORITY_CHANGED,
+        before_json: { priority: oldTask.priority },
+        after_json: { priority: updated.priority },
+      }));
+    }
+
+    if (updateData.deadline !== undefined && String(updateData.deadline) !== String(oldTask.deadline)) {
+      events.push(taskEventRepo.createTaskEvent(tx, {
+        task: tConnect, actor,
+        type: TaskEventType.TASK_DUE_DATE_CHANGED,
+        before_json: { deadline: oldTask.deadline },
+        after_json: { deadline: updated.deadline },
+      }));
+    }
+
+    if (updateData.project_id !== undefined && updateData.project_id !== oldTask.project_id) {
+      events.push(taskEventRepo.createTaskEvent(tx, {
+        task: tConnect, actor,
+        type: TaskEventType.TASK_PROJECT_CHANGED,
+        before_json: { project_id: oldTask.project_id },
+        after_json: { project_id: updated.project_id },
+      }));
+    }
 
     if (updateData.status && oldTask.status !== updated.status) {
       events.push(
@@ -227,17 +261,30 @@ export async function deleteTask(ctx: RequestContext, taskId: string) {
   const task = await taskRepo.getTaskById(taskId, ctx.effectiveOrgId);
   if (!task) return false;
 
-  // Event created first to preserve audit trail. These are separate operations
-  // because task_events.task_id may have a FK constraint that prevents deleting
-  // a task while events reference it.
-  await taskEventRepo.createTaskEvent(prisma, {
-    task: taskConnect(task.task_id),
-    actor: actorConnect(ctx.actorUserId),
-    type: TaskEventType.TASK_DELETED,
-    message: "Task deleted",
-    before_json: task,
-    after_json: emptyObj(),
-  });
+  // Events written before deletion to preserve audit trail (cascade would remove them otherwise).
+  const eventWrites = [
+    taskEventRepo.createTaskEvent(prisma, {
+      task: taskConnect(task.task_id),
+      actor: actorConnect(ctx.actorUserId),
+      type: TaskEventType.TASK_DELETED,
+      before_json: task,
+      after_json: emptyObj(),
+    }),
+  ];
+
+  if ((task as any).parent_task_id) {
+    eventWrites.push(
+      taskEventRepo.createTaskEvent(prisma, {
+        task: taskConnect((task as any).parent_task_id),
+        actor: actorConnect(ctx.actorUserId),
+        type: TaskEventType.SUBTASK_REMOVED,
+        before_json: { task_id: task.task_id, title: (task as any).title },
+        after_json: emptyObj(),
+      }),
+    );
+  }
+
+  await Promise.all(eventWrites);
 
   if (ctx.effectiveOrgId) {
     await taskRepo.deleteTaskInOrg(prisma, taskId, ctx.effectiveOrgId);
@@ -301,7 +348,7 @@ export async function upsertProgressLog(
 }
 
 // Used by the auto-archive scheduler to transition DONE tasks to ARCHIVED.
-// Runs as SYSTEM_USER_ID; creates TASK_UPDATED and TASK_STATUS_CHANGED events atomically.
+// Runs as SYSTEM_USER_ID; creates a TASK_STATUS_CHANGED event atomically.
 export async function archiveTask(
   taskId: string,
   systemUserId: string,
@@ -320,24 +367,13 @@ export async function archiveTask(
 
     const actor = actorConnect(systemUserId);
     const tConnect = taskConnect(taskId);
-    await Promise.all([
-      taskEventRepo.createTaskEvent(tx, {
-        task: tConnect,
-        actor,
-        type: TaskEventType.TASK_UPDATED,
-        message: "Task auto-archived by scheduler",
-        before_json: task,
-        after_json: updated,
-      }),
-      taskEventRepo.createTaskEvent(tx, {
-        task: tConnect,
-        actor,
-        type: TaskEventType.TASK_STATUS_CHANGED,
-        message: `Status changed from ${TaskStatus.DONE} to ${TaskStatus.ARCHIVED}`,
-        before_json: { status: TaskStatus.DONE },
-        after_json: { status: TaskStatus.ARCHIVED },
-      }),
-    ]);
+    await taskEventRepo.createTaskEvent(tx, {
+      task: tConnect,
+      actor,
+      type: TaskEventType.TASK_STATUS_CHANGED,
+      before_json: { status: TaskStatus.DONE },
+      after_json: { status: TaskStatus.ARCHIVED },
+    });
     return updated;
   });
 }

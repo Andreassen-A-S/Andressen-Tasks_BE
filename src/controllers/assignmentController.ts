@@ -47,21 +47,6 @@ export async function getAssignment(req: Request, res: Response) {
   res.json({ success: true, data: assignment });
 }
 
-// Update an assignment (e.g., mark as complete). Validates existence and archived status.
-export async function updateAssignment(req: Request, res: Response) {
-  const id = getParamId(req);
-  if (!id) return res.status(400).json({ success: false, error: "Missing or invalid id" });
-
-  const ctx = getRequestContext(req);
-  if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
-
-  const assignment = await assignmentService.updateAssignment(ctx, id, req.body);
-
-  if (assignment === null) return res.status(404).json({ success: false, error: "Assignment not found" });
-
-  res.json({ success: true, data: assignment });
-}
-
 // Delete an assignment by ID. Validates existence and archived status, then logs event.
 export async function deleteAssignment(req: Request, res: Response) {
   const id = getParamId(req);
