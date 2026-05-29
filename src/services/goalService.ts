@@ -1,9 +1,11 @@
 import { prisma } from "../db/prisma";
-import { TaskEventType } from "../generated/prisma/client";
+import { TaskEventType, TaskStatus } from "../generated/prisma/client";
 import * as goalRepo from "../repositories/goalRepository";
+import * as taskRepo from "../repositories/taskRepository";
 import * as taskEventRepo from "../repositories/taskEventRepository";
 import type { RequestContext } from "../types/requestContext";
 import type { CreateGoalInput } from "../types/task";
+import { TaskNotFoundError, TaskArchivedError } from "../errors/domainErrors";
 
 function taskConnect(taskId: string) {
   return { connect: { task_id: taskId } } as const;
@@ -14,6 +16,10 @@ function actorConnect(userId: string) {
 }
 
 export async function setGoal(ctx: RequestContext, taskId: string, input: CreateGoalInput) {
+  const task = await taskRepo.getTaskById(taskId, ctx.effectiveOrgId);
+  if (!task) throw new TaskNotFoundError(taskId);
+  if (task.status === TaskStatus.ARCHIVED) throw new TaskArchivedError();
+
   return prisma.$transaction(async (tx) => {
     const existing = await goalRepo.getActiveGoal(tx, taskId);
 
@@ -43,6 +49,10 @@ export async function setGoal(ctx: RequestContext, taskId: string, input: Create
 }
 
 export async function removeGoal(ctx: RequestContext, taskId: string) {
+  const task = await taskRepo.getTaskById(taskId, ctx.effectiveOrgId);
+  if (!task) throw new TaskNotFoundError(taskId);
+  if (task.status === TaskStatus.ARCHIVED) throw new TaskArchivedError();
+
   return prisma.$transaction(async (tx) => {
     const existing = await goalRepo.getActiveGoal(tx, taskId);
     if (!existing) return null;
