@@ -123,16 +123,17 @@ export async function updateTask(ctx: RequestContext, taskId: string, updateData
             after_json: assignment,
           }),
         ),
-        ...removedUserIds.map((uid) =>
-          taskEventRepo.createTaskEvent(tx, {
+        ...removedUserIds.map((uid) => {
+          const removedUser = (oldTask as any).assignment_users?.find((u: any) => u.user_id === uid);
+          return taskEventRepo.createTaskEvent(tx, {
             task: tConnect,
             actor,
             type: TaskEventType.ASSIGNMENT_DELETED,
             message: "Deleted assignment",
-            before_json: { user_id: uid },
+            before_json: { user_id: uid, name: removedUser?.name ?? null, email: removedUser?.email ?? null },
             after_json: emptyObj(),
-          }),
-        ),
+          });
+        }),
       );
     }
 
@@ -172,12 +173,21 @@ export async function updateTask(ctx: RequestContext, taskId: string, updateData
       }));
     }
 
+    if (updateData.start_date !== undefined && String(updateData.start_date) !== String(oldTask.start_date)) {
+      events.push(taskEventRepo.createTaskEvent(tx, {
+        task: tConnect, actor,
+        type: TaskEventType.TASK_START_DATE_CHANGED,
+        before_json: { start_date: oldTask.start_date },
+        after_json: { start_date: updated.start_date },
+      }));
+    }
+
     if (updateData.project_id !== undefined && updateData.project_id !== oldTask.project_id) {
       events.push(taskEventRepo.createTaskEvent(tx, {
         task: tConnect, actor,
         type: TaskEventType.TASK_PROJECT_CHANGED,
-        before_json: { project_id: oldTask.project_id },
-        after_json: { project_id: updated.project_id },
+        before_json: { project_id: oldTask.project_id, project_name: (oldTask as any).project?.name ?? null },
+        after_json: { project_id: updated.project_id, project_name: (updated as any).project?.name ?? null },
       }));
     }
 

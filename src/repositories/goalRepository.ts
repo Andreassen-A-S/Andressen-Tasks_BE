@@ -14,7 +14,7 @@ export async function createGoal(db: DbClient, taskId: string, input: CreateGoal
       task_id: taskId,
       target_quantity: input.target_quantity,
       unit: input.unit,
-      current_quantity: 0,
+      current_quantity: input.current_quantity ?? 0,
     },
   });
 }

@@ -37,6 +37,7 @@ export async function createTemplate(req: Request, res: Response) {
   const userId = ctx.actorUserId;
 
   const body = req.body;
+  const goal = body.goal ?? null;
 
   if (body.created_by && body.created_by !== userId) {
     return res.status(400).json({ success: false, error: "created_by must match the authenticated user" });
@@ -48,9 +49,15 @@ export async function createTemplate(req: Request, res: Response) {
     title: body.title,
     description: body.description,
     priority: body.priority || "MEDIUM",
-    unit: body.unit || "NONE",
-    target_quantity: body.target_quantity,
-    goal_type: body.goal_type || "OPEN",
+    goal: goal
+      ? {
+        create: {
+          target_quantity: goal.target_quantity,
+          current_quantity: goal.current_quantity ?? 0,
+          unit: goal.unit,
+        },
+      }
+      : undefined,
     frequency: body.frequency,
     interval: body.interval || 1,
     days_of_week: body.days_of_week,
@@ -134,9 +141,24 @@ export async function updateTemplate(req: Request, res: Response) {
   }
   if (body.description !== undefined) updateData.description = body.description;
   if (body.priority !== undefined) updateData.priority = body.priority;
-  if (body.unit !== undefined) updateData.unit = body.unit;
-  if (body.target_quantity !== undefined) updateData.target_quantity = body.target_quantity;
-  if (body.goal_type !== undefined) updateData.goal_type = body.goal_type;
+  if (body.goal !== undefined && (body.goal !== null || existing.goal)) {
+    updateData.goal = body.goal
+      ? {
+        upsert: {
+          create: {
+            target_quantity: body.goal.target_quantity,
+            current_quantity: body.goal.current_quantity ?? 0,
+            unit: body.goal.unit,
+          },
+          update: {
+            target_quantity: body.goal.target_quantity,
+            current_quantity: body.goal.current_quantity ?? 0,
+            unit: body.goal.unit,
+          },
+        },
+      }
+      : { delete: true };
+  }
   if (body.frequency !== undefined) updateData.frequency = body.frequency;
   if (body.interval !== undefined) updateData.interval = body.interval;
   if (body.days_of_week !== undefined) updateData.days_of_week = body.days_of_week;

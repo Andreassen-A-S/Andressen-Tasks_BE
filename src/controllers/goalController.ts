@@ -11,12 +11,12 @@ export async function setGoal(req: Request, res: Response) {
   const taskId = getParamId(req, "taskId");
   if (!taskId) return res.status(400).json({ success: false, error: "Missing task ID" });
 
-  const { target_quantity, unit } = req.body as { target_quantity: number; unit: TaskUnit };
+  const { target_quantity, unit, current_quantity } = req.body as { target_quantity: number; unit: TaskUnit; current_quantity?: number };
   if (!target_quantity || !unit) {
     return res.status(400).json({ success: false, error: "target_quantity and unit are required" });
   }
 
-  const goal = await goalService.setGoal(ctx, taskId, { target_quantity, unit });
+  const goal = await goalService.setGoal(ctx, taskId, { target_quantity, unit, current_quantity });
   return res.json({ success: true, data: goal });
 }
 

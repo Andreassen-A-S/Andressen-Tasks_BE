@@ -22,12 +22,15 @@ import {
 // Type for template with relations
 type TemplateWithRelations = Prisma.RecurringTaskTemplateGetPayload<{
   include: {
+    goal: true;
     creator: true;
     default_assignees: {
       include: { user: true };
     };
   };
 }>;
+
+type TemplateResponse = TemplateWithRelations;
 
 export class RecurringTaskService {
   /**
@@ -79,49 +82,55 @@ export class RecurringTaskService {
    */
   async getTemplateById(
     templateId: string,
-  ): Promise<TemplateWithRelations | null> {
-    return prisma.recurringTaskTemplate.findUnique({
+  ): Promise<TemplateResponse | null> {
+    const template = await prisma.recurringTaskTemplate.findUnique({
       where: { id: templateId },
       include: {
+        goal: true,
         creator: true,
         default_assignees: {
           include: { user: true },
         },
       },
     });
+    return template;
   }
 
   /**
    * Get all templates
    */
-  async getAllTemplates(orgId: string | null = null): Promise<TemplateWithRelations[]> {
-    return prisma.recurringTaskTemplate.findMany({
+  async getAllTemplates(orgId: string | null = null): Promise<TemplateResponse[]> {
+    const templates = await prisma.recurringTaskTemplate.findMany({
       where: orgId ? { project: { organization_id: orgId } } : undefined,
       include: {
+        goal: true,
         creator: true,
         default_assignees: {
           include: { user: true },
         },
       },
     });
+    return templates;
   }
 
   /**
    * Get all active templates (unscoped — used by the scheduler across all orgs)
    */
-  async getActiveTemplates(orgId: string | null = null): Promise<TemplateWithRelations[]> {
-    return prisma.recurringTaskTemplate.findMany({
+  async getActiveTemplates(orgId: string | null = null): Promise<TemplateResponse[]> {
+    const templates = await prisma.recurringTaskTemplate.findMany({
       where: {
         is_active: true,
         ...(orgId ? { project: { organization_id: orgId } } : {}),
       },
       include: {
+        goal: true,
         creator: true,
         default_assignees: {
           include: { user: true },
         },
       },
     });
+    return templates;
   }
 
   /**
@@ -220,6 +229,7 @@ export class RecurringTaskService {
   ): Promise<void> {
     const template = await tx.recurringTaskTemplate.findUnique({
       where: { id: templateId },
+      include: { goal: true },
     });
 
     if (!template || !template.is_active) {
@@ -299,13 +309,13 @@ export class RecurringTaskService {
     }
 
     // Create goals for tasks spawned from templates with a goal
-    if (template.goal_type === "FIXED" && template.target_quantity != null) {
+    if (template.goal) {
       const goalData = createdTasks.map((task) => ({
         goal_id: crypto.randomUUID(),
         task_id: task.task_id,
-        target_quantity: template.target_quantity as number,
-        unit: template.unit,
-        current_quantity: 0,
+        target_quantity: template.goal!.target_quantity,
+        unit: template.goal!.unit,
+        current_quantity: template.goal!.current_quantity,
       }));
       await tx.taskGoal.createMany({ data: goalData });
     }
@@ -630,24 +640,28 @@ export class RecurringTaskService {
   /**
    * Get all instances for a template
    */
-  async getTemplateInstances(templateId: string): Promise<
-    Prisma.TaskGetPayload<{
+  async getTemplateInstances(templateId: string): Promise<(
+    Omit<Prisma.TaskGetPayload<{
       include: {
         assignments: {
           include: { user: true };
         };
+        goals: true;
       };
-    }>[]
+    }>, "goals"> & { goal: Prisma.TaskGoalGetPayload<{}> | null }
+  )[]
   > {
-    return prisma.task.findMany({
+    const tasks = await prisma.task.findMany({
       where: { recurring_template_id: templateId },
       orderBy: { occurrence_date: "asc" },
       include: {
         assignments: {
           include: { user: true },
         },
+        goals: { where: { removed_at: null }, take: 1 },
       },
     });
+    return tasks.map(({ goals, ...task }) => ({ ...task, goal: goals[0] ?? null }));
   }
 
   /**

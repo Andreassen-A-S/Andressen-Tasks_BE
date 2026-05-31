@@ -56,11 +56,6 @@ enum TaskStatus {
   ARCHIVED
 }
 
-enum TaskGoalType {
- OPEN
- FIXED
-}
-
 enum UserRole {
   USER
   ADMIN
@@ -92,6 +87,7 @@ enum TaskEventType {
   TASK_TITLE_CHANGED
   TASK_DESCRIPTION_CHANGED
   TASK_DUE_DATE_CHANGED
+  TASK_START_DATE_CHANGED
   TASK_PRIORITY_CHANGED
   TASK_PROJECT_CHANGED
   TASK_STATUS_CHANGED
@@ -201,10 +197,6 @@ model RecurringTaskTemplate {
   title             String
   description       String?             @db.Text
   priority          TaskPriority        @default(MEDIUM)
-  
-  unit              TaskUnit            @default(NONE)
-  target_quantity   Float?
-  goal_type         TaskGoalType        @default(OPEN)
   created_by        String
   project_id        String
 
@@ -226,12 +218,26 @@ model RecurringTaskTemplate {
   project           Project             @relation(fields: [project_id], references: [project_id], onDelete: Cascade)
   default_assignees RecurringTaskTemplateAssignee[]
   tasks             Task[]              @relation("RecurringTemplateTasks")
+  goal              RecurringTemplateGoal?
 
   @@index([created_by])
   @@index([project_id])
   @@index([is_active])
   @@index([start_date])
   @@map("recurring_task_templates")
+}
+
+model RecurringTemplateGoal {
+  goal_id          String                @id @default(uuid())
+  template_id      String                @unique
+  template         RecurringTaskTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+  target_quantity  Float
+  current_quantity Float                 @default(0)
+  unit             TaskUnit
+  created_at       DateTime              @default(now())
+
+  @@index([template_id])
+  @@map("recurring_template_goals")
 }
 
 model RecurringTaskTemplateAssignee {

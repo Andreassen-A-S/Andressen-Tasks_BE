@@ -2,7 +2,6 @@ import type {
   TaskPriority,
   TaskStatus,
   TaskUnit,
-  TaskGoalType,
 } from "../generated/prisma/client";
 
 export interface UpdateTaskInput {
@@ -30,10 +29,12 @@ export interface CreateTaskInput {
   goal?: {
     target_quantity: number;
     unit: TaskUnit;
+    current_quantity?: number;
   };
 }
 
 export interface CreateGoalInput {
   target_quantity: number;
   unit: TaskUnit;
+  current_quantity?: number;
 }

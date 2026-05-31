@@ -7,6 +7,7 @@ export const taskEventDisplay: Record<TaskEventType, TaskEventDisplayTarget> = {
   [TaskEventType.TASK_TITLE_CHANGED]:             "timeline",
   [TaskEventType.TASK_DESCRIPTION_CHANGED]:       "inline",
   [TaskEventType.TASK_DUE_DATE_CHANGED]:          "timeline",
+  [TaskEventType.TASK_START_DATE_CHANGED]:         "timeline",
   [TaskEventType.TASK_PRIORITY_CHANGED]:          "timeline",
   [TaskEventType.TASK_PROJECT_CHANGED]:           "timeline",
   [TaskEventType.TASK_STATUS_CHANGED]:            "timeline",

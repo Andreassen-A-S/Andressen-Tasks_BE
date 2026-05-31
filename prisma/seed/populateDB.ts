@@ -5,7 +5,6 @@ import {
   TaskPriority,
   TaskStatus,
   TaskUnit,
-  TaskGoalType,
   TaskEventType,
   AttachmentType,
   AttachmentStatus,
@@ -120,12 +119,23 @@ async function main() {
 
     // Helpers
     async function createTask(data: any, actorId: string) {
+      const { target_quantity, current_quantity, unit, ...taskData } = data;
       const counter = await tx.projectTaskCounter.upsert({
-        where: { project_id: data.project_id },
-        create: { project_id: data.project_id, last_number: 1 },
+        where: { project_id: taskData.project_id },
+        create: { project_id: taskData.project_id, last_number: 1 },
         update: { last_number: { increment: 1 } },
       });
-      const task = await tx.task.create({ data: { ...data, number: counter.last_number } });
+      const task = await tx.task.create({ data: { ...taskData, number: counter.last_number } });
+      if (target_quantity != null && target_quantity > 0) {
+        await tx.taskGoal.create({
+          data: {
+            task_id: task.task_id,
+            target_quantity,
+            current_quantity: current_quantity ?? 0,
+            unit: unit ?? TaskUnit.NONE,
+          },
+        });
+      }
       await tx.taskEvent.create({
         data: {
           task_id: task.task_id,
@@ -286,7 +296,6 @@ async function main() {
         status: TaskStatus.PENDING,
         deadline: addDays(now, 2),
         start_date: atTime(addDays(weekStart, 1), 8, 0), // Tue this week
-        goal_type: TaskGoalType.FIXED,
         unit: TaskUnit.METERS,
         target_quantity: 100,
         current_quantity: 0,
@@ -304,10 +313,6 @@ async function main() {
         status: TaskStatus.PENDING,
         deadline: addDays(now, 1),
         start_date: atTime(addDays(weekStart, 2), 12, 0), // Wed this week
-        goal_type: TaskGoalType.OPEN,
-        unit: TaskUnit.NONE,
-        target_quantity: null,
-        current_quantity: 0,
       },
       henrik.user_id,
     );
@@ -323,10 +328,6 @@ async function main() {
         status: TaskStatus.PENDING,
         deadline: addDays(now, 4),
         start_date: atTime(addDays(weekStart, 4), 14, 0), // Fri this week
-        goal_type: TaskGoalType.OPEN,
-        unit: TaskUnit.NONE,
-        target_quantity: null,
-        current_quantity: 0,
       },
       henrik.user_id,
     );
@@ -342,7 +343,6 @@ async function main() {
         status: TaskStatus.PENDING,
         deadline: addDays(now, 10),
         start_date: atTime(addDays(nextWeekStart, 1), 8, 0), // Tue next week
-        goal_type: TaskGoalType.FIXED,
         unit: TaskUnit.KILOMETERS,
         target_quantity: 2.5,
         current_quantity: 0,
@@ -360,10 +360,6 @@ async function main() {
         status: TaskStatus.PENDING,
         deadline: addDays(now, -2), // overdue
         start_date: atTime(addDays(weekStart, 0), 9, 0), // Mon this week
-        goal_type: TaskGoalType.OPEN,
-        unit: TaskUnit.NONE,
-        target_quantity: null,
-        current_quantity: 0,
       },
       henrik.user_id,
     );

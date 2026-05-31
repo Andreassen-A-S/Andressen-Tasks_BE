@@ -95,7 +95,7 @@ export async function getTaskById(id: string, orgId: string | null) {
     },
     include: {
       project: { select: { name: true, color: true } },
-      assignments: { select: { user_id: true } },
+      assignments: { select: { user_id: true, user: { select: { name: true, email: true } } } },
       creator: { select: { name: true, role: true, profile_picture_url: true } },
       goals: { where: { removed_at: null }, take: 1 },
     },
@@ -105,6 +105,7 @@ export async function getTaskById(id: string, orgId: string | null) {
   return {
     ...rest,
     assigned_users: assignments.map((a) => a.user_id),
+    assignment_users: assignments.map((a) => ({ user_id: a.user_id, name: a.user?.name ?? null, email: a.user?.email ?? null })),
     goal: goals[0] ?? null,
     creator: rest.creator ? await signUserProfilePicture(rest.creator) : rest.creator,
   };
@@ -191,7 +192,7 @@ export async function createTaskWithAssignments(
         task_id: task.task_id,
         target_quantity: data.goal.target_quantity,
         unit: data.goal.unit,
-        current_quantity: 0,
+        current_quantity: data.goal.current_quantity ?? 0,
       },
     });
   }
