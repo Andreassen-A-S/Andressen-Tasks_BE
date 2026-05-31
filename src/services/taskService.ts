@@ -5,6 +5,7 @@ import {
   UserRole,
   type TaskUnit,
 } from "../generated/prisma/client";
+import { TaskForbiddenError } from "../errors/domainErrors";
 import * as taskEventRepo from "../repositories/taskEventRepository";
 import * as taskRepo from "../repositories/taskRepository";
 import * as userRepo from "../repositories/userRepository";
@@ -94,6 +95,11 @@ export async function updateTask(ctx: RequestContext, taskId: string, updateData
   // Read old state before transaction for assignment diff / notification logic.
   const oldTask = await taskRepo.getTaskById(taskId, ctx.effectiveOrgId);
   if (!oldTask) return null;
+
+  const isAdmin = ctx.isSuperAdmin || ctx.actorRole === UserRole.ADMIN;
+  if (!isAdmin && oldTask.created_by !== ctx.actorUserId && !(oldTask.assigned_users ?? []).includes(ctx.actorUserId)) {
+    throw new TaskForbiddenError();
+  }
 
   const updatedTask = await prisma.$transaction(async (tx) => {
     const updated = ctx.effectiveOrgId
@@ -271,36 +277,39 @@ export async function deleteTask(ctx: RequestContext, taskId: string) {
   const task = await taskRepo.getTaskById(taskId, ctx.effectiveOrgId);
   if (!task) return false;
 
-  // Events written before deletion to preserve audit trail (cascade would remove them otherwise).
-  const eventWrites = [
-    taskEventRepo.createTaskEvent(prisma, {
-      task: taskConnect(task.task_id),
-      actor: actorConnect(ctx.actorUserId),
-      type: TaskEventType.TASK_DELETED,
-      before_json: task,
-      after_json: emptyObj(),
-    }),
-  ];
-
-  if ((task as any).parent_task_id) {
-    eventWrites.push(
-      taskEventRepo.createTaskEvent(prisma, {
-        task: taskConnect((task as any).parent_task_id),
+  await prisma.$transaction(async (tx) => {
+    // Events written before deletion to preserve audit trail (cascade would remove them otherwise).
+    const eventWrites = [
+      taskEventRepo.createTaskEvent(tx, {
+        task: taskConnect(task.task_id),
         actor: actorConnect(ctx.actorUserId),
-        type: TaskEventType.SUBTASK_REMOVED,
-        before_json: { task_id: task.task_id, title: (task as any).title },
+        type: TaskEventType.TASK_DELETED,
+        before_json: task,
         after_json: emptyObj(),
       }),
-    );
-  }
+    ];
 
-  await Promise.all(eventWrites);
+    if ((task as any).parent_task_id) {
+      eventWrites.push(
+        taskEventRepo.createTaskEvent(tx, {
+          task: taskConnect((task as any).parent_task_id),
+          actor: actorConnect(ctx.actorUserId),
+          type: TaskEventType.SUBTASK_REMOVED,
+          before_json: { task_id: task.task_id, title: (task as any).title },
+          after_json: emptyObj(),
+        }),
+      );
+    }
 
-  if (ctx.effectiveOrgId) {
-    await taskRepo.deleteTaskInOrg(prisma, taskId, ctx.effectiveOrgId);
-  } else {
-    await taskRepo.deleteTaskPlatform(prisma, taskId);
-  }
+    await Promise.all(eventWrites);
+
+    if (ctx.effectiveOrgId) {
+      await taskRepo.deleteTaskInOrg(tx, taskId, ctx.effectiveOrgId);
+    } else {
+      await taskRepo.deleteTaskPlatform(tx, taskId);
+    }
+  });
+
   return true;
 }
 

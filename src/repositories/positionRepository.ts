@@ -44,19 +44,19 @@ export async function createPosition(orgId: string, name: string): Promise<Posit
 // ---------------------------------------------------------------------------
 
 export async function updatePositionInOrg(positionId: string, orgId: string, name: string): Promise<Position> {
-  const existing = await prisma.position.findFirst({
-    where: { position_id: positionId, organization_id: orgId },
-  });
-  if (!existing) throw new PositionNotFoundError(positionId);
-
   try {
-    return await prisma.position.update({ where: { position_id: positionId }, data: { name } });
+    const result = await prisma.position.updateMany({
+      where: { position_id: positionId, organization_id: orgId },
+      data: { name },
+    });
+    if (result.count === 0) throw new PositionNotFoundError(positionId);
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
       throw new DuplicatePositionError();
     }
     throw err;
   }
+  return prisma.position.findUniqueOrThrow({ where: { position_id: positionId } });
 }
 
 // ---------------------------------------------------------------------------
@@ -64,10 +64,8 @@ export async function updatePositionInOrg(positionId: string, orgId: string, nam
 // ---------------------------------------------------------------------------
 
 export async function deletePositionInOrg(positionId: string, orgId: string): Promise<void> {
-  const existing = await prisma.position.findFirst({
+  const result = await prisma.position.deleteMany({
     where: { position_id: positionId, organization_id: orgId },
   });
-  if (!existing) throw new PositionNotFoundError(positionId);
-
-  await prisma.position.delete({ where: { position_id: positionId } });
+  if (result.count === 0) throw new PositionNotFoundError(positionId);
 }

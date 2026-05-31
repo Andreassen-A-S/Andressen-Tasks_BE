@@ -539,7 +539,7 @@ async function upsertProgressLogScoped(
     newStatus = TaskStatus.IN_PROGRESS;
   }
 
-  if (activeGoal.target_quantity && newCurrentQuantity >= activeGoal.target_quantity) {
+  if (activeGoal.target_quantity > 0 && newCurrentQuantity >= activeGoal.target_quantity) {
     newStatus = TaskStatus.DONE;
   }
 
