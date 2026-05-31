@@ -118,6 +118,14 @@ export class AssignmentCrossOrganizationError extends AppError {
   }
 }
 
+// Thrown when a recurring template is not found, or is outside the caller's org scope.
+export class TemplateNotFoundError extends AppError {
+  constructor(id: string) {
+    super(404, `Template not found: ${id}`);
+    this.name = "TemplateNotFoundError";
+  }
+}
+
 // Thrown when a project is not found, or is outside the caller's org scope.
 export class ProjectNotFoundError extends AppError {
   constructor(id: string) {

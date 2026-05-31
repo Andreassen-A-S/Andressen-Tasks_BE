@@ -10,7 +10,7 @@ import { appDateKey } from "../utils/dateUtils";
 import { prisma } from "../db/prisma";
 import * as templateRepository from "../repositories/templateRepository";
 import { allocateTaskNumbersForProject } from "../repositories/taskRepository";
-import { ValidationError } from "../errors/domainErrors";
+import { TemplateNotFoundError } from "../errors/domainErrors";
 import {
   RecurrenceFrequency,
   TaskEventType,
@@ -18,6 +18,10 @@ import {
   type Prisma,
   type RecurringTaskTemplate,
 } from "../generated/prisma/client";
+import type {
+  CreateTemplateInput,
+  UpdateTemplateInput,
+} from "../types/template";
 
 // Type for template with relations
 type TemplateWithRelations = Prisma.RecurringTaskTemplateGetPayload<{
@@ -38,26 +42,21 @@ export class RecurringTaskService {
    * This is fully atomic - all operations succeed or all fail together
    */
   async createTemplate(
-    data: Prisma.RecurringTaskTemplateCreateInput,
-    assigneeUserIds?: string[],
+    data: CreateTemplateInput,
+    effectiveOrgId: string | null = null,
   ): Promise<RecurringTaskTemplate> {
     return await prisma.$transaction(async (tx) => {
-      // 1. Create the template using transaction client
-      const template = await templateRepository.createTemplate(data, tx);
+      // 1. Create template + validate project org + validate assignees (all in repo)
+      const template = await templateRepository.createTemplateWithAssignees(
+        tx,
+        data,
+        effectiveOrgId,
+      );
 
-      // 2. Set default assignees if provided (within same transaction)
-      if (assigneeUserIds && assigneeUserIds.length > 0) {
-        await this.setDefaultAssigneesInTransaction(
-          tx,
-          template.id,
-          assigneeUserIds,
-        );
-      }
+      // 2. Generate initial 6 instances
+      await this.generateInstancesInTransaction(tx, template.id, 6);
 
-      // 3. Generate initial 12 instances (within same transaction)
-      await this.generateInstancesInTransaction(tx, template.id, 12);
-
-      // 4. Log creation event (within same transaction)
+      // 3. Log creation event
       const firstTask = await tx.task.findFirst({
         where: { recurring_template_id: template.id },
       });
@@ -82,9 +81,13 @@ export class RecurringTaskService {
    */
   async getTemplateById(
     templateId: string,
+    orgId: string | null = null,
   ): Promise<TemplateResponse | null> {
-    const template = await prisma.recurringTaskTemplate.findUnique({
-      where: { id: templateId },
+    const template = await prisma.recurringTaskTemplate.findFirst({
+      where: {
+        id: templateId,
+        ...(orgId ? { project: { organization_id: orgId } } : {}),
+      },
       include: {
         goal: true,
         creator: true,
@@ -99,7 +102,9 @@ export class RecurringTaskService {
   /**
    * Get all templates
    */
-  async getAllTemplates(orgId: string | null = null): Promise<TemplateResponse[]> {
+  async getAllTemplates(
+    orgId: string | null = null,
+  ): Promise<TemplateResponse[]> {
     const templates = await prisma.recurringTaskTemplate.findMany({
       where: orgId ? { project: { organization_id: orgId } } : undefined,
       include: {
@@ -116,7 +121,9 @@ export class RecurringTaskService {
   /**
    * Get all active templates (unscoped — used by the scheduler across all orgs)
    */
-  async getActiveTemplates(orgId: string | null = null): Promise<TemplateResponse[]> {
+  async getActiveTemplates(
+    orgId: string | null = null,
+  ): Promise<TemplateResponse[]> {
     const templates = await prisma.recurringTaskTemplate.findMany({
       where: {
         is_active: true,
@@ -131,68 +138,6 @@ export class RecurringTaskService {
       },
     });
     return templates;
-  }
-
-  /**
-   * Set default assignees for a template
-   * Public method - creates its own transaction
-   */
-  async setDefaultAssignees(
-    templateId: string,
-    userIds: string[],
-  ): Promise<void> {
-    await prisma.$transaction(async (tx) => {
-      await this.setDefaultAssigneesInTransaction(tx, templateId, userIds);
-    });
-  }
-
-  /**
-   * Set default assignees within an existing transaction
-   * Private method for use in atomic operations
-   */
-  private async setDefaultAssigneesInTransaction(
-    tx: Prisma.TransactionClient,
-    templateId: string,
-    userIds: string[],
-  ): Promise<void> {
-    // Validate that all user IDs exist
-    if (userIds.length > 0) {
-      const existingUsers = await tx.user.findMany({
-        where: {
-          user_id: {
-            in: userIds,
-          },
-        },
-        select: { user_id: true },
-      });
-
-      const existingUserIds = existingUsers.map((u) => u.user_id);
-      const invalidUserIds = userIds.filter(
-        (id) => !existingUserIds.includes(id),
-      );
-
-      if (invalidUserIds.length > 0) {
-        throw new ValidationError(
-          `Invalid user IDs: ${invalidUserIds.join(", ")}. These users do not exist.`,
-        );
-      }
-    }
-
-    // Delete existing assignees
-    await tx.recurringTaskTemplateAssignee.deleteMany({
-      where: { template_id: templateId },
-    });
-
-    // Create new assignees
-    if (userIds.length > 0) {
-      await tx.recurringTaskTemplateAssignee.createMany({
-        data: userIds.map((userId) => ({
-          template_id: templateId,
-          user_id: userId,
-        })),
-        skipDuplicates: true,
-      });
-    }
   }
 
   /**
@@ -261,7 +206,11 @@ export class RecurringTaskService {
     }
 
     // Allocate a contiguous block of numbers for all occurrences in one write
-    const numbers = await allocateTaskNumbersForProject(tx, template.project_id, occurrences.length);
+    const numbers = await allocateTaskNumbersForProject(
+      tx,
+      template.project_id,
+      occurrences.length,
+    );
 
     // Batch create all instances
     const taskData = occurrences.map((occurrenceDate, i) => {
@@ -514,34 +463,26 @@ export class RecurringTaskService {
    */
   async updateTemplate(
     templateId: string,
-    updates: Prisma.RecurringTaskTemplateUpdateInput,
-    assigneeUserIds?: string[],
+    data: UpdateTemplateInput,
+    effectiveOrgId: string | null = null,
   ): Promise<RecurringTaskTemplate> {
     return await prisma.$transaction(async (tx) => {
-      // Update the template
-      const template = await templateRepository.updateTemplate(
-        templateId,
-        updates,
+      // Update template + validate project org + validate assignees (all in repo)
+      const template = await templateRepository.updateTemplateWithAssignees(
         tx,
+        templateId,
+        data,
+        effectiveOrgId,
       );
-
-      // Update assignees if provided
-      if (assigneeUserIds !== undefined) {
-        await this.setDefaultAssigneesInTransaction(
-          tx,
-          templateId,
-          assigneeUserIds,
-        );
-      }
 
       // Regenerate future instances if recurrence settings changed
       if (
-        updates.frequency ||
-        updates.interval ||
-        updates.days_of_week ||
-        updates.day_of_month ||
-        updates.start_date ||
-        updates.end_date
+        data.frequency !== undefined ||
+        data.interval !== undefined ||
+        data.days_of_week !== undefined ||
+        data.day_of_month !== undefined ||
+        data.start_date !== undefined ||
+        data.end_date !== undefined
       ) {
         await this.regenerateFutureInstancesInTransaction(tx, templateId);
       }
@@ -640,17 +581,30 @@ export class RecurringTaskService {
   /**
    * Get all instances for a template
    */
-  async getTemplateInstances(templateId: string): Promise<(
-    Omit<Prisma.TaskGetPayload<{
-      include: {
-        assignments: {
-          include: { user: true };
+  async getTemplateInstances(
+    templateId: string,
+    orgId: string | null = null,
+  ): Promise<
+    (Omit<
+      Prisma.TaskGetPayload<{
+        include: {
+          assignments: {
+            include: { user: true };
+          };
+          goals: true;
         };
-        goals: true;
-      };
-    }>, "goals"> & { goal: Prisma.TaskGoalGetPayload<{}> | null }
-  )[]
+      }>,
+      "goals"
+    > & { goal: Prisma.TaskGoalGetPayload<{}> | null })[]
   > {
+    if (orgId) {
+      const template = await prisma.recurringTaskTemplate.findFirst({
+        where: { id: templateId, project: { organization_id: orgId } },
+        select: { id: true },
+      });
+      if (!template) throw new TemplateNotFoundError(templateId);
+    }
+
     const tasks = await prisma.task.findMany({
       where: { recurring_template_id: templateId },
       orderBy: { occurrence_date: "asc" },
@@ -661,7 +615,10 @@ export class RecurringTaskService {
         goals: { where: { removed_at: null }, take: 1 },
       },
     });
-    return tasks.map(({ goals, ...task }) => ({ ...task, goal: goals[0] ?? null }));
+    return tasks.map(({ goals, ...task }) => ({
+      ...task,
+      goal: goals[0] ?? null,
+    }));
   }
 
   /**

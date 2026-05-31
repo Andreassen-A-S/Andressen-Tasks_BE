@@ -1,16 +1,16 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { UserRole } from "../src/generated/prisma/client";
+import { UserRole, UserStatus } from "../src/generated/prisma/client";
 
 const userFindFirstMock = mock<(...args: any[]) => Promise<any>>();
 const userUpdateMock = mock<(...args: any[]) => Promise<any>>();
-const userDeleteManyMock = mock<(...args: any[]) => Promise<{ count: number }>>();
+const userUpdateManyMock = mock<(...args: any[]) => Promise<{ count: number }>>();
 
 mock.module("../src/db/prisma", () => ({
   prisma: {
     user: {
       findFirst: userFindFirstMock,
       update: userUpdateMock,
-      deleteMany: userDeleteManyMock,
+      updateMany: userUpdateManyMock,
     },
   },
 }));
@@ -25,7 +25,7 @@ afterEach(() => {
   mock.restore();
   userFindFirstMock.mockReset();
   userUpdateMock.mockReset();
-  userDeleteManyMock.mockReset();
+  userUpdateManyMock.mockReset();
 });
 
 describe("userRepository organization boundaries", () => {
@@ -50,22 +50,26 @@ describe("userRepository organization boundaries", () => {
     expect(userUpdateMock).not.toHaveBeenCalled();
   });
 
-  test("deleteUserInOrg scopes deletion by effective org", async () => {
-    userDeleteManyMock.mockResolvedValue({ count: 1 });
+  test("deleteUserInOrg scopes termination by effective org", async () => {
+    userUpdateManyMock.mockResolvedValue({ count: 1 });
 
     await userRepo.deleteUserInOrg("user-a", "org-a");
 
-    expect(userDeleteManyMock).toHaveBeenCalledWith({
+    expect(userUpdateManyMock).toHaveBeenCalledWith({
       where: {
         user_id: "user-a",
         role: { not: UserRole.SYSTEM },
         organization_id: "org-a",
       },
+      data: {
+        status: UserStatus.TERMINATED,
+        push_token: null,
+      },
     });
   });
 
   test("deleteUserInOrg rejects users outside scoped org", async () => {
-    userDeleteManyMock.mockResolvedValue({ count: 0 });
+    userUpdateManyMock.mockResolvedValue({ count: 0 });
 
     await expect(userRepo.deleteUserInOrg("user-b", "org-a")).rejects.toThrow("User not found: user-b");
   });

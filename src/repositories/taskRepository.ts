@@ -6,6 +6,7 @@ import {
   TaskStatus,
   TaskUnit,
   UserRole,
+  UserStatus,
 } from "../generated/prisma/client";
 import type { CreateTaskInput, UpdateTaskInput } from "../types/task";
 import type { DbClient } from "../types/db";
@@ -58,6 +59,7 @@ async function assertUsersInOrg(
       user_id: { in: uniqueUserIds },
       organization_id: organizationId,
       role: { not: UserRole.SYSTEM },
+      status: UserStatus.ACTIVE,
     },
     select: { user_id: true },
   });

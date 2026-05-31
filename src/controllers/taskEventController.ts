@@ -1,9 +1,7 @@
 import type { Request, Response } from "express";
 import * as taskService from "../services/taskService";
-import * as taskEventRepo from "../repositories/taskEventRepository";
 import * as storageService from "../services/storageService";
 import { getRequestContext } from "../types/requestContext";
-import { prisma } from "../db/prisma";
 
 export async function listTaskEvents(req: Request, res: Response) {
   const taskId = req.params.taskId as string;
@@ -33,9 +31,4 @@ export async function listTaskEvents(req: Request, res: Response) {
   );
 
   res.json({ success: true, data: eventsWithSignedUrls });
-}
-
-export async function createTaskEvent(req: Request, res: Response) {
-  const event = await taskEventRepo.createTaskEvent(prisma, req.body);
-  res.status(201).json({ success: true, data: event });
 }

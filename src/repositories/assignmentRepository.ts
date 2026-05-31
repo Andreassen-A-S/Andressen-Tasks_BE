@@ -2,6 +2,7 @@ import { prisma } from "../db/prisma";
 import type { CreateTaskAssignmentInput } from "../types/assignment";
 
 import type { TaskAssignment } from "../generated/prisma/client";
+import { UserStatus } from "../generated/prisma/client";
 import { AssignmentNotFoundError, AssignmentCrossOrganizationError, DuplicateAssignmentError } from "../errors/domainErrors";
 import type { DbClient } from "../types/db";
 import { userSelect } from "../types/user";
@@ -53,6 +54,7 @@ export async function assignTaskToUser(
     where: {
       user_id: data.user_id,
       organization_id: task.project.organization_id,
+      status: UserStatus.ACTIVE,
     },
     select: { user_id: true },
   });

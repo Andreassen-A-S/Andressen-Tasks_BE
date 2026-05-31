@@ -214,7 +214,7 @@ model RecurringTaskTemplate {
   updated_at        DateTime            @updatedAt
 
   // Relations
-  creator           User                @relation("RecurringTaskCreator", fields: [created_by], references: [user_id], onDelete: Cascade)
+  creator           User                @relation("RecurringTaskCreator", fields: [created_by], references: [user_id], onDelete: Restrict)
   project           Project             @relation(fields: [project_id], references: [project_id], onDelete: Cascade)
   default_assignees RecurringTaskTemplateAssignee[]
   tasks             Task[]              @relation("RecurringTemplateTasks")
@@ -263,7 +263,7 @@ model Project {
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
 
-  creator            User                    @relation("ProjectCreator", fields: [created_by], references: [user_id], onDelete: Cascade)
+  creator            User                    @relation("ProjectCreator", fields: [created_by], references: [user_id], onDelete: Restrict)
   organization       Organization            @relation(fields: [organization_id], references: [org_id], onDelete: Cascade)
   tasks              Task[]
   recurringTemplates RecurringTaskTemplate[]
@@ -312,7 +312,7 @@ model Task {
   comments             TaskComment[]
   attachments          TaskAttachment[]
   project              Project      @relation(fields: [project_id], references: [project_id], onDelete: Cascade)
-  creator              User         @relation("TaskCreator", fields: [created_by], references: [user_id], onDelete: Cascade)
+  creator              User         @relation("TaskCreator", fields: [created_by], references: [user_id], onDelete: Restrict)
   completer            User?        @relation("TaskCompleter", fields: [completed_by], references: [user_id], onDelete: SetNull)
   assignments          TaskAssignment[]
   events               TaskEvent[]
@@ -437,7 +437,7 @@ model TaskAttachment {
 
   comment   TaskComment? @relation(fields: [comment_id], references: [comment_id], onDelete: Cascade)
   task      Task         @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
-  uploader  User         @relation(fields: [uploaded_by], references: [user_id], onDelete: Cascade)
+  uploader  User         @relation(fields: [uploaded_by], references: [user_id], onDelete: Restrict)
 
   @@index([task_id])
   @@index([comment_id])
