@@ -1,11 +1,12 @@
 import { prisma } from "../db/prisma";
-import { TaskEventType, TaskStatus, UserRole } from "../generated/prisma/client";
+import { TaskEventType, TaskStatus } from "../generated/prisma/client";
 import * as goalRepo from "../repositories/goalRepository";
 import * as taskRepo from "../repositories/taskRepository";
 import * as taskEventRepo from "../repositories/taskEventRepository";
 import type { RequestContext } from "../types/requestContext";
 import type { CreateGoalInput } from "../types/task";
-import { TaskNotFoundError, TaskArchivedError, TaskForbiddenError } from "../errors/domainErrors";
+import { TaskNotFoundError, TaskArchivedError } from "../errors/domainErrors";
+import { assertCanMutateTask } from "../utils/taskAuthGuard";
 
 function taskConnect(taskId: string) {
   return { connect: { task_id: taskId } } as const;
@@ -20,10 +21,7 @@ export async function setGoal(ctx: RequestContext, taskId: string, input: Create
   if (!task) throw new TaskNotFoundError(taskId);
   if (task.status === TaskStatus.ARCHIVED) throw new TaskArchivedError();
 
-  const isAdmin = ctx.isSuperAdmin || ctx.actorRole === UserRole.ADMIN;
-  if (!isAdmin && task.created_by !== ctx.actorUserId && !(task.assigned_users ?? []).includes(ctx.actorUserId)) {
-    throw new TaskForbiddenError();
-  }
+  assertCanMutateTask(ctx, task);
 
   return prisma.$transaction(async (tx) => {
     const existing = await goalRepo.getActiveGoal(tx, taskId);
@@ -58,10 +56,7 @@ export async function removeGoal(ctx: RequestContext, taskId: string) {
   if (!task) throw new TaskNotFoundError(taskId);
   if (task.status === TaskStatus.ARCHIVED) throw new TaskArchivedError();
 
-  const isAdmin = ctx.isSuperAdmin || ctx.actorRole === UserRole.ADMIN;
-  if (!isAdmin && task.created_by !== ctx.actorUserId && !(task.assigned_users ?? []).includes(ctx.actorUserId)) {
-    throw new TaskForbiddenError();
-  }
+  assertCanMutateTask(ctx, task);
 
   return prisma.$transaction(async (tx) => {
     const existing = await goalRepo.getActiveGoal(tx, taskId);

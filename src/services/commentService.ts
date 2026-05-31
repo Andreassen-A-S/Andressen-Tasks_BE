@@ -179,7 +179,19 @@ export async function updateComment(
   }
 
   const result = await prisma.$transaction(async (tx) => {
-    return commentRepo.updateComment(tx, commentId, message, uploadTokens, removeAttachmentIds);
+    const updated = await commentRepo.updateComment(tx, commentId, message, uploadTokens, removeAttachmentIds);
+
+    await taskEventRepo.createTaskEvent(tx, {
+      task: { connect: { task_id: comment.task_id } },
+      actor: { connect: { user_id: ctx.actorUserId } },
+      type: TaskEventType.COMMENT_UPDATED,
+      message: "Comment updated",
+      comment: { connect: { comment_id: comment.comment_id } },
+      before_json: comment,
+      after_json: updated.comment,
+    });
+
+    return updated;
   });
   const updatedComment = result.comment;
 
@@ -193,17 +205,6 @@ export async function updateComment(
       ),
     );
   }
-
-  // Log task event after all DB and GCS operations succeed.
-  await taskEventRepo.createTaskEvent(prisma, {
-    task: { connect: { task_id: comment.task_id } },
-    actor: { connect: { user_id: ctx.actorUserId } },
-    type: TaskEventType.COMMENT_UPDATED,
-    message: "Comment updated",
-    comment: { connect: { comment_id: comment.comment_id } },
-    before_json: comment,
-    after_json: updatedComment,
-  });
 
   return updatedComment;
 }

@@ -45,18 +45,21 @@ export async function createPosition(orgId: string, name: string): Promise<Posit
 
 export async function updatePositionInOrg(positionId: string, orgId: string, name: string): Promise<Position> {
   try {
-    const result = await prisma.position.updateMany({
-      where: { position_id: positionId, organization_id: orgId },
-      data: { name },
+    return await prisma.$transaction(async (tx) => {
+      const result = await tx.position.updateMany({
+        where: { position_id: positionId, organization_id: orgId },
+        data: { name },
+      });
+      if (result.count === 0) throw new PositionNotFoundError(positionId);
+      return tx.position.findUniqueOrThrow({ where: { position_id: positionId } });
     });
-    if (result.count === 0) throw new PositionNotFoundError(positionId);
   } catch (err) {
+    if (err instanceof PositionNotFoundError) throw err;
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
       throw new DuplicatePositionError();
     }
     throw err;
   }
-  return prisma.position.findUniqueOrThrow({ where: { position_id: positionId } });
 }
 
 // ---------------------------------------------------------------------------
