@@ -443,8 +443,8 @@ describe("commentController.updateComment", () => {
       message: "old",
     };
     spyOn(commentRepo, "getCommentById").mockResolvedValue(existingComment as never);
-    // commentService checks task for archived status
-    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING } as any);
+    // commentService checks task for archived status and access
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "u1", assignments: [] } as any);
     transactionMock.mockImplementation(async (fn: any) => fn({}));
     const updatedComment = {
       comment_id: "c1",
@@ -481,7 +481,7 @@ describe("commentController.updateComment", () => {
       task_id: "t1",
       message: "old",
     } as never);
-    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING } as any);
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "u1", assignments: [] } as any);
 
     const req = createRequest({
       params: { commentId: "c1" } as Request["params"],
@@ -503,7 +503,7 @@ describe("commentController.updateComment", () => {
       task_id: "t1",
       message: "old",
     } as never);
-    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING } as any);
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "owner", assignments: [] } as any);
 
     const req = createRequest({
       params: { commentId: "c1" } as Request["params"],
@@ -525,7 +525,7 @@ describe("commentController.updateComment", () => {
       task_id: "t1",
       message: "old",
     } as never);
-    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING } as any);
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "u1", assignments: [] } as any);
     transactionMock.mockRejectedValue(new InvalidUploadTokenError());
 
     const req = createRequest({
@@ -548,7 +548,7 @@ describe("commentController.updateComment", () => {
       task_id: "t1",
       message: "old",
     } as never);
-    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING } as any);
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "u1", assignments: [] } as any);
     transactionMock.mockImplementation(async (fn: any) => fn({}));
     const updateSpy = spyOn(commentRepo, "updateComment").mockResolvedValue({
       comment: { comment_id: "c1", user_id: "u1", task_id: "t1", message: "new" },
@@ -580,7 +580,7 @@ describe("commentController.updateComment", () => {
       task_id: "t1",
       message: "existing",
     } as never);
-    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING } as any);
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "u1", assignments: [] } as any);
     spyOn(attachmentRepo, "getAttachmentsByCommentId").mockResolvedValue([
       { attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg" },
     ] as never);
@@ -620,7 +620,7 @@ describe("commentController.updateComment", () => {
       task_id: "t1",
       message: "old",
     } as never);
-    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING } as any);
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "u1", assignments: [] } as any);
     spyOn(attachmentRepo, "getAttachmentsByCommentId").mockResolvedValue([
       { attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg" },
     ] as never);
