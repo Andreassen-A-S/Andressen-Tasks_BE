@@ -322,17 +322,50 @@ export async function getTopPerformersForWindow(
       completed_at: { gte: windowStart },
     },
     _count: { task_id: true },
-    _sum: { current_quantity: true },
     orderBy: { _count: { task_id: "desc" } },
     take: limit,
   });
 
-  // Fetch user details
   const userIds = performers.map((p) => p.completed_by!);
   const users = await client.user.findMany({
     where: { user_id: { in: userIds } },
     select: { user_id: true, name: true, email: true, profile_picture_url: true },
   });
+
+  // Sum current_quantity from goals for completed tasks per user
+  const goalSums = await client.taskGoal.groupBy({
+    by: ["task_id"],
+    where: {
+      task: {
+        ...orgFilter,
+        status: TaskStatus.DONE,
+        completed_by: { in: userIds },
+        completed_at: { gte: windowStart },
+      },
+    },
+    _sum: { current_quantity: true },
+  });
+
+  const taskToCompleter = await client.task.findMany({
+    where: {
+      ...orgFilter,
+      status: TaskStatus.DONE,
+      completed_by: { in: userIds },
+      completed_at: { gte: windowStart },
+    },
+    select: { task_id: true, completed_by: true },
+  });
+
+  const quantityByUser = new Map<string, number>();
+  for (const gs of goalSums) {
+    const task = taskToCompleter.find((t) => t.task_id === gs.task_id);
+    if (task?.completed_by) {
+      quantityByUser.set(
+        task.completed_by,
+        (quantityByUser.get(task.completed_by) ?? 0) + (gs._sum.current_quantity ?? 0),
+      );
+    }
+  }
 
   const mapped = performers.map((p) => {
     const user = users.find((u) => u.user_id === p.completed_by!);
@@ -341,7 +374,7 @@ export async function getTopPerformersForWindow(
       name: user?.name || "Unknown",
       email: user?.email || "",
       completed_count: p._count.task_id,
-      total_quantity: p._sum.current_quantity || 0,
+      total_quantity: quantityByUser.get(p.completed_by!) ?? 0,
       profile_picture_url: user?.profile_picture_url ?? null,
     };
   });

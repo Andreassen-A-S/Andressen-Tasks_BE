@@ -18,6 +18,14 @@ export class TaskNotFoundError extends AppError {
   }
 }
 
+// Thrown when a caller tries to modify a task they did not create and are not assigned to.
+export class TaskForbiddenError extends AppError {
+  constructor() {
+    super(403, "You do not have permission to modify this task");
+    this.name = "TaskForbiddenError";
+  }
+}
+
 // Thrown when a task is already DONE and the caller tries to set it to DONE again.
 // A task must be transitioned back before it can be re-completed.
 export class TaskAlreadyDoneError extends AppError {
@@ -115,6 +123,14 @@ export class AssignmentCrossOrganizationError extends AppError {
   constructor(message = "Assignment references entities in different organizations") {
     super(403, message);
     this.name = "AssignmentCrossOrganizationError";
+  }
+}
+
+// Thrown when a recurring template is not found, or is outside the caller's org scope.
+export class TemplateNotFoundError extends AppError {
+  constructor(id: string) {
+    super(404, `Template not found: ${id}`);
+    this.name = "TemplateNotFoundError";
   }
 }
 

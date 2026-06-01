@@ -1,10 +1,8 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import {
   RecurrenceFrequency,
-  TaskGoalType,
   TaskPriority,
   TaskStatus,
-  TaskUnit,
 } from "../src/generated/prisma/client";
 
 const transactionMock = mock<(fn: (tx: any) => Promise<any>) => Promise<any>>();
@@ -260,9 +258,6 @@ describe("RecurringTaskService - task numbering", () => {
     days_of_week: null,
     day_of_month: null,
     priority: TaskPriority.MEDIUM,
-    unit: TaskUnit.NONE,
-    goal_type: TaskGoalType.OPEN,
-    target_quantity: null,
     is_active: true,
   };
 

@@ -1,10 +1,10 @@
 import type { Request, Response } from "express";
 import { RecurringTaskService } from "../services/recurringTaskService";
-import type { Prisma } from "../generated/prisma/client";
 import { validateRecurringTemplateData, getParamId } from "../helper/helpers";
 import { RecurrenceFrequency } from "../generated/prisma/client";
 import { getRequestContext } from "../types/requestContext";
 import { ValidationError } from "../errors/domainErrors";
+import type { CreateTemplateInput, UpdateTemplateInput } from "../types/template";
 
 const recurringService = new RecurringTaskService();
 
@@ -26,7 +26,9 @@ export async function getTemplate(req: Request, res: Response) {
   const id = getParamId(req);
   if (!id) return res.status(400).json({ success: false, error: "Missing or invalid id" });
 
-  const template = await recurringService.getTemplateById(id);
+  const ctx = getRequestContext(req);
+  if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
+  const template = await recurringService.getTemplateById(id, ctx.effectiveOrgId);
   if (!template) return res.status(404).json({ success: false, error: "Template not found" });
   return res.json({ success: true, data: template });
 }
@@ -42,33 +44,24 @@ export async function createTemplate(req: Request, res: Response) {
     return res.status(400).json({ success: false, error: "created_by must match the authenticated user" });
   }
 
-  const projectId = body.project_id.trim();
-
-  const templateData: Prisma.RecurringTaskTemplateCreateInput = {
+  const templateData: CreateTemplateInput = {
     title: body.title,
     description: body.description,
-    priority: body.priority || "MEDIUM",
-    unit: body.unit || "NONE",
-    target_quantity: body.target_quantity,
-    goal_type: body.goal_type || "OPEN",
+    priority: body.priority,
     frequency: body.frequency,
-    interval: body.interval || 1,
+    interval: body.interval,
     days_of_week: body.days_of_week,
     day_of_month: body.day_of_month,
     start_date: new Date(body.start_date),
     end_date: body.end_date ? new Date(body.end_date) : undefined,
-    is_active: true,
-    creator: { connect: { user_id: userId } },
-    project: { connect: { project_id: projectId } },
+    project_id: body.project_id.trim(),
+    created_by: userId,
+    assigned_users: Array.isArray(body.assigned_users) ? body.assigned_users : undefined,
+    goal: body.goal ?? undefined,
   };
 
-  const assigneeUserIds =
-    body.assigned_users && Array.isArray(body.assigned_users)
-      ? body.assigned_users
-      : undefined;
-
-  const template = await recurringService.createTemplate(templateData, assigneeUserIds);
-  const completeTemplate = await recurringService.getTemplateById(template.id);
+  const template = await recurringService.createTemplate(templateData, ctx.effectiveOrgId);
+  const completeTemplate = await recurringService.getTemplateById(template.id, ctx.effectiveOrgId);
 
   return res.status(201).json({ success: true, data: completeTemplate });
 }
@@ -83,7 +76,7 @@ export async function updateTemplate(req: Request, res: Response) {
 
   const body = req.body;
 
-  const existing = await recurringService.getTemplateById(id);
+  const existing = await recurringService.getTemplateById(id, ctx.effectiveOrgId);
   if (!existing) return res.status(404).json({ success: false, error: "Template not found" });
 
   if (existing.created_by !== userId) {
@@ -126,31 +119,25 @@ export async function updateTemplate(req: Request, res: Response) {
     }
   }
 
-  const updateData: Prisma.RecurringTaskTemplateUpdateInput = {};
+  const updateData: UpdateTemplateInput = {};
 
   if (body.title !== undefined) updateData.title = body.title;
-  if (body.project_id !== undefined) {
-    updateData.project = { connect: { project_id: body.project_id.trim() } };
-  }
+  if (body.project_id !== undefined) updateData.project_id = body.project_id.trim();
   if (body.description !== undefined) updateData.description = body.description;
   if (body.priority !== undefined) updateData.priority = body.priority;
-  if (body.unit !== undefined) updateData.unit = body.unit;
-  if (body.target_quantity !== undefined) updateData.target_quantity = body.target_quantity;
-  if (body.goal_type !== undefined) updateData.goal_type = body.goal_type;
+  if (body.goal !== undefined) updateData.goal = body.goal ?? null;
   if (body.frequency !== undefined) updateData.frequency = body.frequency;
   if (body.interval !== undefined) updateData.interval = body.interval;
   if (body.days_of_week !== undefined) updateData.days_of_week = body.days_of_week;
   if (body.day_of_month !== undefined) updateData.day_of_month = body.day_of_month;
   if (body.start_date !== undefined) updateData.start_date = new Date(body.start_date);
   if (body.end_date !== undefined) updateData.end_date = body.end_date ? new Date(body.end_date) : null;
+  if (body.assigned_users !== undefined && Array.isArray(body.assigned_users)) {
+    updateData.assigned_users = body.assigned_users;
+  }
 
-  const assigneeUserIds =
-    body.assigned_users !== undefined && Array.isArray(body.assigned_users)
-      ? body.assigned_users
-      : undefined;
-
-  await recurringService.updateTemplate(id, updateData, assigneeUserIds);
-  const updatedTemplate = await recurringService.getTemplateById(id);
+  await recurringService.updateTemplate(id, updateData, ctx.effectiveOrgId);
+  const updatedTemplate = await recurringService.getTemplateById(id, ctx.effectiveOrgId);
 
   return res.json({ success: true, data: updatedTemplate });
 }
@@ -163,7 +150,7 @@ export async function deleteTemplate(req: Request, res: Response) {
   const id = getParamId(req);
   if (!id) return res.status(400).json({ success: false, error: "Missing or invalid id" });
 
-  const template = await recurringService.getTemplateById(id);
+  const template = await recurringService.getTemplateById(id, ctx.effectiveOrgId);
   if (!template) return res.status(404).json({ success: false, error: "Template not found" });
 
   if (template.created_by !== userId) {
@@ -182,7 +169,7 @@ export async function deactivateTemplate(req: Request, res: Response) {
   const id = getParamId(req);
   if (!id) return res.status(400).json({ success: false, error: "Missing or invalid id" });
 
-  const template = await recurringService.getTemplateById(id);
+  const template = await recurringService.getTemplateById(id, ctx.effectiveOrgId);
   if (!template) return res.status(404).json({ success: false, error: "Template not found" });
 
   if (template.created_by !== userId) {
@@ -201,7 +188,7 @@ export async function reactivateTemplate(req: Request, res: Response) {
   const id = getParamId(req);
   if (!id) return res.status(400).json({ success: false, error: "Missing or invalid id" });
 
-  const template = await recurringService.getTemplateById(id);
+  const template = await recurringService.getTemplateById(id, ctx.effectiveOrgId);
   if (!template) return res.status(404).json({ success: false, error: "Template not found" });
 
   if (template.created_by !== userId) {
@@ -216,6 +203,8 @@ export async function getTemplateInstances(req: Request, res: Response) {
   const id = getParamId(req);
   if (!id) return res.status(400).json({ success: false, error: "Missing or invalid id" });
 
-  const instances = await recurringService.getTemplateInstances(id);
+  const ctx = getRequestContext(req);
+  if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
+  const instances = await recurringService.getTemplateInstances(id, ctx.effectiveOrgId);
   return res.json({ success: true, data: instances });
 }

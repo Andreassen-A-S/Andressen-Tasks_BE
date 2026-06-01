@@ -1,5 +1,4 @@
 import type {
-  TaskGoalType,
   TaskPriority,
   TaskStatus,
   TaskUnit,
@@ -13,8 +12,6 @@ export interface UpdateTaskInput {
   deadline?: Date;
   project_id?: string;
   assigned_users?: string[];
-  unit?: TaskUnit;
-  target_quantity?: number;
   start_date?: Date;
 }
 
@@ -29,8 +26,15 @@ export interface CreateTaskInput {
   created_by: string;
   project_id: string;
   assigned_users?: string[];
-  unit?: TaskUnit;
-  target_quantity?: number;
-  goal_type?: TaskGoalType;
+  goal?: {
+    target_quantity: number;
+    unit: TaskUnit;
+    current_quantity?: number;
+  };
+}
+
+export interface CreateGoalInput {
+  target_quantity: number;
+  unit: TaskUnit;
   current_quantity?: number;
 }

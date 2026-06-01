@@ -76,34 +76,6 @@ export async function assignTaskToUser(
   return assignment;
 }
 
-// Updating an assignment on an archived task is rejected.
-export async function updateAssignment(
-  ctx: RequestContext,
-  assignmentId: string,
-  data: Record<string, unknown>,
-) {
-  const existing = await assignmentRepo.getAssignmentById(assignmentId, ctx.effectiveOrgId);
-  if (!existing) return null;
-
-  if ((existing as any).task?.status === TaskStatus.ARCHIVED) throw new TaskArchivedError();
-
-  const assignment = await prisma.$transaction(async (tx) => {
-    const updated = await assignmentRepo.updateAssignment(tx, assignmentId, data as any, ctx.effectiveOrgId);
-    await taskEventRepo.createTaskEvent(tx, {
-      task: { connect: { task_id: updated.task_id } },
-      actor: { connect: { user_id: ctx.actorUserId } },
-      type: TaskEventType.ASSIGNMENT_UPDATED,
-      message: "Assignment updated",
-      assignment: { connect: { assignment_id: updated.assignment_id } },
-      before_json: existing,
-      after_json: updated,
-    });
-    return updated;
-  });
-
-  return assignment;
-}
-
 // Deleting an assignment on an archived task is rejected.
 export async function deleteAssignment(ctx: RequestContext, assignmentId: string) {
   const existing = await assignmentRepo.getAssignmentById(assignmentId, ctx.effectiveOrgId);

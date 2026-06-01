@@ -5,6 +5,7 @@ import {
   UserRole,
   type TaskUnit,
 } from "../generated/prisma/client";
+import { TaskForbiddenError } from "../errors/domainErrors";
 import * as taskEventRepo from "../repositories/taskEventRepository";
 import * as taskRepo from "../repositories/taskRepository";
 import * as userRepo from "../repositories/userRepository";
@@ -95,6 +96,11 @@ export async function updateTask(ctx: RequestContext, taskId: string, updateData
   const oldTask = await taskRepo.getTaskById(taskId, ctx.effectiveOrgId);
   if (!oldTask) return null;
 
+  const isAdmin = ctx.isSuperAdmin || ctx.actorRole === UserRole.ADMIN;
+  if (!isAdmin && oldTask.created_by !== ctx.actorUserId && !oldTask.assigned_users.includes(ctx.actorUserId)) {
+    throw new TaskForbiddenError();
+  }
+
   const updatedTask = await prisma.$transaction(async (tx) => {
     const updated = ctx.effectiveOrgId
       ? await taskRepo.updateTaskInOrg(tx, taskId, ctx.effectiveOrgId, updateData, ctx.actorUserId)
@@ -123,29 +129,73 @@ export async function updateTask(ctx: RequestContext, taskId: string, updateData
             after_json: assignment,
           }),
         ),
-        ...removedUserIds.map((uid) =>
-          taskEventRepo.createTaskEvent(tx, {
+        ...removedUserIds.map((uid) => {
+          const removedUser = (oldTask as any).assignment_users?.find((u: any) => u.user_id === uid);
+          return taskEventRepo.createTaskEvent(tx, {
             task: tConnect,
             actor,
             type: TaskEventType.ASSIGNMENT_DELETED,
             message: "Deleted assignment",
-            before_json: { user_id: uid },
+            before_json: { user_id: uid, name: removedUser?.name ?? null, email: removedUser?.email ?? null },
             after_json: emptyObj(),
-          }),
-        ),
+          });
+        }),
       );
     }
 
-    events.push(
-      taskEventRepo.createTaskEvent(tx, {
-        task: tConnect,
-        actor,
-        type: TaskEventType.TASK_UPDATED,
-        message: "Task updated",
-        before_json: oldTask,
-        after_json: updated,
-      }),
-    );
+    if (updateData.title !== undefined && updateData.title !== oldTask.title) {
+      events.push(taskEventRepo.createTaskEvent(tx, {
+        task: tConnect, actor,
+        type: TaskEventType.TASK_TITLE_CHANGED,
+        before_json: { title: oldTask.title },
+        after_json: { title: updated.title },
+      }));
+    }
+
+    if (updateData.description !== undefined && updateData.description !== oldTask.description) {
+      events.push(taskEventRepo.createTaskEvent(tx, {
+        task: tConnect, actor,
+        type: TaskEventType.TASK_DESCRIPTION_CHANGED,
+        before_json: { description: oldTask.description },
+        after_json: { description: updated.description },
+      }));
+    }
+
+    if (updateData.priority !== undefined && updateData.priority !== oldTask.priority) {
+      events.push(taskEventRepo.createTaskEvent(tx, {
+        task: tConnect, actor,
+        type: TaskEventType.TASK_PRIORITY_CHANGED,
+        before_json: { priority: oldTask.priority },
+        after_json: { priority: updated.priority },
+      }));
+    }
+
+    if (updateData.deadline !== undefined && String(updateData.deadline) !== String(oldTask.deadline)) {
+      events.push(taskEventRepo.createTaskEvent(tx, {
+        task: tConnect, actor,
+        type: TaskEventType.TASK_DUE_DATE_CHANGED,
+        before_json: { deadline: oldTask.deadline },
+        after_json: { deadline: updated.deadline },
+      }));
+    }
+
+    if (updateData.start_date !== undefined && String(updateData.start_date) !== String(oldTask.start_date)) {
+      events.push(taskEventRepo.createTaskEvent(tx, {
+        task: tConnect, actor,
+        type: TaskEventType.TASK_START_DATE_CHANGED,
+        before_json: { start_date: oldTask.start_date },
+        after_json: { start_date: updated.start_date },
+      }));
+    }
+
+    if (updateData.project_id !== undefined && updateData.project_id !== oldTask.project_id) {
+      events.push(taskEventRepo.createTaskEvent(tx, {
+        task: tConnect, actor,
+        type: TaskEventType.TASK_PROJECT_CHANGED,
+        before_json: { project_id: oldTask.project_id, project_name: (oldTask as any).project?.name ?? null },
+        after_json: { project_id: updated.project_id, project_name: (updated as any).project?.name ?? null },
+      }));
+    }
 
     if (updateData.status && oldTask.status !== updated.status) {
       events.push(
@@ -227,23 +277,39 @@ export async function deleteTask(ctx: RequestContext, taskId: string) {
   const task = await taskRepo.getTaskById(taskId, ctx.effectiveOrgId);
   if (!task) return false;
 
-  // Event created first to preserve audit trail. These are separate operations
-  // because task_events.task_id may have a FK constraint that prevents deleting
-  // a task while events reference it.
-  await taskEventRepo.createTaskEvent(prisma, {
-    task: taskConnect(task.task_id),
-    actor: actorConnect(ctx.actorUserId),
-    type: TaskEventType.TASK_DELETED,
-    message: "Task deleted",
-    before_json: task,
-    after_json: emptyObj(),
+  await prisma.$transaction(async (tx) => {
+    // Events written before deletion to preserve audit trail (cascade would remove them otherwise).
+    const eventWrites = [
+      taskEventRepo.createTaskEvent(tx, {
+        task: taskConnect(task.task_id),
+        actor: actorConnect(ctx.actorUserId),
+        type: TaskEventType.TASK_DELETED,
+        before_json: task,
+        after_json: emptyObj(),
+      }),
+    ];
+
+    if ((task as any).parent_task_id) {
+      eventWrites.push(
+        taskEventRepo.createTaskEvent(tx, {
+          task: taskConnect((task as any).parent_task_id),
+          actor: actorConnect(ctx.actorUserId),
+          type: TaskEventType.SUBTASK_REMOVED,
+          before_json: { task_id: task.task_id, title: (task as any).title },
+          after_json: emptyObj(),
+        }),
+      );
+    }
+
+    await Promise.all(eventWrites);
+
+    if (ctx.effectiveOrgId) {
+      await taskRepo.deleteTaskInOrg(tx, taskId, ctx.effectiveOrgId);
+    } else {
+      await taskRepo.deleteTaskPlatform(tx, taskId);
+    }
   });
 
-  if (ctx.effectiveOrgId) {
-    await taskRepo.deleteTaskInOrg(prisma, taskId, ctx.effectiveOrgId);
-  } else {
-    await taskRepo.deleteTaskPlatform(prisma, taskId);
-  }
   return true;
 }
 
@@ -294,14 +360,14 @@ export async function upsertProgressLog(
   return {
     progressLog: result.progressLog,
     task: {
-      current_quantity: result.updatedTask.current_quantity,
       status: result.updatedTask.status,
+      goal: result.updatedTask.goal ?? null,
     },
   };
 }
 
 // Used by the auto-archive scheduler to transition DONE tasks to ARCHIVED.
-// Runs as SYSTEM_USER_ID; creates TASK_UPDATED and TASK_STATUS_CHANGED events atomically.
+// Runs as SYSTEM_USER_ID; creates a TASK_STATUS_CHANGED event atomically.
 export async function archiveTask(
   taskId: string,
   systemUserId: string,
@@ -320,24 +386,13 @@ export async function archiveTask(
 
     const actor = actorConnect(systemUserId);
     const tConnect = taskConnect(taskId);
-    await Promise.all([
-      taskEventRepo.createTaskEvent(tx, {
-        task: tConnect,
-        actor,
-        type: TaskEventType.TASK_UPDATED,
-        message: "Task auto-archived by scheduler",
-        before_json: task,
-        after_json: updated,
-      }),
-      taskEventRepo.createTaskEvent(tx, {
-        task: tConnect,
-        actor,
-        type: TaskEventType.TASK_STATUS_CHANGED,
-        message: `Status changed from ${TaskStatus.DONE} to ${TaskStatus.ARCHIVED}`,
-        before_json: { status: TaskStatus.DONE },
-        after_json: { status: TaskStatus.ARCHIVED },
-      }),
-    ]);
+    await taskEventRepo.createTaskEvent(tx, {
+      task: tConnect,
+      actor,
+      type: TaskEventType.TASK_STATUS_CHANGED,
+      before_json: { status: TaskStatus.DONE },
+      after_json: { status: TaskStatus.ARCHIVED },
+    });
     return updated;
   });
 }

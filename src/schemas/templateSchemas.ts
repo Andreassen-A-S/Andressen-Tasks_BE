@@ -1,6 +1,12 @@
 import { z } from "zod";
-import { RecurrenceFrequency, TaskPriority, TaskUnit, TaskGoalType } from "../generated/prisma/client";
+import { RecurrenceFrequency, TaskPriority, TaskUnit } from "../generated/prisma/client";
 import { validateRecurringTemplateData } from "../helper/helpers";
+
+const templateGoalSchema = z.object({
+  target_quantity: z.number().positive("goal.target_quantity must be a positive number"),
+  unit: z.nativeEnum(TaskUnit),
+  current_quantity: z.number().min(0, "goal.current_quantity must be 0 or greater").optional(),
+});
 
 export const createTemplateSchema = z
   .object({
@@ -14,9 +20,7 @@ export const createTemplateSchema = z
     project_id: z.string("project_id is required").trim().min(1, "project_id is required"),
     description: z.string().optional().nullable(),
     priority: z.nativeEnum(TaskPriority).optional(),
-    unit: z.nativeEnum(TaskUnit).optional(),
-    target_quantity: z.number().optional().nullable(),
-    goal_type: z.nativeEnum(TaskGoalType).optional(),
+    goal: templateGoalSchema.optional().nullable(),
     assigned_users: z.array(z.string()).optional(),
     created_by: z.string().optional(),
   })
@@ -49,8 +53,6 @@ export const updateTemplateSchema = z.object({
   project_id: z.string().trim().min(1, "project_id must be a non-empty string").optional(),
   description: z.string().optional().nullable(),
   priority: z.nativeEnum(TaskPriority).optional(),
-  unit: z.nativeEnum(TaskUnit).optional(),
-  target_quantity: z.number().optional().nullable(),
-  goal_type: z.nativeEnum(TaskGoalType).optional(),
+  goal: templateGoalSchema.optional().nullable(),
   assigned_users: z.array(z.string()).optional(),
 });

@@ -168,45 +168,6 @@ describe("assignmentController.getAssignment", () => {
   });
 });
 
-describe("assignmentController.updateAssignment", () => {
-  test("returns 404 when assignment does not exist", async () => {
-    spyOn(assignmentRepo, "getAssignmentById").mockResolvedValue(null);
-    const req = createRequest({ params: { id: "a1" } as Request["params"] });
-    const res = createMockResponse();
-
-    await callController(assignmentController.updateAssignment, req, res);
-
-    expect(res.statusCode).toBe(404);
-    expect(res.body).toEqual({ success: false, error: "Assignment not found" });
-  });
-
-  test("passes effective org to assignment update repository", async () => {
-    transactionMock.mockImplementation((fn) => fn({}));
-    const existing = {
-      assignment_id: "a1",
-      task_id: "t1",
-      task: { status: TaskStatus.IN_PROGRESS },
-    };
-    const updated = { assignment_id: "a1", task_id: "t1", completed_at: new Date() };
-    spyOn(assignmentRepo, "getAssignmentById").mockResolvedValue(existing as never);
-    const updateSpy = spyOn(assignmentRepo, "updateAssignment").mockResolvedValue(updated as never);
-    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
-
-    const req = createRequest({
-      user: { user_id: "u1" },
-      effectiveOrgId: "org-a",
-      params: { id: "a1" } as Request["params"],
-      body: { completed_at: new Date("2026-01-01") },
-    });
-    const res = createMockResponse();
-
-    await callController(assignmentController.updateAssignment, req, res);
-
-    expect(updateSpy).toHaveBeenCalledWith(expect.anything(), "a1", req.body, "org-a");
-    expect(res.body).toEqual({ success: true, data: updated });
-  });
-});
-
 describe("assignmentController.deleteAssignment", () => {
   test("deletes assignment and logs ASSIGNMENT_DELETED", async () => {
     const existing = { assignment_id: "a1", task_id: "t1" };

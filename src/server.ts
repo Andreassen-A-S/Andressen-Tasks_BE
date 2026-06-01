@@ -16,6 +16,7 @@ import projectRoutes from "./routes/project.routes";
 import attachmentRoutes from "./routes/attachment.routes";
 import organizationRoutes from "./routes/organization.routes";
 import positionRoutes from "./routes/position.routes";
+import goalRoutes from "./routes/goal.routes";
 import { initScheduler } from "./services/schedulerService";
 import { errorMiddleware } from "./middleware/errorMiddleware";
 
@@ -93,6 +94,7 @@ initScheduler();
 
 // Routes
 app.use("/api/tasks", taskRoutes);
+app.use("/api/tasks/:taskId/goal", goalRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/assignments", assignmentRoutes);
 app.use("/api/auth", authRoutes);

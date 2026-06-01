@@ -13,7 +13,6 @@ router.use(authenticateToken, asyncHandler(requireOrgAccess));
 router.get("/", asyncHandler(assignmentController.listAssignments)); // Get all assignments (with optional filters)
 router.post("/", validate(assignTaskSchema), asyncHandler(assignmentController.assignTask)); // Create assignment
 router.get("/:id", asyncHandler(assignmentController.getAssignment)); // Get specific assignment
-router.patch("/:id", asyncHandler(assignmentController.updateAssignment)); // Update assignment (e.g., complete)
 router.delete("/:id", asyncHandler(assignmentController.deleteAssignment)); // Delete assignment
 
 export default router;

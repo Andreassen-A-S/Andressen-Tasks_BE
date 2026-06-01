@@ -1,5 +1,5 @@
 import { prisma } from "../db/prisma";
-import { Prisma, UserRole } from "../generated/prisma/client";
+import { Prisma, UserRole, UserStatus } from "../generated/prisma/client";
 import type { User } from "../generated/prisma/client";
 import { hashPassword } from "../helper/helpers";
 import { getPublicAssetUrl } from "../services/storageService";
@@ -113,11 +113,15 @@ async function deleteUserScoped(
   id: string,
   orgId?: string,
 ): Promise<void> {
-  const result = await prisma.user.deleteMany({
+  const result = await prisma.user.updateMany({
     where: {
       user_id: id,
       role: { not: UserRole.SYSTEM },
       ...(orgId ? { organization_id: orgId } : {}),
+    },
+    data: {
+      status: UserStatus.TERMINATED,
+      push_token: null,
     },
   });
   if (result.count === 0) {

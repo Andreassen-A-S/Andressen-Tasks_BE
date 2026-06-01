@@ -96,8 +96,9 @@ export async function updateComment(
   return { comment: updatedComment, removedGcsPaths };
 }
 
-export async function deleteComment(commentId: string) {
-  await prisma.taskComment.delete({
+// Accepts a DbClient so the caller (service) can include this in its own transaction.
+export async function deleteComment(db: DbClient, commentId: string) {
+  await (db as any).taskComment.delete({
     where: { comment_id: commentId },
   });
 }

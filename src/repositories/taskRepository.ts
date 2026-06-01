@@ -3,10 +3,10 @@ import { signUserProfilePicture } from "./userRepository";
 import {
   type Task,
   type Prisma,
-  TaskGoalType,
   TaskStatus,
   TaskUnit,
   UserRole,
+  UserStatus,
 } from "../generated/prisma/client";
 import type { CreateTaskInput, UpdateTaskInput } from "../types/task";
 import type { DbClient } from "../types/db";
@@ -59,6 +59,7 @@ async function assertUsersInOrg(
       user_id: { in: uniqueUserIds },
       organization_id: organizationId,
       role: { not: UserRole.SYSTEM },
+      status: UserStatus.ACTIVE,
     },
     select: { user_id: true },
   });
@@ -78,11 +79,13 @@ export async function getAllTasks(orgId: string | null) {
     include: {
       assignments: { select: { user_id: true } },
       project: { select: { name: true, color: true } },
+      goals: { where: { removed_at: null }, take: 1 },
     },
   });
-  return tasks.map(({ assignments, ...task }) => ({
+  return tasks.map(({ assignments, goals, ...task }) => ({
     ...task,
     assigned_users: assignments.map((a) => a.user_id),
+    goal: goals[0] ?? null,
   }));
 }
 
@@ -94,15 +97,18 @@ export async function getTaskById(id: string, orgId: string | null) {
     },
     include: {
       project: { select: { name: true, color: true } },
-      assignments: { select: { user_id: true } },
+      assignments: { select: { user_id: true, user: { select: { name: true, email: true } } } },
       creator: { select: { name: true, role: true, profile_picture_url: true } },
+      goals: { where: { removed_at: null }, take: 1 },
     },
   });
   if (!task) return null;
-  const { assignments, ...rest } = task;
+  const { assignments, goals, ...rest } = task;
   return {
     ...rest,
     assigned_users: assignments.map((a) => a.user_id),
+    assignment_users: assignments.map((a) => ({ user_id: a.user_id, name: a.user?.name ?? null, email: a.user?.email ?? null })),
+    goal: goals[0] ?? null,
     creator: rest.creator ? await signUserProfilePicture(rest.creator) : rest.creator,
   };
 }
@@ -170,10 +176,6 @@ export async function createTaskWithAssignments(
         ? { parent: { connect: { task_id: data.parent_task_id } } }
         : {}),
       start_date: data.start_date,
-      unit: data.unit ?? TaskUnit.NONE,
-      goal_type: data.goal_type ?? TaskGoalType.OPEN,
-      target_quantity: data.target_quantity ?? null,
-      current_quantity: data.current_quantity ?? 0,
     },
   });
 
@@ -186,6 +188,17 @@ export async function createTaskWithAssignments(
     });
   }
 
+  if (data.goal) {
+    await (db as any).taskGoal.create({
+      data: {
+        task_id: task.task_id,
+        target_quantity: data.goal.target_quantity,
+        unit: data.goal.unit,
+        current_quantity: data.goal.current_quantity ?? 0,
+      },
+    });
+  }
+
   return (db as any).task.findUnique({
     where: { task_id: task.task_id },
     include: {
@@ -194,6 +207,7 @@ export async function createTaskWithAssignments(
           user: { select: userSelect },
         },
       },
+      goals: { where: { removed_at: null }, take: 1 },
     },
   });
 }
@@ -315,6 +329,7 @@ async function updateTaskScoped(
         },
       },
       project: { select: { name: true, color: true } },
+      goals: { where: { removed_at: null }, take: 1 },
     },
   });
 }
@@ -474,6 +489,11 @@ async function upsertProgressLogScoped(
     throw new TaskNotProgressableError(task.status);
   }
 
+  const activeGoal = await (db as any).taskGoal.findFirst({
+    where: { task_id: taskId, removed_at: null },
+  });
+  if (!activeGoal) throw new TaskNotProgressableError(task.status);
+
   const assignment = await (db as any).taskAssignment.findUnique({
     where: { task_id_user_id: { task_id: taskId, user_id: userId } },
   });
@@ -496,8 +516,11 @@ async function upsertProgressLogScoped(
     update: {},
   });
 
+  const newCurrentQuantity = (activeGoal.current_quantity || 0) + quantity_done;
+
   const progressLog = await (db as any).taskProgressLog.create({
     data: {
+      goal_id: activeGoal.goal_id,
       assignment_id: resolvedAssignment.assignment_id,
       quantity_done,
       unit,
@@ -505,18 +528,18 @@ async function upsertProgressLogScoped(
     },
   });
 
-  const newCurrentQuantity = (task.current_quantity || 0) + quantity_done;
+  await (db as any).taskGoal.update({
+    where: { goal_id: activeGoal.goal_id },
+    data: { current_quantity: newCurrentQuantity },
+  });
+
   let newStatus: TaskStatus = task.status;
 
   if (quantity_done > 0 && task.status === TaskStatus.PENDING) {
     newStatus = TaskStatus.IN_PROGRESS;
   }
 
-  if (
-    task.goal_type === TaskGoalType.FIXED &&
-    task.target_quantity &&
-    newCurrentQuantity >= task.target_quantity
-  ) {
+  if (activeGoal.target_quantity > 0 && newCurrentQuantity >= activeGoal.target_quantity) {
     newStatus = TaskStatus.DONE;
   }
 
@@ -525,7 +548,6 @@ async function upsertProgressLogScoped(
   const updatedTask = await (db as any).task.update({
     where: { task_id: taskId },
     data: {
-      current_quantity: newCurrentQuantity,
       status: newStatus,
       updated_at: new Date(),
       ...(newStatus === TaskStatus.DONE
@@ -541,7 +563,7 @@ async function upsertProgressLogScoped(
     });
   }
 
-  return { progressLog, updatedTask };
+  return { progressLog, updatedTask: { ...updatedTask, goal: { ...activeGoal, current_quantity: newCurrentQuantity } } };
 }
 
 // Org-scoped progress log upsert. db is the tx client passed from the service.

@@ -9,6 +9,5 @@ const router = Router();
 router.use(authenticateToken, asyncHandler(requireOrgAccess));
 
 router.get("/:taskId", asyncHandler(taskEventController.listTaskEvents));
-router.post("/", asyncHandler(taskEventController.createTaskEvent));
 
 export default router;
