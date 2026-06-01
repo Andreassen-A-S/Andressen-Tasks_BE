@@ -5,7 +5,7 @@ import {
   UserRole,
   type TaskUnit,
 } from "../generated/prisma/client";
-import { assertCanMutateTask } from "../utils/taskAuthGuard";
+import { TaskForbiddenError } from "../errors/domainErrors";
 import * as taskEventRepo from "../repositories/taskEventRepository";
 import * as taskRepo from "../repositories/taskRepository";
 import * as userRepo from "../repositories/userRepository";
@@ -96,7 +96,10 @@ export async function updateTask(ctx: RequestContext, taskId: string, updateData
   const oldTask = await taskRepo.getTaskById(taskId, ctx.effectiveOrgId);
   if (!oldTask) return null;
 
-  assertCanMutateTask(ctx, oldTask);
+  const isAdmin = ctx.isSuperAdmin || ctx.actorRole === UserRole.ADMIN;
+  if (!isAdmin && oldTask.created_by !== ctx.actorUserId && !oldTask.assigned_users.includes(ctx.actorUserId)) {
+    throw new TaskForbiddenError();
+  }
 
   const updatedTask = await prisma.$transaction(async (tx) => {
     const updated = ctx.effectiveOrgId
