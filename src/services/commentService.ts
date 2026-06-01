@@ -12,7 +12,9 @@ import {
   CommentNotFoundError,
   CommentForbiddenError,
   TaskArchivedError,
+  TaskNotFoundError,
 } from "../errors/domainErrors";
+import { Prisma } from "../generated/prisma/client";
 
 export { CommentNotFoundError, CommentForbiddenError };
 
@@ -89,26 +91,35 @@ export async function createComment(
     throw new TaskArchivedError();
   }
 
-  const comment = await prisma.$transaction(async (tx) => {
-    const created = await commentRepo.createComment(tx, {
-      message: message?.trim() ?? "",
-      task_id: taskId,
-      user_id: ctx.actorUserId,
-      upload_tokens: uploadTokens,
-    });
+  const comment = await (async () => {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const created = await commentRepo.createComment(tx, {
+          message: message?.trim() ?? "",
+          task_id: taskId,
+          user_id: ctx.actorUserId,
+          upload_tokens: uploadTokens,
+        });
 
-    await taskEventRepo.createTaskEvent(tx, {
-      task: { connect: { task_id: created.task_id } },
-      actor: { connect: { user_id: ctx.actorUserId } },
-      type: TaskEventType.COMMENT_CREATED,
-      message: "Comment created",
-      comment: { connect: { comment_id: created.comment_id } },
-      before_json: {},
-      after_json: created,
-    });
+        await taskEventRepo.createTaskEvent(tx, {
+          task: { connect: { task_id: created.task_id } },
+          actor: { connect: { user_id: ctx.actorUserId } },
+          type: TaskEventType.COMMENT_CREATED,
+          message: "Comment created",
+          comment: { connect: { comment_id: created.comment_id } },
+          before_json: {},
+          after_json: created,
+        });
 
-    return created;
-  });
+        return created;
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2003") {
+        throw new TaskNotFoundError(taskId);
+      }
+      throw err;
+    }
+  })();
 
   // Notify assigned users (skip commenter, skip admins — they get a separate notification).
   for (const assignment of task.assignments) {
@@ -234,18 +245,20 @@ export async function deleteComment(ctx: RequestContext, commentId: string) {
   // Fetch attachment GCS paths before deletion so we can clean up storage.
   const attachmentsToDelete = await attachmentRepo.getAttachmentsByCommentId(commentId);
 
-  // Log event first (comment FK must still exist for the event).
-  await taskEventRepo.createTaskEvent(prisma, {
-    task: { connect: { task_id: comment.task_id } },
-    actor: { connect: { user_id: ctx.actorUserId } },
-    type: TaskEventType.COMMENT_DELETED,
-    message: "Comment deleted",
-    comment: { connect: { comment_id: comment.comment_id } },
-    before_json: comment,
-    after_json: {},
-  });
+  await prisma.$transaction(async (tx) => {
+    // Log event first (comment FK must still exist for the event).
+    await taskEventRepo.createTaskEvent(tx, {
+      task: { connect: { task_id: comment.task_id } },
+      actor: { connect: { user_id: ctx.actorUserId } },
+      type: TaskEventType.COMMENT_DELETED,
+      message: "Comment deleted",
+      comment: { connect: { comment_id: comment.comment_id } },
+      before_json: comment,
+      after_json: {},
+    });
 
-  await commentRepo.deleteComment(commentId);
+    await commentRepo.deleteComment(tx, commentId);
+  });
 
   // Non-blocking GCS cleanup — DB deletion is the source of truth.
   await Promise.all(
