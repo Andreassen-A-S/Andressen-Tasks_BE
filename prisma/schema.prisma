@@ -307,7 +307,9 @@ model Task {
   recurring_template_id String?
   occurrence_date       DateTime?
 
-  goals                TaskGoal[]
+  current_goal_id      String?      @unique
+  current_goal         TaskGoal?    @relation("ActiveGoal", fields: [current_goal_id], references: [goal_id], onDelete: SetNull)
+  goals                TaskGoal[]   @relation("AllGoals")
 
   comments             TaskComment[]
   attachments          TaskAttachment[]
@@ -332,19 +334,18 @@ model Task {
 }
 
 model TaskGoal {
-  goal_id          String    @id @default(uuid())
+  goal_id          String   @id @default(uuid())
   task_id          String
-  task             Task      @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
   target_quantity  Float
-  current_quantity Float     @default(0)
+  current_quantity Float    @default(0)
   unit             TaskUnit
-  removed_at       DateTime?
-  created_at       DateTime  @default(now())
+  created_at       DateTime @default(now())
 
+  task             Task     @relation("AllGoals", fields: [task_id], references: [task_id], onDelete: Cascade)
+  active_task      Task?    @relation("ActiveGoal")
   progressLogs     TaskProgressLog[]
 
   @@index([task_id])
-  @@index([task_id, removed_at])
   @@map("task_goals")
 }
 

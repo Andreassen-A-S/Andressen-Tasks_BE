@@ -123,6 +123,7 @@ describe("taskRepository organization boundaries", () => {
 
     expect(tx.task.findFirst).toHaveBeenCalledWith({
       where: { task_id: "task-b", project: { organization_id: "org-a" } },
+      include: { current_goal: true },
     });
   });
 });

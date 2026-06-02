@@ -5,6 +5,11 @@ export interface PositionSummary {
   name: string;
 }
 
+export interface OrganizationSummary {
+  org_id: string;
+  name: string;
+}
+
 export interface SafeUser {
   user_id: string;
   name: string | null;
@@ -15,6 +20,7 @@ export interface SafeUser {
   status: UserStatus;
   profile_picture_url: string | null;
   organization_id: string;
+  organization: OrganizationSummary;
   created_at: Date;
   updated_at: Date;
 }
@@ -55,6 +61,7 @@ export const userSelect = {
   organization_id: true,
   organization: {
     select: {
+      org_id: true,
       name: true,
     },
   },

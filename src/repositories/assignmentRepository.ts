@@ -131,15 +131,29 @@ export async function getUserAssignments(
   userId: string,
   orgId: string | null,
 ): Promise<TaskAssignment[]> {
-  return prisma.taskAssignment.findMany({
+  const assignments = await prisma.taskAssignment.findMany({
     where: {
       user_id: userId,
       ...(orgId ? { task: { project: { organization_id: orgId } } } : {}),
     },
     include: {
-      task: true,
+      task: {
+        include: {
+          current_goal: true,
+        },
+      },
     },
     orderBy: { assigned_at: "desc" },
+  });
+  return assignments.map(({ task, ...assignment }) => {
+    const { current_goal, ...taskWithoutGoal } = task;
+    return {
+      ...assignment,
+      task: {
+        ...taskWithoutGoal,
+        goal: current_goal ?? null,
+      },
+    } as unknown as TaskAssignment;
   });
 }
 
