@@ -259,14 +259,20 @@ export class RecurringTaskService {
 
     // Create goals for tasks spawned from templates with a goal
     if (template.goal) {
-      const goalData = createdTasks.map((task) => ({
-        goal_id: crypto.randomUUID(),
-        task_id: task.task_id,
-        target_quantity: template.goal!.target_quantity,
-        unit: template.goal!.unit,
-        current_quantity: template.goal!.current_quantity,
-      }));
-      await tx.taskGoal.createMany({ data: goalData });
+      for (const task of createdTasks) {
+        const goal = await tx.taskGoal.create({
+          data: {
+            task_id: task.task_id,
+            target_quantity: template.goal!.target_quantity,
+            unit: template.goal!.unit,
+            current_quantity: template.goal!.current_quantity,
+          },
+        });
+        await tx.task.update({
+          where: { task_id: task.task_id },
+          data: { current_goal_id: goal.goal_id },
+        });
+      }
     }
 
     // Batch create events
@@ -612,12 +618,12 @@ export class RecurringTaskService {
         assignments: {
           include: { user: true },
         },
-        goals: { where: { removed_at: null }, take: 1 },
+        current_goal: true,
       },
     });
-    return tasks.map(({ goals, ...task }) => ({
+    return tasks.map(({ current_goal, ...task }) => ({
       ...task,
-      goal: goals[0] ?? null,
+      goal: current_goal ?? null,
     }));
   }
 

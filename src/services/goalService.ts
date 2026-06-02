@@ -26,10 +26,9 @@ export async function setGoal(ctx: RequestContext, taskId: string, input: Create
   }
 
   return prisma.$transaction(async (tx) => {
-    const existing = await goalRepo.getActiveGoal(tx, taskId);
+    const existing = task.goal;
 
     if (existing) {
-      await goalRepo.softRemoveGoal(tx, existing.goal_id);
       await taskEventRepo.createTaskEvent(tx, {
         task: taskConnect(taskId),
         actor: actorConnect(ctx.actorUserId),
@@ -39,6 +38,7 @@ export async function setGoal(ctx: RequestContext, taskId: string, input: Create
       });
     }
 
+    // createGoal creates the row and atomically updates current_goal_id on the task
     const goal = await goalRepo.createGoal(tx, taskId, input);
 
     await taskEventRepo.createTaskEvent(tx, {
@@ -63,11 +63,11 @@ export async function removeGoal(ctx: RequestContext, taskId: string) {
     throw new TaskForbiddenError();
   }
 
-  return prisma.$transaction(async (tx) => {
-    const existing = await goalRepo.getActiveGoal(tx, taskId);
-    if (!existing) return null;
+  const existing = task.goal;
+  if (!existing) return null;
 
-    await goalRepo.softRemoveGoal(tx, existing.goal_id);
+  return prisma.$transaction(async (tx) => {
+    await goalRepo.removeGoalFromTask(tx, taskId);
 
     await taskEventRepo.createTaskEvent(tx, {
       task: taskConnect(taskId),

@@ -139,19 +139,19 @@ export async function getUserAssignments(
     include: {
       task: {
         include: {
-          goals: { where: { removed_at: null }, take: 1 },
+          current_goal: true,
         },
       },
     },
     orderBy: { assigned_at: "desc" },
   });
   return assignments.map(({ task, ...assignment }) => {
-    const { goals, ...taskWithoutGoals } = task;
+    const { current_goal, ...taskWithoutGoal } = task;
     return {
       ...assignment,
       task: {
-        ...taskWithoutGoals,
-        goal: goals[0] ?? null,
+        ...taskWithoutGoal,
+        goal: current_goal ?? null,
       },
     } as unknown as TaskAssignment;
   });

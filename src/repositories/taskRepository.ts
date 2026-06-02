@@ -79,13 +79,13 @@ export async function getAllTasks(orgId: string | null) {
     include: {
       assignments: { select: { user_id: true } },
       project: { select: { name: true, color: true } },
-      goals: { where: { removed_at: null }, take: 1 },
+      current_goal: true,
     },
   });
-  return tasks.map(({ assignments, goals, ...task }) => ({
+  return tasks.map(({ assignments, current_goal, ...task }) => ({
     ...task,
     assigned_users: assignments.map((a) => a.user_id),
-    goal: goals[0] ?? null,
+    goal: current_goal ?? null,
   }));
 }
 
@@ -99,16 +99,16 @@ export async function getTaskById(id: string, orgId: string | null) {
       project: { select: { name: true, color: true } },
       assignments: { select: { user_id: true, user: { select: { name: true, email: true } } } },
       creator: { select: { name: true, role: true, profile_picture_url: true } },
-      goals: { where: { removed_at: null }, take: 1 },
+      current_goal: true,
     },
   });
   if (!task) return null;
-  const { assignments, goals, ...rest } = task;
+  const { assignments, current_goal, ...rest } = task;
   return {
     ...rest,
     assigned_users: assignments.map((a) => a.user_id),
     assignment_users: assignments.map((a) => ({ user_id: a.user_id, name: a.user?.name ?? null, email: a.user?.email ?? null })),
-    goal: goals[0] ?? null,
+    goal: current_goal ?? null,
     creator: rest.creator ? await signUserProfilePicture(rest.creator) : rest.creator,
   };
 }
@@ -189,13 +189,17 @@ export async function createTaskWithAssignments(
   }
 
   if (data.goal) {
-    await (db as any).taskGoal.create({
+    const goal = await (db as any).taskGoal.create({
       data: {
         task_id: task.task_id,
         target_quantity: data.goal.target_quantity,
         unit: data.goal.unit,
         current_quantity: data.goal.current_quantity ?? 0,
       },
+    });
+    await (db as any).task.update({
+      where: { task_id: task.task_id },
+      data: { current_goal_id: goal.goal_id },
     });
   }
 
@@ -207,7 +211,7 @@ export async function createTaskWithAssignments(
           user: { select: userSelect },
         },
       },
-      goals: { where: { removed_at: null }, take: 1 },
+      current_goal: true,
     },
   });
 }
@@ -329,7 +333,7 @@ async function updateTaskScoped(
         },
       },
       project: { select: { name: true, color: true } },
-      goals: { where: { removed_at: null }, take: 1 },
+      current_goal: true,
     },
   });
 }
@@ -477,6 +481,7 @@ async function upsertProgressLogScoped(
       task_id: taskId,
       ...(effectiveOrgId ? { project: { organization_id: effectiveOrgId } } : {}),
     },
+    include: { current_goal: true },
   });
   if (!task) throw new TaskNotFoundError(taskId);
 
@@ -489,9 +494,7 @@ async function upsertProgressLogScoped(
     throw new TaskNotProgressableError(task.status);
   }
 
-  const activeGoal = await (db as any).taskGoal.findFirst({
-    where: { task_id: taskId, removed_at: null },
-  });
+  const activeGoal = task.current_goal;
   if (!activeGoal) throw new TaskNotProgressableError(task.status);
 
   const assignment = await (db as any).taskAssignment.findUnique({
@@ -551,7 +554,7 @@ async function upsertProgressLogScoped(
     where: {
       task_id: taskId,
       ...(newStatus === TaskStatus.IN_PROGRESS
-        ? { status: { notIn: [TaskStatus.DONE, TaskStatus.ARCHIVED] } }
+        ? { status: { notIn: [TaskStatus.DONE, TaskStatus.ARCHIVED, TaskStatus.REJECTED] } }
         : {}),
     },
     data: {

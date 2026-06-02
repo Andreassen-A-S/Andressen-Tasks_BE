@@ -108,8 +108,7 @@ describe("goalController.setGoal", () => {
 
   test("creates goal and emits TASK_GOAL_SET when no existing goal", async () => {
     transactionMock.mockImplementation((fn: any) => fn({}));
-    spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1", status: TaskStatus.IN_PROGRESS } as never);
-    spyOn(goalRepo, "getActiveGoal").mockResolvedValue(null);
+    spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1", status: TaskStatus.IN_PROGRESS, goal: null } as never);
     const goal = { goal_id: "g1", task_id: "t1", target_quantity: 10, unit: TaskUnit.METERS, current_quantity: 0 };
     spyOn(goalRepo, "createGoal").mockResolvedValue(goal as never);
     const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
@@ -130,10 +129,8 @@ describe("goalController.setGoal", () => {
 
   test("soft-removes existing goal and emits REMOVED then SET when replacing", async () => {
     transactionMock.mockImplementation((fn: any) => fn({}));
-    spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1", status: TaskStatus.IN_PROGRESS } as never);
     const existing = { goal_id: "g-old", task_id: "t1", target_quantity: 5, unit: TaskUnit.METERS };
-    spyOn(goalRepo, "getActiveGoal").mockResolvedValue(existing as never);
-    spyOn(goalRepo, "softRemoveGoal").mockResolvedValue({} as never);
+    spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1", status: TaskStatus.IN_PROGRESS, goal: existing } as never);
     const newGoal = { goal_id: "g-new", task_id: "t1", target_quantity: 20, unit: TaskUnit.METERS, current_quantity: 0 };
     spyOn(goalRepo, "createGoal").mockResolvedValue(newGoal as never);
     const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
@@ -146,7 +143,6 @@ describe("goalController.setGoal", () => {
 
     await callController(goalController.setGoal, req, res);
 
-    expect(goalRepo.softRemoveGoal).toHaveBeenCalledWith(expect.anything(), "g-old");
     expect(eventSpy).toHaveBeenCalledTimes(2);
     expect(eventSpy.mock.calls[0]?.[1]?.type).toBe(TaskEventType.TASK_GOAL_REMOVED);
     expect(eventSpy.mock.calls[1]?.[1]?.type).toBe(TaskEventType.TASK_GOAL_SET);
@@ -179,8 +175,7 @@ describe("goalController.removeGoal", () => {
 
   test("returns 404 when no active goal exists", async () => {
     transactionMock.mockImplementation((fn: any) => fn({}));
-    spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1", status: TaskStatus.IN_PROGRESS } as never);
-    spyOn(goalRepo, "getActiveGoal").mockResolvedValue(null);
+    spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1", status: TaskStatus.IN_PROGRESS, goal: null } as never);
 
     const req = createRequest({ params: { taskId: "t1" } });
     const res = createMockResponse();
@@ -193,10 +188,9 @@ describe("goalController.removeGoal", () => {
 
   test("soft-removes goal and emits TASK_GOAL_REMOVED", async () => {
     transactionMock.mockImplementation((fn: any) => fn({}));
-    spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1", status: TaskStatus.IN_PROGRESS } as never);
     const existing = { goal_id: "g1", task_id: "t1", target_quantity: 10, unit: TaskUnit.METERS };
-    spyOn(goalRepo, "getActiveGoal").mockResolvedValue(existing as never);
-    spyOn(goalRepo, "softRemoveGoal").mockResolvedValue({} as never);
+    spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1", status: TaskStatus.IN_PROGRESS, goal: existing } as never);
+    spyOn(goalRepo, "removeGoalFromTask").mockResolvedValue({} as never);
     const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
 
     const req = createRequest({ params: { taskId: "t1" } });
@@ -204,7 +198,7 @@ describe("goalController.removeGoal", () => {
 
     await callController(goalController.removeGoal, req, res);
 
-    expect(goalRepo.softRemoveGoal).toHaveBeenCalledWith(expect.anything(), "g1");
+    expect(goalRepo.removeGoalFromTask).toHaveBeenCalledWith(expect.anything(), "t1");
     expect(eventSpy).toHaveBeenCalledTimes(1);
     expect(eventSpy.mock.calls[0]?.[1]?.type).toBe(TaskEventType.TASK_GOAL_REMOVED);
     expect(res.body).toEqual({ success: true });

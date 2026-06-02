@@ -86,8 +86,8 @@ export async function createTask(ctx: RequestContext, input: CreateTaskInput) {
     }
   }
 
-  const { assignments, goals, ...taskData } = task;
-  return { ...taskData, assigned_users: assignments.map((a: any) => a.user_id), goal: (goals as any[] | undefined)?.[0] ?? null };
+  const { assignments, current_goal, ...taskData } = task;
+  return { ...taskData, assigned_users: assignments.map((a: any) => a.user_id), goal: current_goal ?? null };
 }
 
 export async function updateTask(ctx: RequestContext, taskId: string, updateData: UpdateTaskInput) {
