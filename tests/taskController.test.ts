@@ -245,7 +245,7 @@ describe("taskController.createTask", () => {
       TaskEventType.ASSIGNMENT_CREATED,
     );
     expect(res.statusCode).toBe(201);
-    expect(res.body).toEqual({ success: true, data: task });
+    expect(res.body).toEqual({ success: true, data: { task_id: "t1", assigned_users: ["u2", "u3"], goal: null } });
   });
 
   test("passes effective org to create repository", async () => {
@@ -316,7 +316,7 @@ describe("taskController.updateTask", () => {
     expect(taskRepo.updateTaskPlatform).toHaveBeenCalledWith(expect.anything(), "t1", { title: "new" }, "u1");
     expect(eventSpy).toHaveBeenCalledTimes(1);
     expect(eventSpy.mock.calls[0]?.[1]?.type).toBe(TaskEventType.TASK_TITLE_CHANGED);
-    expect(res.body).toEqual({ success: true, data: { task_id: "t1", title: "new", project: { name: "P1", color: null }, assigned_users: ["u1"] } });
+    expect(res.body).toEqual({ success: true, data: { task_id: "t1", title: "new", project: { name: "P1", color: null }, assigned_users: ["u1"], goal: null } });
   });
 
   test("returns 404 when updateTask throws TaskNotFoundError", async () => {
@@ -456,7 +456,7 @@ describe("taskController.updateTask", () => {
     expect(eventSpy.mock.calls[1]?.[1]?.type).toBe(TaskEventType.ASSIGNMENT_DELETED);
     expect(res.body).toEqual({
       success: true,
-      data: { task_id: "t1", project: { name: "P1", color: null }, assigned_users: ["u1", "u3"] },
+      data: { task_id: "t1", project: { name: "P1", color: null }, assigned_users: ["u1", "u3"], goal: null },
     });
   });
 
