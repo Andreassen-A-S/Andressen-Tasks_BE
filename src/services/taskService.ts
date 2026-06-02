@@ -270,8 +270,8 @@ export async function updateTask(ctx: RequestContext, taskId: string, updateData
     }
   }
 
-  const { assignments, goals, ...taskData } = updatedTask;
-  return { ...taskData, assigned_users: assignments.map((a: any) => a.user_id), goal: (goals as any[] | undefined)?.[0] ?? null };
+  const { assignments, current_goal, ...taskData } = updatedTask;
+  return { ...taskData, assigned_users: assignments.map((a: any) => a.user_id), goal: current_goal ?? null };
 }
 
 export async function deleteTask(ctx: RequestContext, taskId: string) {
