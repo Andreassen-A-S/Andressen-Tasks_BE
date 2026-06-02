@@ -545,8 +545,15 @@ async function upsertProgressLogScoped(
 
   const completionTimestamp = new Date();
 
-  const updatedTask = await (db as any).task.update({
-    where: { task_id: taskId },
+  // Guard: IN_PROGRESS must not overwrite a DONE written by a concurrent transaction.
+  // DONE always wins — goal reached is authoritative regardless of ordering.
+  await (db as any).task.updateMany({
+    where: {
+      task_id: taskId,
+      ...(newStatus === TaskStatus.IN_PROGRESS
+        ? { status: { notIn: [TaskStatus.DONE, TaskStatus.ARCHIVED] } }
+        : {}),
+    },
     data: {
       status: newStatus,
       updated_at: new Date(),
@@ -562,6 +569,8 @@ async function upsertProgressLogScoped(
       data: { completed_at: completionTimestamp },
     });
   }
+
+  const updatedTask = await (db as any).task.findUnique({ where: { task_id: taskId } });
 
   return { progressLog, updatedTask: { ...updatedTask, goal: { ...activeGoal, current_quantity: newCurrentQuantity } } };
 }
