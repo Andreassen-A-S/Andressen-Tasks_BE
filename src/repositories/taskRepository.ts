@@ -516,8 +516,6 @@ async function upsertProgressLogScoped(
     update: {},
   });
 
-  const newCurrentQuantity = (activeGoal.current_quantity || 0) + quantity_done;
-
   const progressLog = await (db as any).taskProgressLog.create({
     data: {
       goal_id: activeGoal.goal_id,
@@ -528,10 +526,12 @@ async function upsertProgressLogScoped(
     },
   });
 
-  await (db as any).taskGoal.update({
+  const updatedGoal = await (db as any).taskGoal.update({
     where: { goal_id: activeGoal.goal_id },
-    data: { current_quantity: newCurrentQuantity },
+    data: { current_quantity: { increment: quantity_done } },
   });
+
+  const newCurrentQuantity = updatedGoal.current_quantity;
 
   let newStatus: TaskStatus = task.status;
 
