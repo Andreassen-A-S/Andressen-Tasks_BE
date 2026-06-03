@@ -95,15 +95,19 @@ export async function revokeAllSessions(req: Request, res: Response) {
 export async function revokeWebSession(req: Request, res: Response) {
   const userId = (req as any).user?.user_id;
   if (!userId) return res.status(401).json({ success: false, error: "Unauthorized" });
+  const id = typeof req.params.id === "string" ? req.params.id : undefined;
+  if (!id) return res.status(400).json({ success: false, error: "Missing session id" });
   const currentSessionId = (req.cookies as Record<string, string>)?.session_id;
-  await authService.revokeWebSession(userId, req.params.id, currentSessionId);
+  await authService.revokeWebSession(userId, id, currentSessionId);
   return res.json({ success: true });
 }
 
 export async function revokeMobileSession(req: Request, res: Response) {
   const userId = (req as any).user?.user_id;
   if (!userId) return res.status(401).json({ success: false, error: "Unauthorized" });
-  await authService.revokeMobileSession(userId, req.params.id);
+  const id = typeof req.params.id === "string" ? req.params.id : undefined;
+  if (!id) return res.status(400).json({ success: false, error: "Missing token id" });
+  await authService.revokeMobileSession(userId, id);
   return res.json({ success: true });
 }
 
