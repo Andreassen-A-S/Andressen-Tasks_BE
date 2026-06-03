@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import type { CreateUserInput, UpdateUserInput } from "../types/user";
 import { getRequestContext } from "../types/requestContext";
 import * as userService from "../services/userService";
+import { ValidationError } from "../errors/domainErrors";
 
 export async function listUsers(req: Request, res: Response) {
   const ctx = getRequestContext(req);
@@ -28,7 +29,12 @@ export async function createUser(req: Request, res: Response) {
 export async function updateUser(req: Request, res: Response) {
   const ctx = getRequestContext(req);
   if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
-  const user = await userService.updateUser(ctx, req.params.id as string, req.body as UpdateUserInput);
+  const targetId = req.params.id as string;
+  const { profile_picture_url } = req.body;
+  if (profile_picture_url != null && !profile_picture_url.startsWith(`users/${targetId}/`)) {
+    throw new ValidationError("Invalid profile_picture_url");
+  }
+  const user = await userService.updateUser(ctx, targetId, req.body as UpdateUserInput);
   res.json({ success: true, data: user });
 }
 

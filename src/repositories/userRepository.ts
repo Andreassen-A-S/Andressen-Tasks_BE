@@ -75,12 +75,6 @@ async function updateUserScoped(
   if (!existing || existing.role === UserRole.SYSTEM) {
     throw new UserNotFoundError(id);
   }
-  if (data.profile_picture_url !== undefined && data.profile_picture_url !== null) {
-    const expectedPrefix = `users/${id}/profile.`;
-    if (!data.profile_picture_url.startsWith(expectedPrefix) || !isUserProfilePicturePath(data.profile_picture_url)) {
-      throw new ValidationError("Invalid profile_picture_url");
-    }
-  }
   if (data.password) {
     data.password = await hashPassword(data.password);
   }

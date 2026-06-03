@@ -2,6 +2,7 @@ import { z } from "zod";
 import Expo from "expo-server-sdk";
 import { UserRole, UserStatus } from "../generated/prisma/client";
 import { ALLOWED_MIME_TYPES } from "../services/storageService";
+import { isUserProfilePicturePath } from "../repositories/userRepository";
 
 export const createUserSchema = z.object({
   name: z.string().min(1),
@@ -19,7 +20,7 @@ export const updateUserSchema = z.object({
   position_id: z.string().uuid().nullable().optional(),
   role: z.nativeEnum(UserRole).optional(),
   status: z.nativeEnum(UserStatus).optional(),
-  profile_picture_url: z.string().nullable().optional(),
+  profile_picture_url: z.string().refine(isUserProfilePicturePath, { message: "Invalid profile_picture_url" }).nullable().optional(),
 });
 
 export const prepareProfilePictureSchema = z.object({

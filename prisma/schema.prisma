@@ -166,9 +166,70 @@ model User {
   createdRecurringTemplates RecurringTaskTemplate[] @relation("RecurringTaskCreator")
   recurringTemplateAssignees RecurringTaskTemplateAssignee[]
   uploadedAttachments TaskAttachment[]
+  session_accounts        SessionAccount[]
 
   @@index([organization_id])
   @@map("users")
+}
+
+enum SessionPlatform {
+  browser
+  mobile
+}
+
+model Session {
+  session_id                String          @id @default(cuid())
+  platform                  SessionPlatform @default(browser)
+  active_session_account_id String?         @unique
+  device_name               String?
+  location                  String?
+  expires_at                DateTime
+  revoked_at                DateTime?
+  created_at                DateTime        @default(now())
+  updated_at                DateTime        @updatedAt
+
+  session_accounts SessionAccount[] @relation("SessionAccounts")
+  active_account   SessionAccount?  @relation("ActiveAccount", fields: [active_session_account_id], references: [session_account_id])
+
+  @@map("sessions")
+}
+
+model SessionAccount {
+  session_account_id String    @id @default(cuid())
+  session_id         String
+  user_id            String
+  added_at           DateTime  @default(now())
+  last_used_at       DateTime  @default(now())
+  expires_at         DateTime?
+  revoked_at         DateTime?
+
+  session           Session        @relation("SessionAccounts", fields: [session_id], references: [session_id], onDelete: Cascade)
+  user              User           @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  refresh_tokens    RefreshToken[]
+  active_in_session Session?       @relation("ActiveAccount")
+
+  @@unique([session_id, user_id])
+  @@index([session_id])
+  @@index([user_id])
+  @@map("session_accounts")
+}
+
+model RefreshToken {
+  token_id           String    @id @default(uuid())
+  session_account_id String
+  token_hash         String    @unique
+  family_id          String
+  parent_token_id    String?
+  created_at         DateTime  @default(now())
+  expires_at         DateTime
+  used_at            DateTime?
+  revoked_at         DateTime?
+
+  session_account SessionAccount @relation(fields: [session_account_id], references: [session_account_id], onDelete: Cascade)
+
+  @@index([session_account_id])
+  @@index([family_id])
+  @@map("refresh_tokens")
 }
 
 model TaskComment {
