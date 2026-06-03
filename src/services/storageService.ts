@@ -111,7 +111,7 @@ export async function generateOrgLogoUploadUrl(
 export async function generateUserProfilePictureUploadUrl(
   userId: string,
   mimeType: string,
-): Promise<{ uploadUrl: string; publicUrl: string }> {
+): Promise<{ uploadUrl: string; gcsPath: string }> {
   const config = ALLOWED_MIME_TYPES[mimeType];
   if (!config || !mimeType.startsWith("image/")) {
     throw new Error(`Unsupported mime type: ${mimeType}`);
@@ -124,7 +124,7 @@ export async function generateUserProfilePictureUploadUrl(
     expires: Date.now() + 15 * 60 * 1000,
     contentType: mimeType,
   });
-  return { uploadUrl, publicUrl: getPublicAssetUrl(gcsPath) };
+  return { uploadUrl, gcsPath };
 }
 
 export async function deleteFile(gcsPath: string): Promise<void> {

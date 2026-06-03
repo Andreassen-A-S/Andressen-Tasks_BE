@@ -172,6 +172,6 @@ export async function prepareProfilePictureUpload(ctx: RequestContext, userId: s
     throw new PayloadTooLargeError(`File exceeds maximum size of ${mimeConfig.maxBytes / (1024 * 1024)} MB`);
   }
 
-  const { uploadUrl, publicUrl } = await generateUserProfilePictureUploadUrl(userId, mimeType);
-  return { upload_url: uploadUrl, public_url: publicUrl };
+  const { uploadUrl, gcsPath } = await generateUserProfilePictureUploadUrl(userId, mimeType);
+  return { upload_url: uploadUrl, gcs_path: gcsPath };
 }
