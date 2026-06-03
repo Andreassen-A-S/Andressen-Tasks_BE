@@ -45,12 +45,18 @@ export async function rotateRefreshToken(raw: string) {
 
   if (!stored) return null;
 
-  // Replay: already consumed — revoke entire family
+  // Replay: already consumed — revoke family and session account
   if (stored.used_at) {
-    await prisma.refreshToken.updateMany({
-      where: { family_id: stored.family_id },
-      data: { revoked_at: new Date() },
-    });
+    await prisma.$transaction([
+      prisma.refreshToken.updateMany({
+        where: { family_id: stored.family_id },
+        data: { revoked_at: new Date() },
+      }),
+      prisma.sessionAccount.updateMany({
+        where: { session_account_id: stored.session_account_id, revoked_at: null },
+        data: { revoked_at: new Date() },
+      }),
+    ]);
     return null;
   }
 
@@ -71,10 +77,16 @@ export async function rotateRefreshToken(raw: string) {
       data: { used_at: now },
     });
     if (consumed.count === 0) {
-      await tx.refreshToken.updateMany({
-        where: { family_id: stored.family_id },
-        data: { revoked_at: now },
-      });
+      await Promise.all([
+        tx.refreshToken.updateMany({
+          where: { family_id: stored.family_id },
+          data: { revoked_at: now },
+        }),
+        tx.sessionAccount.updateMany({
+          where: { session_account_id: stored.session_account_id, revoked_at: null },
+          data: { revoked_at: now },
+        }),
+      ]);
       return false;
     }
 
