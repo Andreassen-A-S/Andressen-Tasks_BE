@@ -119,9 +119,12 @@ export async function refreshTokens(raw: string) {
   return { token, refresh_token: result.newRaw, user: safeUser };
 }
 
-// Mobile logout: best-effort revocation of a refresh token.
+// Mobile logout: revokes the token and its session account (best effort).
 export async function logout(raw: string): Promise<void> {
-  await refreshTokenRepo.revokeRefreshToken(raw);
+  const sessionAccountId = await refreshTokenRepo.revokeRefreshToken(raw);
+  if (sessionAccountId) {
+    await sessionRepo.revokeSessionAccountAndMaybeSession(sessionAccountId);
+  }
 }
 
 // Returns all active sessions for the authenticated user.

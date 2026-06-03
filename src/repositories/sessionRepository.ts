@@ -215,6 +215,30 @@ export async function revokeActiveAccount(sessionId: string): Promise<void> {
   ]);
 }
 
+// Revoke a session account and mark the session revoked if no active accounts remain.
+export async function revokeSessionAccountAndMaybeSession(sessionAccountId: string): Promise<void> {
+  const account = await prisma.sessionAccount.findUnique({
+    where: { session_account_id: sessionAccountId },
+    select: { session_id: true, revoked_at: true },
+  });
+  if (!account || account.revoked_at) return;
+
+  await prisma.sessionAccount.update({
+    where: { session_account_id: sessionAccountId },
+    data: { revoked_at: new Date() },
+  });
+
+  const activeCount = await prisma.sessionAccount.count({
+    where: { session_id: account.session_id, revoked_at: null },
+  });
+  if (activeCount === 0) {
+    await prisma.session.update({
+      where: { session_id: account.session_id },
+      data: { revoked_at: new Date() },
+    });
+  }
+}
+
 // Revoke all session accounts for a user across every session.
 export async function revokeAllSessionAccountsForUser(userId: string): Promise<void> {
   await prisma.sessionAccount.updateMany({

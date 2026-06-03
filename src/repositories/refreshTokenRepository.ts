@@ -23,7 +23,7 @@ export async function createRefreshToken(sessionAccountId: string): Promise<stri
   return raw;
 }
 
-// Rotate a token: mark old as used, create replacement in the same family.
+// Rotate a token: atomically consume old, create replacement, extend session.
 // Detects replay attacks: if the token was already used, revokes the entire family.
 export async function rotateRefreshToken(raw: string) {
   const stored = await prisma.refreshToken.findUnique({
@@ -37,7 +37,7 @@ export async function rotateRefreshToken(raw: string) {
               organization_id: true, status: true,
             },
           },
-          session: { select: { revoked_at: true, expires_at: true } },
+          session: { select: { session_id: true, revoked_at: true, expires_at: true } },
         },
       },
     },
@@ -45,7 +45,7 @@ export async function rotateRefreshToken(raw: string) {
 
   if (!stored) return null;
 
-  // Replay attack: token already consumed — revoke entire family
+  // Replay: already consumed — revoke entire family
   if (stored.used_at) {
     await prisma.refreshToken.updateMany({
       where: { family_id: stored.family_id },
@@ -62,36 +62,60 @@ export async function rotateRefreshToken(raw: string) {
   if (account.user.status !== UserStatus.ACTIVE) return null;
 
   const newRaw = generateRawRefreshToken();
+  const now = new Date();
 
-  await prisma.$transaction([
-    prisma.refreshToken.update({
-      where: { token_id: stored.token_id },
-      data: { used_at: new Date() },
-    }),
-    prisma.refreshToken.create({
-      data: {
-        session_account_id: stored.session_account_id,
-        token_hash: hashToken(newRaw),
-        family_id: stored.family_id,
-        parent_token_id: stored.token_id,
-        expires_at: expiresAt(),
-      },
-    }),
-    prisma.sessionAccount.update({
-      where: { session_account_id: stored.session_account_id },
-      data: { last_used_at: new Date() },
-    }),
-  ]);
+  const rotated = await prisma.$transaction(async (tx) => {
+    // Conditional consume: 0 rows means concurrent rotation — treat as replay
+    const consumed = await tx.refreshToken.updateMany({
+      where: { token_id: stored.token_id, used_at: null, revoked_at: null },
+      data: { used_at: now },
+    });
+    if (consumed.count === 0) {
+      await tx.refreshToken.updateMany({
+        where: { family_id: stored.family_id },
+        data: { revoked_at: now },
+      });
+      return false;
+    }
 
+    await Promise.all([
+      tx.refreshToken.create({
+        data: {
+          session_account_id: stored.session_account_id,
+          token_hash: hashToken(newRaw),
+          family_id: stored.family_id,
+          parent_token_id: stored.token_id,
+          expires_at: expiresAt(),
+        },
+      }),
+      tx.sessionAccount.update({
+        where: { session_account_id: stored.session_account_id },
+        data: { last_used_at: now },
+      }),
+      tx.session.update({
+        where: { session_id: account.session.session_id },
+        data: { expires_at: expiresAt(30) },
+      }),
+    ]);
+    return true;
+  });
+
+  if (!rotated) return null;
   return { user: account.user, newRaw };
 }
 
-// Revoke a token by its raw value (mobile logout — best effort).
-export async function revokeRefreshToken(raw: string): Promise<void> {
-  await prisma.refreshToken.updateMany({
-    where: { token_hash: hashToken(raw), revoked_at: null },
+// Revoke a token by its raw value (mobile logout). Returns session_account_id if found.
+export async function revokeRefreshToken(raw: string): Promise<string | null> {
+  const token = await prisma.refreshToken.findUnique({
+    where: { token_hash: hashToken(raw) },
+    select: { token_id: true, session_account_id: true, revoked_at: true },
+  });
+  if (!token || token.revoked_at) return null;
+  await prisma.refreshToken.update({
+    where: { token_id: token.token_id },
     data: { revoked_at: new Date() },
   });
+  return token.session_account_id;
 }
 
 // Revoke all tokens for a session account (session revocation).
