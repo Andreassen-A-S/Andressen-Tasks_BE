@@ -28,7 +28,6 @@ router.post("/switch-account", asyncHandler(authController.switchAccount));
 router.post("/logout", asyncHandler(authController.logout));
 router.get("/sessions", authenticateToken, asyncHandler(authController.getSessions));
 router.delete("/sessions/all", authenticateToken, asyncHandler(authController.revokeAllSessions));
-router.delete("/sessions/browser/:id", authenticateToken, asyncHandler(authController.revokeWebSession));
-router.delete("/sessions/mobile/:id", authenticateToken, asyncHandler(authController.revokeMobileSession));
+router.delete("/sessions/:id", authenticateToken, asyncHandler(authController.revokeSession));
 
 export default router;
