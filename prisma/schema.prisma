@@ -166,9 +166,55 @@ model User {
   createdRecurringTemplates RecurringTaskTemplate[] @relation("RecurringTaskCreator")
   recurringTemplateAssignees RecurringTaskTemplateAssignee[]
   uploadedAttachments TaskAttachment[]
+  refreshTokens           RefreshToken[]
+  browserSessionAccounts  BrowserSessionAccount[]
 
   @@index([organization_id])
   @@map("users")
+}
+
+model BrowserSession {
+  session_id     String                  @id @default(cuid())
+  active_user_id String?
+  device_name    String?
+  location       String?
+  created_at     DateTime                @default(now())
+  expires_at     DateTime
+  accounts       BrowserSessionAccount[]
+
+  @@map("browser_sessions")
+}
+
+model BrowserSessionAccount {
+  id                 String         @id @default(cuid())
+  session_id         String
+  user_id            String
+  refresh_token_hash String         @unique
+  added_at           DateTime       @default(now())
+  expires_at         DateTime
+  revoked_at         DateTime?
+  last_used_at       DateTime       @default(now())
+  session            BrowserSession @relation(fields: [session_id], references: [session_id], onDelete: Cascade)
+  user               User           @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@unique([session_id, user_id])
+  @@index([session_id])
+  @@map("browser_session_accounts")
+}
+
+model RefreshToken {
+  token_id    String    @id @default(uuid())
+  user_id     String
+  token_hash  String    @unique
+  device_name String?
+  location    String?
+  expires_at  DateTime
+  revoked_at  DateTime?
+  created_at  DateTime  @default(now())
+  user        User      @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("refresh_tokens")
 }
 
 model TaskComment {

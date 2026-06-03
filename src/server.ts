@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import os from "os";
@@ -54,9 +55,9 @@ app.use(
 
       return cb(new Error(`CORS blocked for origin: ${origin}`));
     },
-    credentials: false, // Bearer tokens in Authorization header
+    credentials: true, // needed for httpOnly refresh-token cookie (web client)
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Org-Context"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Org-Context", "X-Client"],
   }),
 );
 
@@ -73,6 +74,7 @@ app.use(
   }),
 );
 
+app.use(cookieParser());
 app.use(express.json({ limit: "1mb" }));
 
 // Logging: status + duration

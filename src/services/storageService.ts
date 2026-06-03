@@ -124,7 +124,7 @@ export async function generateUserProfilePictureUploadUrl(
     expires: Date.now() + 15 * 60 * 1000,
     contentType: mimeType,
   });
-  return { uploadUrl, gcsPath };
+  return { uploadUrl, publicUrl: getPublicAssetUrl(gcsPath) };
 }
 
 export async function deleteFile(gcsPath: string): Promise<void> {
