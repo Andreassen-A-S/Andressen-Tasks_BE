@@ -278,6 +278,11 @@ export async function deleteTask(ctx: RequestContext, taskId: string) {
   const task = await taskRepo.getTaskById(taskId, ctx.effectiveOrgId);
   if (!task) return false;
 
+  const isAdmin = ctx.isSuperAdmin || ctx.actorRole === UserRole.ADMIN;
+  if (!isAdmin && task.created_by !== ctx.actorUserId && !(task.assigned_users ?? []).includes(ctx.actorUserId)) {
+    throw new TaskForbiddenError();
+  }
+
   await prisma.$transaction(async (tx) => {
     // Events written before deletion to preserve audit trail (cascade would remove them otherwise).
     const eventWrites = [

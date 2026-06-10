@@ -10,14 +10,16 @@ import { appDateKey } from "../utils/dateUtils";
 import { prisma } from "../db/prisma";
 import * as templateRepository from "../repositories/templateRepository";
 import { allocateTaskNumbersForProject } from "../repositories/taskRepository";
-import { TemplateNotFoundError } from "../errors/domainErrors";
+import { TemplateNotFoundError, TemplateForbiddenError } from "../errors/domainErrors";
 import {
   RecurrenceFrequency,
   TaskEventType,
   TaskStatus,
+  UserRole,
   type Prisma,
   type RecurringTaskTemplate,
 } from "../generated/prisma/client";
+import type { RequestContext } from "../types/requestContext";
 import type {
   CreateTemplateInput,
   UpdateTemplateInput,
@@ -42,9 +44,12 @@ export class RecurringTaskService {
    * This is fully atomic - all operations succeed or all fail together
    */
   async createTemplate(
+    ctx: RequestContext,
     data: CreateTemplateInput,
     effectiveOrgId: string | null = null,
   ): Promise<RecurringTaskTemplate> {
+    const isAdmin = ctx.isSuperAdmin || ctx.actorRole === UserRole.ADMIN;
+    if (!isAdmin) throw new TemplateForbiddenError();
     return await prisma.$transaction(async (tx) => {
       // 1. Create template + validate project org + validate assignees (all in repo)
       const template = await templateRepository.createTemplateWithAssignees(
@@ -143,7 +148,13 @@ export class RecurringTaskService {
   /**
    * Delete template and all its instances
    */
-  async deleteTemplate(templateId: string): Promise<RecurringTaskTemplate> {
+  async deleteTemplate(ctx: RequestContext, templateId: string, effectiveOrgId: string | null = null): Promise<RecurringTaskTemplate> {
+    const template = await this.getTemplateById(templateId, effectiveOrgId);
+    if (!template) throw new TemplateNotFoundError(templateId);
+
+    const isAdmin = ctx.isSuperAdmin || ctx.actorRole === UserRole.ADMIN;
+    if (!isAdmin && template.created_by !== ctx.actorUserId) throw new TemplateForbiddenError();
+
     // Cascade will handle deleting instances and assignees
     return prisma.recurringTaskTemplate.delete({
       where: { id: templateId },
@@ -468,10 +479,16 @@ export class RecurringTaskService {
    * Update template and regenerate future instances
    */
   async updateTemplate(
+    ctx: RequestContext,
     templateId: string,
     data: UpdateTemplateInput,
     effectiveOrgId: string | null = null,
   ): Promise<RecurringTaskTemplate> {
+    const existing = await this.getTemplateById(templateId, effectiveOrgId);
+    if (!existing) throw new TemplateNotFoundError(templateId);
+
+    const isAdmin = ctx.isSuperAdmin || ctx.actorRole === UserRole.ADMIN;
+    if (!isAdmin && existing.created_by !== ctx.actorUserId) throw new TemplateForbiddenError();
     return await prisma.$transaction(async (tx) => {
       // Update template + validate project org + validate assignees (all in repo)
       const template = await templateRepository.updateTemplateWithAssignees(
@@ -538,7 +555,12 @@ export class RecurringTaskService {
   /**
    * Deactivate template (stops generating new instances)
    */
-  async deactivateTemplate(templateId: string): Promise<RecurringTaskTemplate> {
+  async deactivateTemplate(ctx: RequestContext, templateId: string, effectiveOrgId: string | null = null): Promise<RecurringTaskTemplate> {
+    const existing = await this.getTemplateById(templateId, effectiveOrgId);
+    if (!existing) throw new TemplateNotFoundError(templateId);
+
+    const isAdmin = ctx.isSuperAdmin || ctx.actorRole === UserRole.ADMIN;
+    if (!isAdmin && existing.created_by !== ctx.actorUserId) throw new TemplateForbiddenError();
     return await prisma.$transaction(async (tx) => {
       const template = await templateRepository.updateTemplate(
         templateId,
@@ -569,7 +591,12 @@ export class RecurringTaskService {
   /**
    * Reactivate template and generate instances
    */
-  async reactivateTemplate(templateId: string): Promise<RecurringTaskTemplate> {
+  async reactivateTemplate(ctx: RequestContext, templateId: string, effectiveOrgId: string | null = null): Promise<RecurringTaskTemplate> {
+    const existing = await this.getTemplateById(templateId, effectiveOrgId);
+    if (!existing) throw new TemplateNotFoundError(templateId);
+
+    const isAdmin = ctx.isSuperAdmin || ctx.actorRole === UserRole.ADMIN;
+    if (!isAdmin && existing.created_by !== ctx.actorUserId) throw new TemplateForbiddenError();
     return await prisma.$transaction(async (tx) => {
       const template = await templateRepository.updateTemplate(
         templateId,

@@ -113,7 +113,7 @@ describe("projectController.createProject", () => {
     const project = { project_id: "p1", name: "New Project" };
     spyOn(projectRepo, "createProject").mockResolvedValue(project as never);
     const req = createRequest({
-      user: { user_id: "u1" },
+      user: { user_id: "u1", role: "ADMIN" },
       effectiveOrgId: "org1",
       body: { name: "New Project" },
     });
@@ -138,7 +138,7 @@ describe("projectController.createProject", () => {
   test("returns 500 when repository fails", async () => {
     spyOn(projectRepo, "createProject").mockRejectedValue(new Error("db fail"));
     const req = createRequest({
-      user: { user_id: "u1" },
+      user: { user_id: "u1", role: "ADMIN" },
       effectiveOrgId: "org1",
       body: { name: "New Project" },
     });

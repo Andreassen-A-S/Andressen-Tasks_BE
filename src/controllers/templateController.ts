@@ -60,7 +60,7 @@ export async function createTemplate(req: Request, res: Response) {
     goal: body.goal ?? undefined,
   };
 
-  const template = await recurringService.createTemplate(templateData, ctx.effectiveOrgId);
+  const template = await recurringService.createTemplate(ctx, templateData, ctx.effectiveOrgId);
   const completeTemplate = await recurringService.getTemplateById(template.id, ctx.effectiveOrgId);
 
   return res.status(201).json({ success: true, data: completeTemplate });
@@ -69,8 +69,6 @@ export async function createTemplate(req: Request, res: Response) {
 export async function updateTemplate(req: Request, res: Response) {
   const ctx = getRequestContext(req);
   if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
-  const userId = ctx.actorUserId;
-
   const id = getParamId(req);
   if (!id) return res.status(400).json({ success: false, error: "Missing or invalid id" });
 
@@ -78,10 +76,6 @@ export async function updateTemplate(req: Request, res: Response) {
 
   const existing = await recurringService.getTemplateById(id, ctx.effectiveOrgId);
   if (!existing) return res.status(404).json({ success: false, error: "Template not found" });
-
-  if (existing.created_by !== userId) {
-    return res.status(403).json({ success: false, error: "Not authorized to update this template" });
-  }
 
   if (
     body.frequency !== undefined ||
@@ -136,7 +130,7 @@ export async function updateTemplate(req: Request, res: Response) {
     updateData.assigned_users = body.assigned_users;
   }
 
-  await recurringService.updateTemplate(id, updateData, ctx.effectiveOrgId);
+  await recurringService.updateTemplate(ctx, id, updateData, ctx.effectiveOrgId);
   const updatedTemplate = await recurringService.getTemplateById(id, ctx.effectiveOrgId);
 
   return res.json({ success: true, data: updatedTemplate });
@@ -145,57 +139,30 @@ export async function updateTemplate(req: Request, res: Response) {
 export async function deleteTemplate(req: Request, res: Response) {
   const ctx = getRequestContext(req);
   if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
-  const userId = ctx.actorUserId;
-
   const id = getParamId(req);
   if (!id) return res.status(400).json({ success: false, error: "Missing or invalid id" });
 
-  const template = await recurringService.getTemplateById(id, ctx.effectiveOrgId);
-  if (!template) return res.status(404).json({ success: false, error: "Template not found" });
-
-  if (template.created_by !== userId) {
-    return res.status(403).json({ success: false, error: "Not authorized to delete this template" });
-  }
-
-  await recurringService.deleteTemplate(id);
+  await recurringService.deleteTemplate(ctx, id, ctx.effectiveOrgId);
   return res.status(204).send();
 }
 
 export async function deactivateTemplate(req: Request, res: Response) {
   const ctx = getRequestContext(req);
   if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
-  const userId = ctx.actorUserId;
-
   const id = getParamId(req);
   if (!id) return res.status(400).json({ success: false, error: "Missing or invalid id" });
 
-  const template = await recurringService.getTemplateById(id, ctx.effectiveOrgId);
-  if (!template) return res.status(404).json({ success: false, error: "Template not found" });
-
-  if (template.created_by !== userId) {
-    return res.status(403).json({ success: false, error: "Not authorized to deactivate this template" });
-  }
-
-  const updated = await recurringService.deactivateTemplate(id);
+  const updated = await recurringService.deactivateTemplate(ctx, id, ctx.effectiveOrgId);
   return res.json({ success: true, data: updated });
 }
 
 export async function reactivateTemplate(req: Request, res: Response) {
   const ctx = getRequestContext(req);
   if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
-  const userId = ctx.actorUserId;
-
   const id = getParamId(req);
   if (!id) return res.status(400).json({ success: false, error: "Missing or invalid id" });
 
-  const template = await recurringService.getTemplateById(id, ctx.effectiveOrgId);
-  if (!template) return res.status(404).json({ success: false, error: "Template not found" });
-
-  if (template.created_by !== userId) {
-    return res.status(403).json({ success: false, error: "Not authorized to reactivate this template" });
-  }
-
-  const updated = await recurringService.reactivateTemplate(id);
+  const updated = await recurringService.reactivateTemplate(ctx, id, ctx.effectiveOrgId);
   return res.json({ success: true, data: updated });
 }
 

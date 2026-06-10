@@ -18,7 +18,7 @@ export async function listAssignments(req: Request, res: Response) {
   res.json({ success: true, data: assignments });
 }
 
-// Assign a user to a task. Requires admin or super-admin role (enforced by route middleware).
+// Assign a user to a task. Requires admin or super-admin role (enforced by service layer).
 export async function assignTask(req: Request, res: Response) {
   const ctx = getRequestContext(req);
   if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });

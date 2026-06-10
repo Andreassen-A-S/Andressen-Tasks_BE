@@ -97,7 +97,7 @@ describe("assignmentController.assignTask", () => {
       {} as never,
     );
     const req = createRequest({
-      user: { user_id: "u1" },
+      user: { user_id: "u1", role: "ADMIN" },
       body: { task_id: "t1", user_id: "u2" },
     });
     const res = createMockResponse();
@@ -138,7 +138,7 @@ describe("assignmentController.assignTask", () => {
       new AssignmentCrossOrganizationError("Assigned user must belong to the task organization."),
     );
     const req = createRequest({
-      user: { user_id: "admin-a" },
+      user: { user_id: "admin-a", role: "ADMIN" },
       effectiveOrgId: "org-a",
       body: { task_id: "task-org-a", user_id: "user-org-b" },
     });
@@ -183,7 +183,7 @@ describe("assignmentController.deleteAssignment", () => {
     );
 
     const req = createRequest({
-      user: { user_id: "u1" },
+      user: { user_id: "u1", role: "ADMIN" },
       params: { id: "a1" } as Request["params"],
     });
     const res = createMockResponse();
@@ -210,7 +210,7 @@ describe("assignmentController.deleteAssignment", () => {
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
 
     const req = createRequest({
-      user: { user_id: "u1" },
+      user: { user_id: "u1", role: "ADMIN" },
       effectiveOrgId: "org-a",
       params: { id: "a1" } as Request["params"],
     });

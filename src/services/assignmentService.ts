@@ -1,5 +1,5 @@
 import { prisma } from "../db/prisma";
-import { TaskEventType, TaskStatus } from "../generated/prisma/client";
+import { TaskEventType, TaskStatus, UserRole } from "../generated/prisma/client";
 import * as assignmentRepo from "../repositories/assignmentRepository";
 import * as taskRepo from "../repositories/taskRepository";
 import * as taskEventRepo from "../repositories/taskEventRepository";
@@ -9,6 +9,7 @@ import type { RequestContext } from "../types/requestContext";
 import {
   AssignmentNotFoundError,
   AssignmentCrossOrganizationError,
+  AssignmentForbiddenError,
   TaskArchivedError,
 } from "../errors/domainErrors";
 
@@ -40,6 +41,9 @@ export async function assignTaskToUser(
   taskId: string,
   userId: string,
 ) {
+  const isAdmin = ctx.isSuperAdmin || ctx.actorRole === UserRole.ADMIN;
+  if (!isAdmin) throw new AssignmentForbiddenError();
+
   const task = await taskRepo.getTaskById(taskId, ctx.effectiveOrgId);
   if (!task) return null;
 
@@ -78,6 +82,9 @@ export async function assignTaskToUser(
 
 // Deleting an assignment on an archived task is rejected.
 export async function deleteAssignment(ctx: RequestContext, assignmentId: string) {
+  const isAdmin = ctx.isSuperAdmin || ctx.actorRole === UserRole.ADMIN;
+  if (!isAdmin) throw new AssignmentForbiddenError();
+
   const existing = await assignmentRepo.getAssignmentById(assignmentId, ctx.effectiveOrgId);
   if (!existing) throw new AssignmentNotFoundError();
 

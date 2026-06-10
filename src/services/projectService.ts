@@ -1,7 +1,8 @@
 import * as projectRepo from "../repositories/projectRepository";
+import { UserRole } from "../generated/prisma/client";
 import type { RequestContext } from "../types/requestContext";
 import type { CreateProjectInput, UpdateProjectInput } from "../types/project";
-import { ProjectNotFoundError } from "../errors/domainErrors";
+import { ProjectNotFoundError, ProjectForbiddenError } from "../errors/domainErrors";
 
 export { ProjectNotFoundError };
 
@@ -20,15 +21,21 @@ export async function getProject(ctx: RequestContext, projectId: string) {
 
 // Creates a project in the caller's org. Requires effectiveOrgId (no org → 403).
 export async function createProject(ctx: RequestContext, data: CreateProjectInput) {
+  const isAdmin = ctx.isSuperAdmin || ctx.actorRole === UserRole.ADMIN;
+  if (!isAdmin) throw new ProjectForbiddenError();
   return projectRepo.createProject(data, ctx.actorUserId, ctx.effectiveOrgId!);
 }
 
 // Updates a project's metadata. Throws ProjectNotFoundError if outside scope.
 export async function updateProject(ctx: RequestContext, projectId: string, data: UpdateProjectInput) {
+  const isAdmin = ctx.isSuperAdmin || ctx.actorRole === UserRole.ADMIN;
+  if (!isAdmin) throw new ProjectForbiddenError();
   return projectRepo.updateProject(projectId, data, ctx.effectiveOrgId);
 }
 
 // Deletes a project. Throws ProjectNotFoundError if outside scope.
 export async function deleteProject(ctx: RequestContext, projectId: string) {
+  const isAdmin = ctx.isSuperAdmin || ctx.actorRole === UserRole.ADMIN;
+  if (!isAdmin) throw new ProjectForbiddenError();
   return projectRepo.deleteProject(projectId, ctx.effectiveOrgId);
 }
