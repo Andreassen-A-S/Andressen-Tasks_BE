@@ -18,6 +18,7 @@ import attachmentRoutes from "./routes/attachment.routes";
 import organizationRoutes from "./routes/organization.routes";
 import positionRoutes from "./routes/position.routes";
 import goalRoutes from "./routes/goal.routes";
+import dashboardRoutes from "./routes/dashboard.routes";
 import { initScheduler } from "./services/schedulerService";
 import { errorMiddleware } from "./middleware/errorMiddleware";
 
@@ -108,6 +109,7 @@ app.use("/api/projects", projectRoutes);
 app.use("/api/organizations", organizationRoutes);
 app.use("/api/attachments", attachmentRoutes);
 app.use("/api/positions", positionRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 // 404
 app.use((_req, res) => {
