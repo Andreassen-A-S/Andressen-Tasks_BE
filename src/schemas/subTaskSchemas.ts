@@ -1,7 +1,6 @@
 import { z } from "zod";
+import { createTaskSchema } from "./taskSchemas";
 
-export const createSubtaskSchema = z
-  .object({
-    parent_task_id: z.string("parent_task_id is required").trim().min(1, "parent_task_id is required"),
-  })
-  .passthrough();
+export const createSubtaskSchema = createTaskSchema.extend({
+  parent_task_id: z.string().trim().min(1),
+});

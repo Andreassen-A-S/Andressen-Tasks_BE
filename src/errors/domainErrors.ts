@@ -18,6 +18,14 @@ export class TaskNotFoundError extends AppError {
   }
 }
 
+// Thrown when a non-admin tries to access the dashboard.
+export class DashboardForbiddenError extends AppError {
+  constructor() {
+    super(403, "Only admins can access the dashboard");
+    this.name = "DashboardForbiddenError";
+  }
+}
+
 // Thrown when a non-admin/non-creator tries to mutate a recurring template.
 export class TemplateForbiddenError extends AppError {
   constructor() {

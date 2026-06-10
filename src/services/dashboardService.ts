@@ -3,10 +3,15 @@ import * as projectRepo from "../repositories/projectRepository";
 import * as assignmentRepo from "../repositories/assignmentRepository";
 import * as commentRepo from "../repositories/commentRepository";
 import { generateSignedReadUrl } from "./storageService";
+import { UserRole } from "../generated/prisma/client";
+import { DashboardForbiddenError } from "../errors/domainErrors";
 import type { RequestContext } from "../types/requestContext";
 
 export async function getDashboardData(ctx: RequestContext) {
   if (!ctx.effectiveOrgId) return null;
+
+  const isAdmin = ctx.isSuperAdmin || ctx.actorRole === UserRole.ADMIN;
+  if (!isAdmin) throw new DashboardForbiddenError();
   const orgId = ctx.effectiveOrgId;
 
   const [tasks, projects, assignments, todayComments] = await Promise.all([
