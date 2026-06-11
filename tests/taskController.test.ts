@@ -728,7 +728,7 @@ describe("taskController.updateTask", () => {
 describe("taskController.deleteTask", () => {
   test("deletes task and logs TASK_DELETED", async () => {
     transactionMock.mockImplementation((fn: any) => fn({}));
-    const task = { task_id: "t1" };
+    const task = { task_id: "t1", assigned_users: [] };
     spyOn(taskRepo, "getTaskById").mockResolvedValue(task as never);
     const deleteSpy = spyOn(taskRepo, "deleteTaskPlatform").mockResolvedValue(
       undefined,
@@ -738,7 +738,7 @@ describe("taskController.deleteTask", () => {
     );
 
     const req = createRequest({
-      user: { user_id: "u1" },
+      user: { user_id: "u1", role: "ADMIN" },
       params: { id: "t1" } as Request["params"],
     });
     const res = createMockResponse();
@@ -771,12 +771,12 @@ describe("taskController.deleteTask", () => {
 
   test("maps repository task delete org miss to 404", async () => {
     transactionMock.mockImplementation((fn: any) => fn({}));
-    spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1" } as never);
+    spyOn(taskRepo, "getTaskById").mockResolvedValue({ task_id: "t1", assigned_users: [] } as never);
     spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
     spyOn(taskRepo, "deleteTaskInOrg").mockRejectedValue(new TaskNotFoundError("t1"));
 
     const req = createRequest({
-      user: { user_id: "u1" },
+      user: { user_id: "u1", role: "ADMIN" },
       effectiveOrgId: "org-a",
       params: { id: "t1" } as Request["params"],
     });

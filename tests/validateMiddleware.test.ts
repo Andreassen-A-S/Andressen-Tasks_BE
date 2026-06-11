@@ -131,6 +131,7 @@ describe("validate middleware — organization schema integration", () => {
 
 describe("validate middleware — task schema integration", () => {
   const { createTaskSchema } = require("../src/schemas/taskSchemas");
+  const { createSubtaskSchema } = require("../src/schemas/subTaskSchemas");
 
   test("returns 400 with field error when project_id is missing", () => {
     const { req, res } = makeReqRes({ title: "My task" });
@@ -143,8 +144,14 @@ describe("validate middleware — task schema integration", () => {
     expect(error.fields).toHaveProperty("project_id");
   });
 
-  test("passes and preserves extra fields when project_id is valid", () => {
-    const { req, res } = makeReqRes({ project_id: "  p1  ", title: "My task", extra: true });
+  test("passes with all required fields", () => {
+    const { req, res } = makeReqRes({
+      project_id: "  p1  ",
+      title: "My task",
+      priority: "HIGH",
+      deadline: "2025-12-31T00:00:00Z",
+      start_date: "2025-12-01T00:00:00Z",
+    });
     const next = mock();
 
     validate(createTaskSchema)(req, res, next);
@@ -152,7 +159,24 @@ describe("validate middleware — task schema integration", () => {
     expect(next).toHaveBeenCalledWith();
     expect(req.body.project_id).toBe("p1");
     expect(req.body.title).toBe("My task");
-    expect(req.body.extra).toBe(true);
+  });
+
+  test("subtask creation passes without project_id and strips supplied project_id", () => {
+    const { req, res } = makeReqRes({
+      parent_task_id: "  parent-1  ",
+      project_id: "client-project",
+      title: "Subtask",
+      priority: "HIGH",
+      deadline: "2025-12-31T00:00:00Z",
+      start_date: "2025-12-01T00:00:00Z",
+    });
+    const next = mock();
+
+    validate(createSubtaskSchema)(req, res, next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(req.body.parent_task_id).toBe("parent-1");
+    expect(req.body.project_id).toBeUndefined();
   });
 });
 

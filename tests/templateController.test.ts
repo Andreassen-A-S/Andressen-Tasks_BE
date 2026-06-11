@@ -352,7 +352,7 @@ describe("recurringTemplateController.updateTemplate", () => {
     expect(res.statusCode).toBe(403);
     expect(res.body).toEqual({
       success: false,
-      error: "Not authorized to update this template",
+      error: "You do not have permission to modify this template",
     });
   });
 
@@ -408,7 +408,7 @@ describe("recurringTemplateController.deleteTemplate", () => {
 
     await callController(recurringTemplateController.deleteTemplate, req, res);
 
-    expect(deleteSpy).toHaveBeenCalledWith("t1");
+    expect(deleteSpy).toHaveBeenCalledWith(expect.anything(), "t1", null);
     expect(res.statusCode).toBe(204);
   });
 
@@ -429,7 +429,7 @@ describe("recurringTemplateController.deleteTemplate", () => {
     expect(res.statusCode).toBe(403);
     expect(res.body).toEqual({
       success: false,
-      error: "Not authorized to delete this template",
+      error: "You do not have permission to modify this template",
     });
   });
 });

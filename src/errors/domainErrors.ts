@@ -18,6 +18,38 @@ export class TaskNotFoundError extends AppError {
   }
 }
 
+// Thrown when a non-admin tries to access the dashboard.
+export class DashboardForbiddenError extends AppError {
+  constructor() {
+    super(403, "Only admins can access the dashboard");
+    this.name = "DashboardForbiddenError";
+  }
+}
+
+// Thrown when a non-admin/non-creator tries to mutate a recurring template.
+export class TemplateForbiddenError extends AppError {
+  constructor() {
+    super(403, "You do not have permission to modify this template");
+    this.name = "TemplateForbiddenError";
+  }
+}
+
+// Thrown when a non-admin tries to mutate project structure.
+export class ProjectForbiddenError extends AppError {
+  constructor() {
+    super(403, "Only admins can manage projects");
+    this.name = "ProjectForbiddenError";
+  }
+}
+
+// Thrown when a non-admin tries to manage assignments.
+export class AssignmentForbiddenError extends AppError {
+  constructor() {
+    super(403, "Only admins can manage assignments");
+    this.name = "AssignmentForbiddenError";
+  }
+}
+
 // Thrown when a caller tries to modify a task they did not create and are not assigned to.
 export class TaskForbiddenError extends AppError {
   constructor() {
