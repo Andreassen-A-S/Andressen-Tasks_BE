@@ -28,6 +28,7 @@ mock.module("../src/db/prisma", () => ({
 mock.module("../src/utils/tokenUtils", () => ({
   hashToken: mock((raw: string) => `hashed:${raw}`),
   generateRawRefreshToken: mock(() => "new-raw"),
+  generateAccessToken: mock(() => "mock-access-token"),
 }));
 
 const repo = await import("../src/repositories/refreshTokenRepository");
