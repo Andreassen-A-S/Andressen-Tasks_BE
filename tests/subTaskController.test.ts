@@ -79,9 +79,10 @@ describe("subTaskController.createSubtask", () => {
   test("creates subtask and logs parent/subtask events", async () => {
     spyOn(taskRepo, "getTaskById").mockResolvedValue({
       task_id: "p1",
+      project_id: "parent-project",
     } as never);
     const subtask = { task_id: "s1", parent_task_id: "p1" };
-    spyOn(taskRepo, "createTaskWithAssignments").mockResolvedValue(
+    const createSpy = spyOn(taskRepo, "createTaskWithAssignments").mockResolvedValue(
       subtask as never,
     );
     const eventSpy = spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue(
@@ -92,12 +93,18 @@ describe("subTaskController.createSubtask", () => {
 
     const req = createRequest({
       user: { user_id: "u1" },
-      body: { parent_task_id: "p1", title: "subtask" },
+      body: { parent_task_id: "p1", title: "subtask", project_id: "client-project" },
     });
     const res = createMockResponse();
 
     await callController(subTaskController.createSubtask, req, res);
 
+    expect(createSpy.mock.calls[0]?.[1]).toMatchObject({
+      title: "subtask",
+      parent_task_id: "p1",
+      project_id: "parent-project",
+      created_by: "u1",
+    });
     expect(eventSpy).toHaveBeenCalledTimes(2);
     // createTaskEvent(db, data) — second arg (index 1) carries the event type
     expect(eventSpy.mock.calls[0]?.[1]?.type).toBe(TaskEventType.SUBTASK_ADDED);

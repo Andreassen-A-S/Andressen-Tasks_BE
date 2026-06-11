@@ -9,7 +9,7 @@ export { TaskArchivedError, TaskNotFoundError };
 
 // Creates a subtask under the given parent task.
 // The parent task must exist and must not be archived.
-// The subtask inherits the parent's project_id if one is not explicitly provided.
+// The subtask always inherits the parent's project_id on creation.
 export async function createSubtask(
   ctx: RequestContext,
   parentTaskId: string,
@@ -22,12 +22,12 @@ export async function createSubtask(
   const subtask = await prisma.$transaction(async (tx) => {
     const created = await taskRepo.createTaskWithAssignments(
       tx,
-      {
-        ...subtaskData,
-        parent_task_id: parentTaskId,
-        project_id: (subtaskData.project_id as string | undefined) ?? parentTask.project_id,
-        created_by: ctx.actorUserId,
-      } as any,
+        {
+          ...subtaskData,
+          parent_task_id: parentTaskId,
+          project_id: parentTask.project_id,
+          created_by: ctx.actorUserId,
+        } as any,
       ctx.effectiveOrgId,
     );
 
