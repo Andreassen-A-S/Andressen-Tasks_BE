@@ -30,6 +30,10 @@ export async function createComment(
     user_id: string;
     message?: string;
     upload_tokens?: string[];
+    reply_to_comment_id?: string;
+    reply_preview?: string;
+    reply_author_id?: string;
+    reply_author_name?: string;
   },
 ) {
   const { upload_tokens, ...commentData } = data;

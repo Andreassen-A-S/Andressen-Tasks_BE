@@ -186,10 +186,19 @@ describe("attachmentController.prepareAttachments", () => {
       gcsPath: "tasks/t1/uuid.jpg",
       url: "https://storage.googleapis.com/bucket/tasks/t1/uuid.jpg",
     });
-    spyOn(attachmentRepo, "prepareAttachment").mockResolvedValue({ upload_token: "tok1" } as never);
+    const prepareSpy = spyOn(attachmentRepo, "prepareAttachment").mockResolvedValue({ upload_token: "tok1" } as never);
 
     const req = createRequest({
-      body: { task_id: "t1", files: [{ file_name: "photo.jpg", mime_type: "image/jpeg", file_size: 1024 }] },
+      body: {
+        task_id: "t1",
+        files: [{
+          file_name: "photo.jpg",
+          mime_type: "image/jpeg",
+          file_size: 1024,
+          width: 1920,
+          height: 1080,
+        }],
+      },
       user: { user_id: "u1", role: UserRole.USER },
     });
     const res = createMockResponse();
@@ -201,6 +210,10 @@ describe("attachmentController.prepareAttachments", () => {
       success: true,
       data: [{ upload_token: "tok1", upload_url: "https://storage.googleapis.com/signed" }],
     });
+    expect(prepareSpy).toHaveBeenCalledWith(expect.objectContaining({
+      width: 1920,
+      height: 1080,
+    }));
   });
 });
 

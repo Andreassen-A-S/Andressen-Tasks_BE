@@ -233,22 +233,30 @@ model RefreshToken {
 }
 
 model TaskComment {
-  comment_id String   @id @default(uuid())
-  task_id    String
-  user_id    String
-  message    String   @db.Text
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  comment_id         String   @id @default(uuid())
+  task_id            String
+  user_id            String
+  message            String   @db.Text
+  reply_to_comment_id String?
+  reply_preview       String?  @db.Text
+  reply_author_id     String?
+  reply_author_name   String?
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
 
   // Relations
-  task       Task     @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
-  author     User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  task    Task @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
+  author  User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  replyTo TaskComment?  @relation("CommentReplies", fields: [reply_to_comment_id], references: [comment_id], onDelete: SetNull)
+  replies TaskComment[] @relation("CommentReplies")
 
   events      TaskEvent[]
   attachments TaskAttachment[]
 
   @@index([task_id])
   @@index([user_id])
+  @@index([reply_to_comment_id])
   @@index([created_at])
   @@map("task_comments")
 }
@@ -495,6 +503,8 @@ model TaskAttachment {
   file_name     String?
   mime_type     String?
   file_size     Int?
+  width         Int?
+  height        Int?
   created_at    DateTime         @default(now())
 
   comment   TaskComment? @relation(fields: [comment_id], references: [comment_id], onDelete: Cascade)

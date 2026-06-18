@@ -225,6 +225,138 @@ describe("commentController.createComment", () => {
     expect(res.body).toMatchObject({ success: true, data: { attachments: [{ attachment_id: "a1" }] } });
   });
 
+  test("creates a flat reply with an immutable author and message preview", async () => {
+    findFirstMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
+      created_by: "u1",
+      assignments: [],
+    } as any);
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "parent-1",
+      task_id: "t1",
+      user_id: "u2",
+      message: "The original comment",
+      attachments: [],
+      author: { name: "Alice", email: "alice@example.com" },
+    } as never);
+    spyOn(userRepo, "getPushToken").mockResolvedValue(null);
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
+    transactionMock.mockImplementation(async (fn: any) => fn({}));
+    const createSpy = spyOn(commentRepo, "createComment").mockResolvedValue({
+      comment_id: "reply-1",
+      task_id: "t1",
+      user_id: "u1",
+      message: "Reply",
+      reply_to_comment_id: "parent-1",
+      reply_preview: "The original comment",
+      reply_author_id: "u2",
+      reply_author_name: "Alice",
+      attachments: [],
+    } as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+
+    const req = createRequest({
+      params: { taskId: "t1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { message: "Reply", reply_to_comment_id: "parent-1" },
+    });
+    const res = createMockResponse();
+
+    await callController(commentController.createComment, req, res);
+
+    expect(createSpy.mock.calls[0]?.[1]).toMatchObject({
+      reply_to_comment_id: "parent-1",
+      reply_preview: "The original comment",
+      reply_author_id: "u2",
+      reply_author_name: "Alice",
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  test("rejects a reply target from another task", async () => {
+    findFirstMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
+      created_by: "u1",
+      assignments: [],
+    } as any);
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "parent-1",
+      task_id: "t2",
+      user_id: "u2",
+      message: "Wrong task",
+      attachments: [],
+      author: { name: "Alice", email: "alice@example.com" },
+    } as never);
+
+    const req = createRequest({
+      params: { taskId: "t1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { message: "Reply", reply_to_comment_id: "parent-1" },
+    });
+    const res = createMockResponse();
+
+    await callController(commentController.createComment, req, res);
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toEqual({ success: false, error: "Comment not found" });
+  });
+
+  test("notifies the replied-to author once with the created reply id", async () => {
+    findFirstMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
+      created_by: "u1",
+      assignments: [{
+        user_id: "u2",
+        user: { user_id: "u2", role: UserRole.USER, push_token: "ExponentPushToken[reply]" },
+      }],
+    } as any);
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "parent-1",
+      task_id: "t1",
+      user_id: "u2",
+      message: "",
+      attachments: [{ attachment_id: "a1" }],
+      author: { name: null, email: "alice@example.com" },
+    } as never);
+    spyOn(userRepo, "getPushToken").mockResolvedValue("ExponentPushToken[reply]");
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
+    transactionMock.mockImplementation(async (fn: any) => fn({}));
+    const createSpy = spyOn(commentRepo, "createComment").mockResolvedValue({
+      comment_id: "reply-1",
+      task_id: "t1",
+      user_id: "u1",
+      message: "Reply",
+      attachments: [],
+    } as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+
+    const req = createRequest({
+      params: { taskId: "t1" } as Request["params"],
+      user: { user_id: "u1", role: UserRole.USER },
+      body: { message: "Reply", reply_to_comment_id: "parent-1" },
+    });
+    const res = createMockResponse();
+
+    await callController(commentController.createComment, req, res);
+
+    expect(createSpy.mock.calls[0]?.[1]).toMatchObject({
+      reply_preview: "Vedhæftning",
+      reply_author_id: "u2",
+      reply_author_name: "alice@example.com",
+    });
+    expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
+    expect(sendPushNotificationMock).toHaveBeenCalledWith(
+      "ExponentPushToken[reply]",
+      "Nyt svar på din kommentar",
+      "Test Task",
+      { taskId: "t1", screen: "comments", commentId: "reply-1" },
+      "u2",
+    );
+  });
+
   test("returns signed read URL for attachment in response", async () => {
     findFirstMock.mockResolvedValueOnce({
       task_id: "t1",

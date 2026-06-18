@@ -226,6 +226,29 @@ describe("validate middleware — createComment schema integration", () => {
     expect(req.body.message).toBe("hello");
   });
 
+  test("rejects a malformed reply_to_comment_id", () => {
+    const { req, res } = makeReqRes({ message: "reply", reply_to_comment_id: "not-a-uuid" });
+    const next = mock();
+
+    validate(createCommentSchema)(req, res, next);
+
+    const error = next.mock.calls[0][0];
+    expect(error).toBeInstanceOf(ValidationError);
+    expect(error.fields).toHaveProperty("reply_to_comment_id", "Invalid reply comment ID");
+  });
+
+  test("passes with a valid reply_to_comment_id", () => {
+    const { req, res } = makeReqRes({
+      message: "reply",
+      reply_to_comment_id: "4b58bb8c-2d8f-48f3-b3eb-c7a95dbb2918",
+    });
+    const next = mock();
+
+    validate(createCommentSchema)(req, res, next);
+
+    expect(next).toHaveBeenCalledWith();
+  });
+
   test("passes when only upload_tokens provided without message", () => {
     const { req, res } = makeReqRes({ upload_tokens: ["tok1"] });
     const next = mock();
@@ -380,6 +403,31 @@ describe("validate middleware — prepareAttachments schema integration", () => 
 
     expect(next).toHaveBeenCalledWith();
     expect(req.body.task_id).toBe("t1");
+  });
+
+  test("accepts positive image dimensions", () => {
+    const { req, res } = makeReqRes({
+      task_id: "t1",
+      files: [{ mime_type: "image/jpeg", file_size: 1024, width: 1920, height: 1080 }],
+    });
+    const next = mock();
+
+    validate(prepareAttachmentsSchema)(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+  });
+
+  test("rejects an incomplete image dimension pair", () => {
+    const { req, res } = makeReqRes({
+      task_id: "t1",
+      files: [{ mime_type: "image/jpeg", file_size: 1024, width: 1920 }],
+    });
+    const next = mock();
+
+    validate(prepareAttachmentsSchema)(req, res, next);
+
+    const error = next.mock.calls[0][0];
+    expect(error.fields["files.0.height"]).toBeDefined();
   });
 });
 
