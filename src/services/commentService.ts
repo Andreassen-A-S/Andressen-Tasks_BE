@@ -131,7 +131,12 @@ export async function createComment(
 
   const notifiedUserIds = new Set<string>();
 
-  if (replyTarget && replyTarget.user_id !== ctx.actorUserId) {
+  const replyTargetHasAccess = replyTarget && (
+    replyTarget.user_id === task.created_by ||
+    task.assignments.some((a) => a.user_id === replyTarget.user_id)
+  );
+
+  if (replyTargetHasAccess && replyTarget.user_id !== ctx.actorUserId) {
     const replyPushToken = await userRepo.getPushToken(replyTarget.user_id);
     if (replyPushToken) {
       notifiedUserIds.add(replyTarget.user_id);
