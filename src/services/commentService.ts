@@ -150,7 +150,7 @@ export async function createComment(
         replyPushToken,
         "Nyt svar på din kommentar",
         task.title,
-        { taskId: task.task_id, screen: "comments", commentId: comment.comment_id },
+        { taskId: task.task_id, screen: "comments" },
         replyTarget.user_id,
       );
     }

@@ -358,7 +358,7 @@ describe("commentController.createComment", () => {
       "ExponentPushToken[reply]",
       "Nyt svar på din kommentar",
       "Test Task",
-      { taskId: "t1", screen: "comments", commentId: "reply-1" },
+      { taskId: "t1", screen: "comments" },
       "u2",
     );
   });
@@ -610,7 +610,7 @@ describe("commentController.createComment — notification routing", () => {
       "ExponentPushToken[admin]",
       "Nyt svar på din kommentar",
       "Test Task",
-      { taskId: "t1", screen: "comments", commentId: "c1" },
+      { taskId: "t1", screen: "comments" },
       "a1",
     );
   });
