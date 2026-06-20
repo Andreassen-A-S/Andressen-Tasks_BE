@@ -78,6 +78,7 @@ export async function createComment(
       assignments: {
         include: { user: { select: { user_id: true, role: true, push_token: true } } },
       },
+      project: { select: { organization_id: true } },
     },
   });
 
@@ -132,7 +133,7 @@ export async function createComment(
   const notifiedUserIds = new Set<string>();
 
   // Fetch admins early so we can include them in the reply-target access check.
-  const admins = await userRepo.getAdminPushTokens(ctx.effectiveOrgId);
+  const admins = await userRepo.getAdminPushTokens(task.project.organization_id);
   const adminMap = new Map(admins.map(({ user_id, push_token }) => [user_id, push_token]));
 
   const replyTargetHasAccess = replyTarget && (

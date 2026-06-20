@@ -124,6 +124,7 @@ describe("commentController.createComment", () => {
       title: "Test Task",
       created_by: "u1",
       assignments: [],
+      project: { organization_id: "org1" },
     } as any);
     // commentService wraps createComment in $transaction; the repo throws inside
     transactionMock.mockRejectedValue(new InvalidUploadTokenError());
@@ -147,6 +148,7 @@ describe("commentController.createComment", () => {
       title: "Test Task",
       created_by: "u1",
       assignments: [],
+      project: { organization_id: "org1" },
     } as any);
 
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
@@ -190,6 +192,7 @@ describe("commentController.createComment", () => {
       title: "Test Task",
       created_by: "u1",
       assignments: [],
+      project: { organization_id: "org1" },
     } as any);
 
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
@@ -231,6 +234,7 @@ describe("commentController.createComment", () => {
       title: "Test Task",
       created_by: "u1",
       assignments: [],
+      project: { organization_id: "org1" },
     } as any);
     spyOn(commentRepo, "getCommentById").mockResolvedValue({
       comment_id: "parent-1",
@@ -280,6 +284,7 @@ describe("commentController.createComment", () => {
       title: "Test Task",
       created_by: "u1",
       assignments: [],
+      project: { organization_id: "org1" },
     } as any);
     spyOn(commentRepo, "getCommentById").mockResolvedValue({
       comment_id: "parent-1",
@@ -312,6 +317,7 @@ describe("commentController.createComment", () => {
         user_id: "u2",
         user: { user_id: "u2", role: UserRole.USER, push_token: "ExponentPushToken[reply]" },
       }],
+      project: { organization_id: "org1" },
     } as any);
     spyOn(commentRepo, "getCommentById").mockResolvedValue({
       comment_id: "parent-1",
@@ -363,6 +369,7 @@ describe("commentController.createComment", () => {
       title: "Test Task",
       created_by: "u1",
       assignments: [],
+      project: { organization_id: "org1" },
     } as any);
 
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
@@ -418,6 +425,7 @@ describe("commentController.createComment — notification routing", () => {
         { user_id: "u1", user: { user_id: "u1", role: UserRole.USER, push_token: "token-u1" } },
         { user_id: "u2", user: { user_id: "u2", role: UserRole.USER, push_token: "token-u2" } },
       ],
+      project: { organization_id: "org1" },
     } as any);
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
 
@@ -445,6 +453,7 @@ describe("commentController.createComment — notification routing", () => {
       assignments: [
         { user_id: "u1", user: { user_id: "u1", role: UserRole.USER, push_token: "token-u1" } },
       ],
+      project: { organization_id: "org1" },
     } as any);
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
 
@@ -465,6 +474,7 @@ describe("commentController.createComment — notification routing", () => {
       assignments: [
         { user_id: "a1", user: { user_id: "a1", role: UserRole.ADMIN, push_token: "token-a1" } },
       ],
+      project: { organization_id: "org1" },
     } as any);
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
       { user_id: "a1", push_token: "token-a1" },
@@ -492,6 +502,7 @@ describe("commentController.createComment — notification routing", () => {
       title: "Test Task",
       created_by: "u1",
       assignments: [],
+      project: { organization_id: "org1" },
     } as any);
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
       { user_id: "a1", push_token: "token-a1" },
@@ -519,6 +530,7 @@ describe("commentController.createComment — notification routing", () => {
       title: "Test Task",
       created_by: "u1",
       assignments: [],
+      project: { organization_id: "org1" },
     } as any);
     spyOn(commentRepo, "getCommentById").mockResolvedValue({
       comment_id: "parent-1",
@@ -546,6 +558,7 @@ describe("commentController.createComment — notification routing", () => {
       title: "Test Task",
       created_by: "u1",
       assignments: [{ user_id: "u2", user: { user_id: "u2", role: UserRole.USER, push_token: null } }],
+      project: { organization_id: "org1" },
     } as any);
     spyOn(commentRepo, "getCommentById").mockResolvedValue({
       comment_id: "parent-1",
@@ -573,6 +586,7 @@ describe("commentController.createComment — notification routing", () => {
       title: "Test Task",
       created_by: "u1",
       assignments: [],
+      project: { organization_id: "org1" },
     } as any);
     spyOn(commentRepo, "getCommentById").mockResolvedValue({
       comment_id: "parent-1",
@@ -608,6 +622,7 @@ describe("commentController.createComment — notification routing", () => {
       title: "Test Task",
       created_by: "a1",
       assignments: [],
+      project: { organization_id: "org1" },
     } as any);
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
       { user_id: "a1", push_token: "token-a1" },
@@ -626,6 +641,35 @@ describe("commentController.createComment — notification routing", () => {
       "Test Task",
       { taskId: "t1", screen: "comments" },
       "a2",
+    );
+  });
+
+  test("unscoped super-admin notifies only admins in the task's own organization", async () => {
+    stubCommentInfra();
+    findFirstMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
+      created_by: "u1",
+      assignments: [],
+      project: { organization_id: "org-a" },
+    } as any);
+    const getAdminsSpy = spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
+      { user_id: "admin-a", push_token: "token-admin-a" },
+    ]);
+
+    await callController(
+      commentController.createComment,
+      createRequest({ params: { taskId: "t1" }, user: { user_id: "u1", role: UserRole.SUPER_ADMIN, isSuperAdmin: true }, body: { message: "hello" } }),
+      createMockResponse(),
+    );
+    expect(getAdminsSpy).toHaveBeenCalledWith("org-a");
+    expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
+    expect(sendPushNotificationMock).toHaveBeenCalledWith(
+      "token-admin-a",
+      "Ny kommentar",
+      "Test Task",
+      { taskId: "t1", screen: "comments" },
+      "admin-a",
     );
   });
 });
@@ -665,7 +709,7 @@ describe("commentController.updateComment", () => {
     };
     spyOn(commentRepo, "getCommentById").mockResolvedValue(existingComment as never);
     // commentService checks task for archived status and access
-    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "u1", assignments: [] } as any);
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "u1", assignments: [], project: { organization_id: "org1" } } as any);
     transactionMock.mockImplementation(async (fn: any) => fn({}));
     const updatedComment = {
       comment_id: "c1",
@@ -702,7 +746,7 @@ describe("commentController.updateComment", () => {
       task_id: "t1",
       message: "old",
     } as never);
-    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "u1", assignments: [] } as any);
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "u1", assignments: [], project: { organization_id: "org1" } } as any);
 
     const req = createRequest({
       params: { commentId: "c1" } as Request["params"],
@@ -724,7 +768,7 @@ describe("commentController.updateComment", () => {
       task_id: "t1",
       message: "old",
     } as never);
-    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "owner", assignments: [] } as any);
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "owner", assignments: [], project: { organization_id: "org1" } } as any);
 
     const req = createRequest({
       params: { commentId: "c1" } as Request["params"],
@@ -746,7 +790,7 @@ describe("commentController.updateComment", () => {
       task_id: "t1",
       message: "old",
     } as never);
-    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "u1", assignments: [] } as any);
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "u1", assignments: [], project: { organization_id: "org1" } } as any);
     transactionMock.mockRejectedValue(new InvalidUploadTokenError());
 
     const req = createRequest({
@@ -769,7 +813,7 @@ describe("commentController.updateComment", () => {
       task_id: "t1",
       message: "old",
     } as never);
-    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "u1", assignments: [] } as any);
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "u1", assignments: [], project: { organization_id: "org1" } } as any);
     transactionMock.mockImplementation(async (fn: any) => fn({}));
     const updateSpy = spyOn(commentRepo, "updateComment").mockResolvedValue({
       comment: { comment_id: "c1", user_id: "u1", task_id: "t1", message: "new" },
@@ -801,7 +845,7 @@ describe("commentController.updateComment", () => {
       task_id: "t1",
       message: "existing",
     } as never);
-    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "u1", assignments: [] } as any);
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "u1", assignments: [], project: { organization_id: "org1" } } as any);
     spyOn(attachmentRepo, "getAttachmentsByCommentId").mockResolvedValue([
       { attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg" },
     ] as never);
@@ -841,7 +885,7 @@ describe("commentController.updateComment", () => {
       task_id: "t1",
       message: "old",
     } as never);
-    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "u1", assignments: [] } as any);
+    findFirstMock.mockResolvedValueOnce({ status: TaskStatus.PENDING, created_by: "u1", assignments: [], project: { organization_id: "org1" } } as any);
     spyOn(attachmentRepo, "getAttachmentsByCommentId").mockResolvedValue([
       { attachment_id: "a1", gcs_path: "tasks/t1/uuid.jpg" },
     ] as never);

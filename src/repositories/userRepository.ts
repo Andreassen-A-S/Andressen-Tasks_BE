@@ -174,9 +174,10 @@ export async function updatePushToken(
 export async function getPushToken(userId: string): Promise<string | null> {
   const user = await prisma.user.findUnique({
     where: { user_id: userId },
-    select: { push_token: true },
+    select: { push_token: true, status: true },
   });
-  return user?.push_token ?? null;
+  if (!user || user.status !== UserStatus.ACTIVE) return null;
+  return user.push_token ?? null;
 }
 
 export async function getPushTokensForUsers(
@@ -184,7 +185,7 @@ export async function getPushTokensForUsers(
 ): Promise<Map<string, string>> {
   if (userIds.length === 0) return new Map();
   const users = await prisma.user.findMany({
-    where: { user_id: { in: userIds }, push_token: { not: null } },
+    where: { user_id: { in: userIds }, push_token: { not: null }, status: UserStatus.ACTIVE },
     select: { user_id: true, push_token: true },
   });
   return new Map(users.map((u) => [u.user_id, u.push_token!]));
@@ -196,6 +197,7 @@ export async function getAdminPushTokens(orgId: string | null = null): Promise<
   const admins = await prisma.user.findMany({
     where: {
       role: UserRole.ADMIN,
+      status: UserStatus.ACTIVE,
       push_token: { not: null },
       ...(orgId ? { organization_id: orgId } : {}),
     },
