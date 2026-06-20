@@ -1,9 +1,10 @@
 import { prisma } from "../db/prisma";
-import { AttachmentStatus } from "../generated/prisma/client";
+import { AttachmentStatus, Prisma } from "../generated/prisma/client";
 import { confirmAttachments } from "./attachmentRepository";
 import { signUserProfilePicture } from "./userRepository";
 import { appDayBounds } from "../utils/dateUtils";
 import type { DbClient } from "../types/db";
+import { CommentNotFoundError } from "../errors/domainErrors";
 
 const COMMENT_INCLUDE = {
   author: { select: { user_id: true, name: true, email: true, profile_picture_url: true } },
@@ -38,7 +39,15 @@ export async function createComment(
 ) {
   const { upload_tokens, ...commentData } = data;
 
-  const comment = await (db as any).taskComment.create({ data: commentData });
+  let comment: { comment_id: string };
+  try {
+    comment = await (db as any).taskComment.create({ data: commentData });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2003") {
+      throw new CommentNotFoundError();
+    }
+    throw err;
+  }
 
   if (upload_tokens && upload_tokens.length > 0) {
     await confirmAttachments(db, upload_tokens, comment.comment_id, data.user_id, data.task_id);
