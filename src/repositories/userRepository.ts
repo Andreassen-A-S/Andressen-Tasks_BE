@@ -80,7 +80,7 @@ async function updateUserScoped(
   }
   const user = await prisma.user.update({
     where: { user_id: id },
-    data,
+    data: data.status === UserStatus.TERMINATED ? { ...data, push_token: null } : data,
     select: userSelect,
   });
   return signUserProfilePicture(user);

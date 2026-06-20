@@ -512,6 +512,95 @@ describe("commentController.createComment — notification routing", () => {
     );
   });
 
+  test("does not send reply notification to unassigned former participant", async () => {
+    stubCommentInfra();
+    findFirstMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
+      created_by: "u1",
+      assignments: [],
+    } as any);
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "parent-1",
+      task_id: "t1",
+      user_id: "u2",
+      message: "old comment",
+      attachments: [],
+      author: { name: "Former", email: "former@example.com" },
+    } as never);
+    spyOn(userRepo, "getPushToken").mockResolvedValue("ExponentPushToken[former]");
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
+
+    await callController(
+      commentController.createComment,
+      createRequest({ params: { taskId: "t1" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "Reply", reply_to_comment_id: "parent-1" } }),
+      createMockResponse(),
+    );
+    expect(sendPushNotificationMock).not.toHaveBeenCalled();
+  });
+
+  test("does not send reply notification when reply target has no push token (e.g. terminated)", async () => {
+    stubCommentInfra();
+    findFirstMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
+      created_by: "u1",
+      assignments: [{ user_id: "u2", user: { user_id: "u2", role: UserRole.USER, push_token: null } }],
+    } as any);
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "parent-1",
+      task_id: "t1",
+      user_id: "u2",
+      message: "old comment",
+      attachments: [],
+      author: { name: "Terminated", email: "terminated@example.com" },
+    } as never);
+    spyOn(userRepo, "getPushToken").mockResolvedValue(null);
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
+
+    await callController(
+      commentController.createComment,
+      createRequest({ params: { taskId: "t1" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "Reply", reply_to_comment_id: "parent-1" } }),
+      createMockResponse(),
+    );
+    expect(sendPushNotificationMock).not.toHaveBeenCalled();
+  });
+
+  test("sends targeted reply notification to admin who authored the original comment", async () => {
+    stubCommentInfra();
+    findFirstMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
+      created_by: "u1",
+      assignments: [],
+    } as any);
+    spyOn(commentRepo, "getCommentById").mockResolvedValue({
+      comment_id: "parent-1",
+      task_id: "t1",
+      user_id: "a1",
+      message: "Admin comment",
+      attachments: [],
+      author: { name: "Admin", email: "admin@example.com" },
+    } as never);
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
+      { user_id: "a1", push_token: "ExponentPushToken[admin]" },
+    ]);
+
+    await callController(
+      commentController.createComment,
+      createRequest({ params: { taskId: "t1" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "Reply", reply_to_comment_id: "parent-1" } }),
+      createMockResponse(),
+    );
+    expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
+    expect(sendPushNotificationMock).toHaveBeenCalledWith(
+      "ExponentPushToken[admin]",
+      "Nyt svar på din kommentar",
+      "Test Task",
+      { taskId: "t1", screen: "comments", commentId: "c1" },
+      "a1",
+    );
+  });
+
   test("skips commenter from admin notifications when commenter is an admin", async () => {
     stubCommentInfra();
     findFirstMock.mockResolvedValueOnce({

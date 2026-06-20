@@ -131,13 +131,18 @@ export async function createComment(
 
   const notifiedUserIds = new Set<string>();
 
+  // Fetch admins early so we can include them in the reply-target access check.
+  const admins = await userRepo.getAdminPushTokens(ctx.effectiveOrgId);
+  const adminMap = new Map(admins.map(({ user_id, push_token }) => [user_id, push_token]));
+
   const replyTargetHasAccess = replyTarget && (
     replyTarget.user_id === task.created_by ||
-    task.assignments.some((a) => a.user_id === replyTarget.user_id)
+    task.assignments.some((a) => a.user_id === replyTarget.user_id) ||
+    adminMap.has(replyTarget.user_id)
   );
 
   if (replyTargetHasAccess && replyTarget.user_id !== ctx.actorUserId) {
-    const replyPushToken = await userRepo.getPushToken(replyTarget.user_id);
+    const replyPushToken = adminMap.get(replyTarget.user_id) ?? await userRepo.getPushToken(replyTarget.user_id);
     if (replyPushToken) {
       notifiedUserIds.add(replyTarget.user_id);
       void sendPushNotification(
@@ -167,7 +172,6 @@ export async function createComment(
   }
 
   // Notify admins separately.
-  const admins = await userRepo.getAdminPushTokens(ctx.effectiveOrgId);
   for (const { user_id: adminId, push_token } of admins) {
     if (adminId === ctx.actorUserId) continue;
     if (notifiedUserIds.has(adminId)) continue;
