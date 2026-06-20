@@ -3,6 +3,10 @@ export interface TaskComment {
   task_id: string;
   user_id: string;
   message: string;
+  reply_to_comment_id?: string | null;
+  reply_preview?: string | null;
+  reply_author_id?: string | null;
+  reply_author_name?: string | null;
   created_at: Date;
   updated_at: Date;
   author?: {
@@ -16,6 +20,7 @@ export interface TaskComment {
 export interface CreateCommentRequest {
   message?: string;
   upload_tokens?: string[];
+  reply_to_comment_id?: string;
 }
 
 export interface UpdateCommentRequest {

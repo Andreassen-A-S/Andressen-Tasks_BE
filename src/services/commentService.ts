@@ -66,6 +66,7 @@ export async function createComment(
   taskId: string,
   message: string | undefined,
   uploadTokens: string[] | undefined,
+  replyToCommentId?: string,
 ) {
   // Fetch task with all assignments for notification routing.
   const task = await prisma.task.findFirst({
@@ -77,6 +78,7 @@ export async function createComment(
       assignments: {
         include: { user: { select: { user_id: true, role: true, push_token: true } } },
       },
+      project: { select: { organization_id: true } },
     },
   });
 
@@ -89,12 +91,30 @@ export async function createComment(
     throw new TaskArchivedError();
   }
 
+  const replyTarget = replyToCommentId
+    ? await commentRepo.getCommentById(replyToCommentId)
+    : null;
+  if (replyToCommentId && (!replyTarget || replyTarget.task_id !== taskId)) {
+    throw new CommentNotFoundError();
+  }
+
+  const replyPreview = replyTarget
+    ? (replyTarget.message.trim() || (replyTarget.attachments.length > 0 ? "Vedhæftning" : "Kommentar")).slice(0, 180)
+    : undefined;
+  const replyAuthorName = replyTarget
+    ? (replyTarget.author?.name?.trim() || replyTarget.author?.email || "Ukendt bruger")
+    : undefined;
+
   const comment = await prisma.$transaction(async (tx) => {
     const created = await commentRepo.createComment(tx, {
       message: message?.trim() ?? "",
       task_id: taskId,
       user_id: ctx.actorUserId,
       upload_tokens: uploadTokens,
+      reply_to_comment_id: replyTarget?.comment_id,
+      reply_preview: replyPreview,
+      reply_author_id: replyTarget?.user_id,
+      reply_author_name: replyAuthorName,
     });
 
     await taskEventRepo.createTaskEvent(tx, {
@@ -110,11 +130,39 @@ export async function createComment(
     return created;
   });
 
+  const notifiedUserIds = new Set<string>();
+
+  // Fetch admins early so we can include them in the reply-target access check.
+  const admins = await userRepo.getAdminPushTokens(task.project.organization_id);
+  const adminMap = new Map(admins.map(({ user_id, push_token }) => [user_id, push_token]));
+
+  const replyTargetHasAccess = replyTarget && (
+    replyTarget.user_id === task.created_by ||
+    task.assignments.some((a) => a.user_id === replyTarget.user_id) ||
+    adminMap.has(replyTarget.user_id)
+  );
+
+  if (replyTargetHasAccess && replyTarget.user_id !== ctx.actorUserId) {
+    const replyPushToken = adminMap.get(replyTarget.user_id) ?? await userRepo.getPushToken(replyTarget.user_id);
+    if (replyPushToken) {
+      notifiedUserIds.add(replyTarget.user_id);
+      void sendPushNotification(
+        replyPushToken,
+        "Nyt svar på din kommentar",
+        task.title,
+        { taskId: task.task_id, screen: "comments" },
+        replyTarget.user_id,
+      );
+    }
+  }
+
   // Notify assigned users (skip commenter, skip admins — they get a separate notification).
   for (const assignment of task.assignments) {
     if (assignment.user_id === ctx.actorUserId) continue;
+    if (notifiedUserIds.has(assignment.user_id)) continue;
     if (assignment.user.role === UserRole.ADMIN) continue;
     if (!assignment.user.push_token) continue;
+    notifiedUserIds.add(assignment.user_id);
     void sendPushNotification(
       assignment.user.push_token,
       "Ny kommentar på din opgave",
@@ -125,9 +173,10 @@ export async function createComment(
   }
 
   // Notify admins separately.
-  const admins = await userRepo.getAdminPushTokens(ctx.effectiveOrgId);
   for (const { user_id: adminId, push_token } of admins) {
     if (adminId === ctx.actorUserId) continue;
+    if (notifiedUserIds.has(adminId)) continue;
+    notifiedUserIds.add(adminId);
     void sendPushNotification(
       push_token,
       "Ny kommentar",

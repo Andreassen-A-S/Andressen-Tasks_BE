@@ -38,7 +38,13 @@ async function assertTaskAccess(
 export async function prepareAttachments(
   ctx: RequestContext,
   taskId: string,
-  files: { mimeType: string; fileName?: string | null; fileSize?: number | null }[],
+  files: {
+    mimeType: string;
+    fileName?: string | null;
+    fileSize?: number | null;
+    width?: number | null;
+    height?: number | null;
+  }[],
 ) {
   const task = await assertTaskAccess(ctx, taskId);
 
@@ -67,6 +73,8 @@ export async function prepareAttachments(
         url,
         fileName: f.fileName ?? null,
         fileSize: f.fileSize ?? null,
+        width: f.mimeType.startsWith("image/") ? (f.width ?? null) : null,
+        height: f.mimeType.startsWith("image/") ? (f.height ?? null) : null,
       });
       created.push({ attachmentId: attachment_id, uploadToken: upload_token, uploadUrl });
     }

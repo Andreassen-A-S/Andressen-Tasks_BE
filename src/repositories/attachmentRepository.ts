@@ -35,6 +35,8 @@ export type PrepareAttachmentInput = {
   url: string;
   fileName?: string | null;
   fileSize?: number | null;
+  width?: number | null;
+  height?: number | null;
 };
 
 export async function prepareAttachment(input: PrepareAttachmentInput) {
@@ -48,6 +50,8 @@ export async function prepareAttachment(input: PrepareAttachmentInput) {
       file_name: input.fileName ?? null,
       mime_type: input.mimeType,
       file_size: input.fileSize ?? null,
+      width: input.width ?? null,
+      height: input.height ?? null,
       status: AttachmentStatus.PENDING,
     },
     select: { attachment_id: true, upload_token: true },

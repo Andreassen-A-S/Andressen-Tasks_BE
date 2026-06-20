@@ -15,6 +15,18 @@ const fileSchema = z.object({
     .nonnegative("file_size must be non-negative")
     .nullable()
     .optional(),
+  width: z.number().int().positive().max(32767).nullable().optional(),
+  height: z.number().int().positive().max(32767).nullable().optional(),
+}).superRefine((file, ctx) => {
+  const hasWidth = file.width != null;
+  const hasHeight = file.height != null;
+  if (hasWidth !== hasHeight) {
+    ctx.addIssue({
+      code: "custom",
+      path: [hasWidth ? "height" : "width"],
+      message: "width and height must be provided together",
+    });
+  }
 });
 
 export const prepareAttachmentsSchema = z.object({

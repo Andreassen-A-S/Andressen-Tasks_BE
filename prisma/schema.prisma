@@ -49,7 +49,7 @@ enum TaskPriority {
 }
 
 enum TaskStatus {
-  DONE 
+  DONE
   PENDING
   IN_PROGRESS
   REJECTED
@@ -119,54 +119,54 @@ model Organization {
   created_at          DateTime           @default(now())
   updated_at          DateTime           @updatedAt
 
-  users        User[]
-  projects     Project[]
-  positions    Position[]
+  users     User[]
+  projects  Project[]
+  positions Position[]
 
   @@map("organizations")
 }
 
 model Position {
-  position_id     String       @id @default(uuid())
+  position_id     String   @id @default(uuid())
   name            String
   organization_id String
-  created_at      DateTime     @default(now())
-  updated_at      DateTime     @updatedAt
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
 
-  organization    Organization @relation(fields: [organization_id], references: [org_id], onDelete: Cascade)
-  users           User[]
+  organization Organization @relation(fields: [organization_id], references: [org_id], onDelete: Cascade)
+  users        User[]
 
   @@unique([organization_id, name])
   @@map("positions")
 }
 
 model User {
-  user_id             String        @id @default(uuid())
+  user_id             String     @id @default(uuid())
   name                String?
-  email               String        @unique
+  email               String     @unique
   password            String
-  role                UserRole      @default(USER)
-  status              UserStatus    @default(ACTIVE)
+  role                UserRole   @default(USER)
+  status              UserStatus @default(ACTIVE)
   position_id         String?
-  push_token          String?       @unique
-  profile_picture_url String?       @db.Text
+  push_token          String?    @unique
+  profile_picture_url String?    @db.Text
   organization_id     String
-  created_at          DateTime      @default(now())
-  updated_at          DateTime      @updatedAt
+  created_at          DateTime   @default(now())
+  updated_at          DateTime   @updatedAt
 
   // Relations
-  organization    Organization  @relation(fields: [organization_id], references: [org_id], onDelete: Cascade)
-  position        Position?     @relation(fields: [position_id], references: [position_id], onDelete: SetNull)
-  taskComments    TaskComment[]
-  createdProjects Project[]     @relation("ProjectCreator")
-  createdTasks    Task[]        @relation("TaskCreator")
-  completedTasks  Task[]        @relation("TaskCompleter")
-  taskEvents      TaskEvent[]   @relation("TaskEventActor")
-  taskAssignments TaskAssignment[]
-  createdRecurringTemplates RecurringTaskTemplate[] @relation("RecurringTaskCreator")
+  organization               Organization                    @relation(fields: [organization_id], references: [org_id], onDelete: Cascade)
+  position                   Position?                       @relation(fields: [position_id], references: [position_id], onDelete: SetNull)
+  taskComments               TaskComment[]
+  createdProjects            Project[]                       @relation("ProjectCreator")
+  createdTasks               Task[]                          @relation("TaskCreator")
+  completedTasks             Task[]                          @relation("TaskCompleter")
+  taskEvents                 TaskEvent[]                     @relation("TaskEventActor")
+  taskAssignments            TaskAssignment[]
+  createdRecurringTemplates  RecurringTaskTemplate[]         @relation("RecurringTaskCreator")
   recurringTemplateAssignees RecurringTaskTemplateAssignee[]
-  uploadedAttachments TaskAttachment[]
-  session_accounts        SessionAccount[]
+  uploadedAttachments        TaskAttachment[]
+  session_accounts           SessionAccount[]
 
   @@index([organization_id])
   @@map("users")
@@ -233,52 +233,60 @@ model RefreshToken {
 }
 
 model TaskComment {
-  comment_id String   @id @default(uuid())
-  task_id    String
-  user_id    String
-  message    String   @db.Text
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  comment_id          String   @id @default(uuid())
+  task_id             String
+  user_id             String
+  message             String   @db.Text
+  reply_to_comment_id String?
+  reply_preview       String?  @db.Text
+  reply_author_id     String?
+  reply_author_name   String?
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
 
   // Relations
-  task       Task     @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
-  author     User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  task   Task @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
+  author User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  replyTo TaskComment?  @relation("CommentReplies", fields: [reply_to_comment_id], references: [comment_id], onDelete: SetNull)
+  replies TaskComment[] @relation("CommentReplies")
 
   events      TaskEvent[]
   attachments TaskAttachment[]
 
   @@index([task_id])
   @@index([user_id])
+  @@index([reply_to_comment_id])
   @@index([created_at])
   @@map("task_comments")
 }
 
 model RecurringTaskTemplate {
-  id                String              @id @default(uuid())
-  title             String
-  description       String?             @db.Text
-  priority          TaskPriority        @default(MEDIUM)
-  created_by        String
-  project_id        String
+  id          String       @id @default(uuid())
+  title       String
+  description String?      @db.Text
+  priority    TaskPriority @default(MEDIUM)
+  created_by  String
+  project_id  String
 
   // Recurrence settings
-  frequency         RecurrenceFrequency // DAILY, WEEKLY, MONTHLY, YEARLY
-  interval          Int                 @default(1)
-  days_of_week      Json?               // Optional: For weekly - [1,3,5] = Mon, Wed, Fri
-  day_of_month      Int?                // Optional: For monthly - 15 = 15th of month
-  
-  start_date        DateTime  @db.Date
-  end_date          DateTime? @db.Date
-  is_active         Boolean             @default(true)
-  
-  created_at        DateTime            @default(now())
-  updated_at        DateTime            @updatedAt
+  frequency    RecurrenceFrequency // DAILY, WEEKLY, MONTHLY, YEARLY
+  interval     Int                 @default(1)
+  days_of_week Json? // Optional: For weekly - [1,3,5] = Mon, Wed, Fri
+  day_of_month Int? // Optional: For monthly - 15 = 15th of month
+
+  start_date DateTime  @db.Date
+  end_date   DateTime? @db.Date
+  is_active  Boolean   @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   // Relations
-  creator           User                @relation("RecurringTaskCreator", fields: [created_by], references: [user_id], onDelete: Restrict)
-  project           Project             @relation(fields: [project_id], references: [project_id], onDelete: Cascade)
+  creator           User                            @relation("RecurringTaskCreator", fields: [created_by], references: [user_id], onDelete: Restrict)
+  project           Project                         @relation(fields: [project_id], references: [project_id], onDelete: Cascade)
   default_assignees RecurringTaskTemplateAssignee[]
-  tasks             Task[]              @relation("RecurringTemplateTasks")
+  tasks             Task[]                          @relation("RecurringTemplateTasks")
   goal              RecurringTemplateGoal?
 
   @@index([created_by])
@@ -302,11 +310,11 @@ model RecurringTemplateGoal {
 }
 
 model RecurringTaskTemplateAssignee {
-  id         String                @id @default(uuid())
-  template   RecurringTaskTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
-  template_id String        
-  user       User                  @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
-  user_id    String
+  id          String                @id @default(uuid())
+  template    RecurringTaskTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+  template_id String
+  user        User                  @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  user_id     String
 
   @@unique([template_id, user_id])
   @@index([template_id])
@@ -344,42 +352,42 @@ model ProjectTaskCounter {
 }
 
 model Task {
-  task_id              String       @id @default(uuid())
-  number               Int
-  project_id           String
-  created_by           String
-  title                String
-  description          String       @db.Text
-  priority             TaskPriority @default(MEDIUM)
-  status               TaskStatus   @default(PENDING)
-  deadline             DateTime @db.Date
-  created_at           DateTime     @default(now())
-  updated_at           DateTime     @updatedAt
+  task_id     String       @id @default(uuid())
+  number      Int
+  project_id  String
+  created_by  String
+  title       String
+  description String       @db.Text
+  priority    TaskPriority @default(MEDIUM)
+  status      TaskStatus   @default(PENDING)
+  deadline    DateTime     @db.Date
+  created_at  DateTime     @default(now())
+  updated_at  DateTime     @updatedAt
 
-  parent_task_id       String?
-  parent               Task?        @relation("Subtasks", fields: [parent_task_id], references: [task_id], onDelete: Cascade)
-  subtasks             Task[]       @relation("Subtasks")
+  parent_task_id String?
+  parent         Task?   @relation("Subtasks", fields: [parent_task_id], references: [task_id], onDelete: Cascade)
+  subtasks       Task[]  @relation("Subtasks")
 
-  completed_by         String?
-  completed_at         DateTime?
+  completed_by String?
+  completed_at DateTime?
 
-  start_date           DateTime @db.Date
+  start_date DateTime @db.Date
 
   recurring_template_id String?
   occurrence_date       DateTime?
 
-  current_goal_id      String?      @unique
-  current_goal         TaskGoal?    @relation("ActiveGoal", fields: [current_goal_id], references: [goal_id], onDelete: SetNull)
-  goals                TaskGoal[]   @relation("AllGoals")
+  current_goal_id String?    @unique
+  current_goal    TaskGoal?  @relation("ActiveGoal", fields: [current_goal_id], references: [goal_id], onDelete: SetNull)
+  goals           TaskGoal[] @relation("AllGoals")
 
-  comments             TaskComment[]
-  attachments          TaskAttachment[]
-  project              Project      @relation(fields: [project_id], references: [project_id], onDelete: Cascade)
-  creator              User         @relation("TaskCreator", fields: [created_by], references: [user_id], onDelete: Restrict)
-  completer            User?        @relation("TaskCompleter", fields: [completed_by], references: [user_id], onDelete: SetNull)
-  assignments          TaskAssignment[]
-  events               TaskEvent[]
-  recurring_template   RecurringTaskTemplate? @relation("RecurringTemplateTasks", fields: [recurring_template_id], references: [id], onDelete: Cascade)  // Add onDelete
+  comments           TaskComment[]
+  attachments        TaskAttachment[]
+  project            Project                @relation(fields: [project_id], references: [project_id], onDelete: Cascade)
+  creator            User                   @relation("TaskCreator", fields: [created_by], references: [user_id], onDelete: Restrict)
+  completer          User?                  @relation("TaskCompleter", fields: [completed_by], references: [user_id], onDelete: SetNull)
+  assignments        TaskAssignment[]
+  events             TaskEvent[]
+  recurring_template RecurringTaskTemplate? @relation("RecurringTemplateTasks", fields: [recurring_template_id], references: [id], onDelete: Cascade) // Add onDelete
 
   @@unique([project_id, number])
   @@unique([recurring_template_id, occurrence_date])
@@ -402,26 +410,26 @@ model TaskGoal {
   unit             TaskUnit
   created_at       DateTime @default(now())
 
-  task             Task     @relation("AllGoals", fields: [task_id], references: [task_id], onDelete: Cascade)
-  active_task      Task?    @relation("ActiveGoal")
-  progressLogs     TaskProgressLog[]
+  task         Task              @relation("AllGoals", fields: [task_id], references: [task_id], onDelete: Cascade)
+  active_task  Task?             @relation("ActiveGoal")
+  progressLogs TaskProgressLog[]
 
   @@index([task_id])
   @@map("task_goals")
 }
 
 model TaskAssignment {
-  assignment_id String           @id @default(uuid())
+  assignment_id String    @id @default(uuid())
   task_id       String
   user_id       String
-  assigned_at   DateTime         @default(now())
+  assigned_at   DateTime  @default(now())
   completed_at  DateTime?
 
-  task          Task             @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
-  user          User             @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  task Task @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
 
-  progressLogs  TaskProgressLog[]
-  taskEvents    TaskEvent[]
+  progressLogs TaskProgressLog[]
+  taskEvents   TaskEvent[]
 
   @@unique([task_id, user_id])
   @@index([user_id])
@@ -430,18 +438,18 @@ model TaskAssignment {
 }
 
 model TaskProgressLog {
-  progress_id   String         @id @default(uuid())
+  progress_id   String    @id @default(uuid())
   goal_id       String
   assignment_id String
   quantity_done Float
   unit          TaskUnit?
-  note          String?        @db.Text
-  created_at    DateTime       @default(now())
+  note          String?   @db.Text
+  created_at    DateTime  @default(now())
 
-  goal          TaskGoal       @relation(fields: [goal_id], references: [goal_id], onDelete: Cascade)
-  assignment    TaskAssignment @relation(fields: [assignment_id], references: [assignment_id], onDelete: Cascade)
+  goal       TaskGoal       @relation(fields: [goal_id], references: [goal_id], onDelete: Cascade)
+  assignment TaskAssignment @relation(fields: [assignment_id], references: [assignment_id], onDelete: Cascade)
 
-  events        TaskEvent[]
+  events TaskEvent[]
 
   @@index([goal_id])
   @@index([assignment_id])
@@ -449,30 +457,29 @@ model TaskProgressLog {
   @@map("task_progress_logs")
 }
 
-
 model TaskEvent {
-  event_id      String        @id @default(uuid())
-  task_id       String
-  actor_id      String?
-  type          TaskEventType
-  message       String?       @db.Text
+  event_id String        @id @default(uuid())
+  task_id  String
+  actor_id String?
+  type     TaskEventType
+  message  String?       @db.Text
 
   // Links to what happened
   comment_id    String?
   progress_id   String?
   assignment_id String?
 
-  before_json   Json?
-  after_json    Json?
+  before_json Json?
+  after_json  Json?
 
-  created_at    DateTime      @default(now())
+  created_at DateTime @default(now())
 
-  task          Task           @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
-  actor         User?          @relation("TaskEventActor", fields: [actor_id], references: [user_id], onDelete: SetNull)
+  task  Task  @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
+  actor User? @relation("TaskEventActor", fields: [actor_id], references: [user_id], onDelete: SetNull)
 
-  comment       TaskComment?     @relation(fields: [comment_id], references: [comment_id], onDelete: SetNull)
-  progress      TaskProgressLog? @relation(fields: [progress_id], references: [progress_id], onDelete: SetNull)
-  assignment    TaskAssignment?  @relation(fields: [assignment_id], references: [assignment_id], onDelete: SetNull)
+  comment    TaskComment?     @relation(fields: [comment_id], references: [comment_id], onDelete: SetNull)
+  progress   TaskProgressLog? @relation(fields: [progress_id], references: [progress_id], onDelete: SetNull)
+  assignment TaskAssignment?  @relation(fields: [assignment_id], references: [assignment_id], onDelete: SetNull)
 
   @@index([task_id, created_at])
   @@index([type, created_at])
@@ -495,11 +502,13 @@ model TaskAttachment {
   file_name     String?
   mime_type     String?
   file_size     Int?
+  width         Int?
+  height        Int?
   created_at    DateTime         @default(now())
 
-  comment   TaskComment? @relation(fields: [comment_id], references: [comment_id], onDelete: Cascade)
-  task      Task         @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
-  uploader  User         @relation(fields: [uploaded_by], references: [user_id], onDelete: Restrict)
+  comment  TaskComment? @relation(fields: [comment_id], references: [comment_id], onDelete: Cascade)
+  task     Task         @relation(fields: [task_id], references: [task_id], onDelete: Cascade)
+  uploader User         @relation(fields: [uploaded_by], references: [user_id], onDelete: Restrict)
 
   @@index([task_id])
   @@index([comment_id])

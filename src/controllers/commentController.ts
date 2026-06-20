@@ -26,7 +26,7 @@ export async function createComment(req: Request, res: Response) {
   const ctx = getRequestContext(req);
   if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
-  const { message, upload_tokens } = req.body as CreateCommentRequest;
+  const { message, upload_tokens, reply_to_comment_id } = req.body as CreateCommentRequest;
   const hasTokens = Array.isArray(upload_tokens) && upload_tokens.length > 0;
 
   const comment = await commentService.createComment(
@@ -34,6 +34,7 @@ export async function createComment(req: Request, res: Response) {
     taskId,
     message?.trim(),
     hasTokens ? upload_tokens : undefined,
+    reply_to_comment_id,
   );
 
   if (comment === null) return res.status(404).json({ success: false, error: "Task not found" });

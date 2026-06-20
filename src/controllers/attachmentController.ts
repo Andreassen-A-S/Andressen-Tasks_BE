@@ -9,7 +9,13 @@ export async function prepareAttachments(req: Request, res: Response) {
 
   const { task_id, files } = req.body as {
     task_id: string;
-    files: { file_name?: string | null; mime_type: string; file_size?: number | null }[];
+    files: {
+      file_name?: string | null;
+      mime_type: string;
+      file_size?: number | null;
+      width?: number | null;
+      height?: number | null;
+    }[];
   };
 
   const result = await attachmentService.prepareAttachments(
@@ -19,6 +25,8 @@ export async function prepareAttachments(req: Request, res: Response) {
       mimeType: f.mime_type as string,
       fileName: f.file_name ?? null,
       fileSize: f.file_size ?? null,
+      width: f.width ?? null,
+      height: f.height ?? null,
     })),
   );
 

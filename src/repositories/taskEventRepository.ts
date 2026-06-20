@@ -26,6 +26,8 @@ export async function getTaskEventsByTaskId(taskId: string) {
               file_name: true,
               mime_type: true,
               file_size: true,
+              width: true,
+              height: true,
               gcs_path: true,
               url: true,
               created_at: true,
