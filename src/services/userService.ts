@@ -1,4 +1,5 @@
 import { UserRole } from "../generated/prisma/client";
+import { MESTERPLAN_ORG_ID } from "../constants";
 import * as userRepo from "../repositories/userRepository";
 import * as positionRepo from "../repositories/positionRepository";
 import { generateUserProfilePictureUploadUrl, ALLOWED_MIME_TYPES } from "./storageService";
@@ -63,7 +64,9 @@ export async function createUser(ctx: RequestContext, body: CreateUserInput) {
   const role = resolveCreateUserRole(ctx.actorRole, body.role);
   let organization_id: string;
 
-  if (ctx.actorRole === UserRole.SUPER_ADMIN) {
+  if (role === UserRole.SUPER_ADMIN) {
+    organization_id = MESTERPLAN_ORG_ID;
+  } else if (ctx.actorRole === UserRole.SUPER_ADMIN) {
     if (ctx.effectiveOrgId) {
       organization_id = ctx.effectiveOrgId;
     } else {
@@ -115,15 +118,23 @@ export async function updateUser(ctx: RequestContext, targetId: string, body: Up
 
   const scopeOrgId = resolveMutationOrgScope(ctx);
 
+  // Scoped lookup: out-of-scope users and SUPER_ADMINs in other orgs are both
+  // indistinguishable (404). Concurrent promotions that move the target to MESTERPLAN
+  // are caught naturally — the org-scoped update that follows will hit 0 rows.
+  const targetUser = await userRepo.getUserById(targetId, scopeOrgId);
+  if (!targetUser) throw new UserNotFoundError(targetId);
+  if (targetUser.role === UserRole.SUPER_ADMIN && ctx.actorRole !== UserRole.SUPER_ADMIN) {
+    throw new ForbiddenUserOperationError();
+  }
+
+  // Resolve the target org before validating the position so a promotion to
+  // SUPER_ADMIN is validated against MESTERPLAN, not the user's old org.
+  if (body.role === UserRole.SUPER_ADMIN) {
+    body = { ...body, organization_id: MESTERPLAN_ORG_ID };
+  }
+
   if (body.position_id) {
-    // For platform-scoped super-admin (scopeOrgId === null), resolve the target user's
-    // actual org so we don't allow cross-org position assignment.
-    let positionOrgId: string | null = scopeOrgId;
-    if (!positionOrgId) {
-      const targetUser = await userRepo.getUserById(targetId, null);
-      if (!targetUser) throw new UserNotFoundError(targetId);
-      positionOrgId = targetUser.organization_id;
-    }
+    const positionOrgId = body.organization_id ?? scopeOrgId ?? targetUser.organization_id;
     const pos = await positionRepo.getPositionById(body.position_id, positionOrgId);
     if (!pos) throw new PositionNotFoundError(body.position_id);
   }
@@ -138,7 +149,16 @@ export async function deleteUser(ctx: RequestContext, targetId: string) {
     throw new ForbiddenUserOperationError();
   }
 
+  // Scoped lookup — same reasoning as updateUser.
   const scopeOrgId = resolveMutationOrgScope(ctx);
+
+  // Scoped lookup — same reasoning as updateUser.
+  const targetUser = await userRepo.getUserById(targetId, scopeOrgId);
+  if (!targetUser) throw new UserNotFoundError(targetId);
+  if (targetUser.role === UserRole.SUPER_ADMIN && ctx.actorRole !== UserRole.SUPER_ADMIN) {
+    throw new ForbiddenUserOperationError();
+  }
+
   return scopeOrgId
     ? userRepo.deleteUserInOrg(targetId, scopeOrgId)
     : userRepo.deleteUserPlatform(targetId);

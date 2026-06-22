@@ -6,6 +6,7 @@ import * as positionRepo from "../src/repositories/positionRepository";
 import { UserRole, UserStatus } from "../src/generated/prisma/client";
 import { UserNotFoundError } from "../src/errors/domainErrors";
 import { errorMiddleware } from "../src/middleware/errorMiddleware";
+import { MESTERPLAN_ORG_ID } from "../src/constants";
 
 async function callController(
   fn: (req: Request, res: Response) => Promise<void>,
@@ -214,7 +215,7 @@ describe("userController.createUser", () => {
       password: "x",
       position_id: undefined,
       role: UserRole.SUPER_ADMIN,
-      organization_id: "org1",
+      organization_id: MESTERPLAN_ORG_ID,
     });
     expect(res.statusCode).toBe(201);
   });
@@ -238,6 +239,7 @@ describe("userController.createUser", () => {
 describe("userController.updateUser", () => {
   test("allows user to update themselves", async () => {
     const user = { user_id: "u1", name: "Updated" };
+    spyOn(userRepo, "getUserById").mockResolvedValue({ role: UserRole.USER } as never);
     const updateSpy = spyOn(userRepo, "updateUserInOrg").mockResolvedValue(user as never);
     const req = createRequest({
       user: { user_id: "u1", role: UserRole.USER, organization_id: "org1" },
@@ -254,6 +256,7 @@ describe("userController.updateUser", () => {
 
   test("allows admin to update user in own organization", async () => {
     const user = { user_id: "u2", name: "Updated" };
+    spyOn(userRepo, "getUserById").mockResolvedValue({ role: UserRole.USER } as never);
     const updateSpy = spyOn(userRepo, "updateUserInOrg").mockResolvedValue(user as never);
     const req = createRequest({
       user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
@@ -270,6 +273,7 @@ describe("userController.updateUser", () => {
   });
 
   test("admin from org A cannot update user from org B", async () => {
+    spyOn(userRepo, "getUserById").mockResolvedValue({ role: UserRole.USER } as never);
     const updateSpy = spyOn(userRepo, "updateUserInOrg").mockRejectedValue(new UserNotFoundError("user-org-b"));
     const req = createRequest({
       user: { user_id: "admin-a", role: UserRole.ADMIN, organization_id: "org-a" },
@@ -288,6 +292,7 @@ describe("userController.updateUser", () => {
 
   test("superadmin with org context is scoped to that organization on update", async () => {
     const user = { user_id: "u2", name: "Updated" };
+    spyOn(userRepo, "getUserById").mockResolvedValue({ role: UserRole.USER } as never);
     const updateSpy = spyOn(userRepo, "updateUserInOrg").mockResolvedValue(user as never);
     const req = createRequest({
       user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
@@ -305,6 +310,7 @@ describe("userController.updateUser", () => {
 
   test("superadmin without org context can update globally", async () => {
     const user = { user_id: "u2", name: "Updated" };
+    spyOn(userRepo, "getUserById").mockResolvedValue({ role: UserRole.USER } as never);
     const updateSpy = spyOn(userRepo, "updateUserPlatform").mockResolvedValue(user as never);
     const req = createRequest({
       user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
@@ -354,6 +360,7 @@ describe("userController.updateUser", () => {
 
   test("allows admin to set user status", async () => {
     const user = { user_id: "u1", status: UserStatus.TERMINATED };
+    spyOn(userRepo, "getUserById").mockResolvedValue({ role: UserRole.USER } as never);
     const updateSpy = spyOn(userRepo, "updateUserInOrg").mockResolvedValue(user as never);
     const req = createRequest({
       user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
@@ -371,6 +378,7 @@ describe("userController.updateUser", () => {
 
   test("allows superadmin to set user status", async () => {
     const user = { user_id: "u1", status: UserStatus.TERMINATED };
+    spyOn(userRepo, "getUserById").mockResolvedValue({ role: UserRole.USER } as never);
     const updateSpy = spyOn(userRepo, "updateUserPlatform").mockResolvedValue(user as never);
     const req = createRequest({
       user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
@@ -386,8 +394,25 @@ describe("userController.updateUser", () => {
     expect(res.body).toEqual({ success: true, data: user });
   });
 
+  test("admin cannot update a superadmin", async () => {
+    spyOn(userRepo, "getUserById").mockResolvedValue({ role: UserRole.SUPER_ADMIN } as never);
+    const updateSpy = spyOn(userRepo, "updateUserInOrg");
+    const req = createRequest({
+      user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: MESTERPLAN_ORG_ID },
+      effectiveOrgId: MESTERPLAN_ORG_ID,
+      params: { id: "super1" } as Request["params"],
+      body: { name: "Hacked" },
+    });
+    const res = createMockResponse();
+
+    await callController(userController.updateUser, req, res);
+
+    expect(updateSpy).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
+  });
+
   test("superadmin without org context cannot assign user to position from another org", async () => {
-    spyOn(userRepo, "getUserById").mockResolvedValue({ user_id: "u1", organization_id: "org-a" } as never);
+    spyOn(userRepo, "getUserById").mockResolvedValue({ user_id: "u1", role: UserRole.USER, organization_id: "org-a" } as never);
     spyOn(positionRepo, "getPositionById").mockResolvedValue(null);
     const req = createRequest({
       user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
@@ -406,6 +431,7 @@ describe("userController.updateUser", () => {
 
 describe("userController.deleteUser", () => {
   test("deletes user when admin", async () => {
+    spyOn(userRepo, "getUserById").mockResolvedValue({ role: UserRole.USER } as never);
     const deleteSpy = spyOn(userRepo, "deleteUserInOrg").mockResolvedValue(undefined as never);
     const req = createRequest({
       user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
@@ -436,6 +462,7 @@ describe("userController.deleteUser", () => {
   });
 
   test("returns 404 when delete fails", async () => {
+    spyOn(userRepo, "getUserById").mockResolvedValue({ role: UserRole.USER } as never);
     spyOn(userRepo, "deleteUserInOrg").mockRejectedValue(new UserNotFoundError("u1"));
     const req = createRequest({
       user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: "org1" },
@@ -450,6 +477,7 @@ describe("userController.deleteUser", () => {
   });
 
   test("admin from org A cannot delete user from org B", async () => {
+    spyOn(userRepo, "getUserById").mockResolvedValue({ role: UserRole.USER } as never);
     const deleteSpy = spyOn(userRepo, "deleteUserInOrg").mockRejectedValue(new UserNotFoundError("user-org-b"));
     const req = createRequest({
       user: { user_id: "admin-a", role: UserRole.ADMIN, organization_id: "org-a" },
@@ -466,6 +494,7 @@ describe("userController.deleteUser", () => {
   });
 
   test("superadmin without org context can delete globally", async () => {
+    spyOn(userRepo, "getUserById").mockResolvedValue({ role: UserRole.USER } as never);
     const deleteSpy = spyOn(userRepo, "deleteUserPlatform").mockResolvedValue(undefined as never);
     const req = createRequest({
       user: { user_id: "super1", role: UserRole.SUPER_ADMIN, organization_id: null },
@@ -478,5 +507,21 @@ describe("userController.deleteUser", () => {
 
     expect(deleteSpy).toHaveBeenCalledWith("u1");
     expect(res.statusCode).toBe(204);
+  });
+
+  test("admin cannot delete a superadmin", async () => {
+    spyOn(userRepo, "getUserById").mockResolvedValue({ role: UserRole.SUPER_ADMIN } as never);
+    const deleteSpy = spyOn(userRepo, "deleteUserInOrg");
+    const req = createRequest({
+      user: { user_id: "admin1", role: UserRole.ADMIN, organization_id: MESTERPLAN_ORG_ID },
+      effectiveOrgId: MESTERPLAN_ORG_ID,
+      params: { id: "super1" } as Request["params"],
+    });
+    const res = createMockResponse();
+
+    await callController(userController.deleteUser, req, res);
+
+    expect(deleteSpy).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
   });
 });

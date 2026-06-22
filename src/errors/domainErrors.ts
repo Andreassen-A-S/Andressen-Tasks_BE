@@ -298,6 +298,13 @@ export class UserTerminatedError extends AppError {
   }
 }
 
+export class EmailAlreadyInUseError extends AppError {
+  constructor() {
+    super(409, "Email is already in use");
+    this.name = "EmailAlreadyInUseError";
+  }
+}
+
 // Thrown when a caller passes an out-of-range or otherwise invalid parameter value.
 // When produced by the Zod validate middleware, carries field-level errors in `fields`.
 export class ValidationError extends AppError {

@@ -9,7 +9,7 @@ import {
   type SafeUser,
   type UpdateUserInput,
 } from "../types/user";
-import { UserNotFoundError, ValidationError } from "../errors/domainErrors";
+import { EmailAlreadyInUseError, UserNotFoundError, ValidationError } from "../errors/domainErrors";
 
 export function isUserProfilePicturePath(value: string): boolean {
   return /^users\/[^/]+\/profile\.(jpe?g|png|webp|heic)$/i.test(value);
@@ -50,14 +50,21 @@ export async function getUserById(id: string, orgId: string | null): Promise<Saf
 export async function createUser(data: CreateUserInput) {
   const hashedPassword = await hashPassword(data.password);
 
-  const user = await prisma.user.create({
-    data: {
-      ...data,
-      password: hashedPassword,
-    },
-    select: userSelect,
-  });
-  return signUserProfilePicture(user);
+  try {
+    const user = await prisma.user.create({
+      data: {
+        ...data,
+        password: hashedPassword,
+      },
+      select: userSelect,
+    });
+    return signUserProfilePicture(user);
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      throw new EmailAlreadyInUseError();
+    }
+    throw err;
+  }
 }
 
 async function updateUserScoped(
@@ -78,12 +85,19 @@ async function updateUserScoped(
   if (data.password) {
     data.password = await hashPassword(data.password);
   }
-  const user = await prisma.user.update({
-    where: { user_id: id },
-    data: data.status === UserStatus.TERMINATED ? { ...data, push_token: null } : data,
-    select: userSelect,
-  });
-  return signUserProfilePicture(user);
+  try {
+    const user = await prisma.user.update({
+      where: { user_id: id },
+      data: data.status === UserStatus.TERMINATED ? { ...data, push_token: null } : data,
+      select: userSelect,
+    });
+    return signUserProfilePicture(user);
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      throw new EmailAlreadyInUseError();
+    }
+    throw err;
+  }
 }
 
 // Org-scoped user update. Validates that the user belongs to the specified org

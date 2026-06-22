@@ -33,6 +33,7 @@ export interface UpdateUserInput {
   status?: UserStatus;
   position_id?: string | null;
   profile_picture_url?: string | null;
+  organization_id?: string;
 }
 
 export interface CreateUserInput {
