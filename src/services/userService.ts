@@ -118,8 +118,10 @@ export async function updateUser(ctx: RequestContext, targetId: string, body: Up
 
   const scopeOrgId = resolveMutationOrgScope(ctx);
 
-  // Only SUPER_ADMIN can modify another SUPER_ADMIN.
-  const targetUser = await userRepo.getUserById(targetId, null);
+  // Scoped lookup: out-of-scope users and SUPER_ADMINs in other orgs are both
+  // indistinguishable (404). Concurrent promotions that move the target to MESTERPLAN
+  // are caught naturally — the org-scoped update that follows will hit 0 rows.
+  const targetUser = await userRepo.getUserById(targetId, scopeOrgId);
   if (!targetUser) throw new UserNotFoundError(targetId);
   if (targetUser.role === UserRole.SUPER_ADMIN && ctx.actorRole !== UserRole.SUPER_ADMIN) {
     throw new ForbiddenUserOperationError();
@@ -132,14 +134,7 @@ export async function updateUser(ctx: RequestContext, targetId: string, body: Up
   }
 
   if (body.position_id) {
-    // For platform-scoped super-admin (scopeOrgId === null), resolve the target user's
-    // actual org so we don't allow cross-org position assignment.
-    let positionOrgId: string | null = body.organization_id ?? scopeOrgId;
-    if (!positionOrgId) {
-      const targetUser = await userRepo.getUserById(targetId, null);
-      if (!targetUser) throw new UserNotFoundError(targetId);
-      positionOrgId = targetUser.organization_id;
-    }
+    const positionOrgId = body.organization_id ?? scopeOrgId ?? targetUser.organization_id;
     const pos = await positionRepo.getPositionById(body.position_id, positionOrgId);
     if (!pos) throw new PositionNotFoundError(body.position_id);
   }
@@ -154,14 +149,16 @@ export async function deleteUser(ctx: RequestContext, targetId: string) {
     throw new ForbiddenUserOperationError();
   }
 
-  // Only SUPER_ADMIN can delete another SUPER_ADMIN.
-  const targetUser = await userRepo.getUserById(targetId, null);
+  // Scoped lookup — same reasoning as updateUser.
+  const scopeOrgId = resolveMutationOrgScope(ctx);
+
+  // Scoped lookup — same reasoning as updateUser.
+  const targetUser = await userRepo.getUserById(targetId, scopeOrgId);
   if (!targetUser) throw new UserNotFoundError(targetId);
   if (targetUser.role === UserRole.SUPER_ADMIN && ctx.actorRole !== UserRole.SUPER_ADMIN) {
     throw new ForbiddenUserOperationError();
   }
 
-  const scopeOrgId = resolveMutationOrgScope(ctx);
   return scopeOrgId
     ? userRepo.deleteUserInOrg(targetId, scopeOrgId)
     : userRepo.deleteUserPlatform(targetId);
