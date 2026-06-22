@@ -1,4 +1,5 @@
 import { UserRole } from "../generated/prisma/client";
+import { MESTERPLAN_ORG_ID } from "../constants";
 import * as userRepo from "../repositories/userRepository";
 import * as positionRepo from "../repositories/positionRepository";
 import { generateUserProfilePictureUploadUrl, ALLOWED_MIME_TYPES } from "./storageService";
@@ -63,7 +64,9 @@ export async function createUser(ctx: RequestContext, body: CreateUserInput) {
   const role = resolveCreateUserRole(ctx.actorRole, body.role);
   let organization_id: string;
 
-  if (ctx.actorRole === UserRole.SUPER_ADMIN) {
+  if (role === UserRole.SUPER_ADMIN) {
+    organization_id = MESTERPLAN_ORG_ID;
+  } else if (ctx.actorRole === UserRole.SUPER_ADMIN) {
     if (ctx.effectiveOrgId) {
       organization_id = ctx.effectiveOrgId;
     } else {
@@ -115,10 +118,23 @@ export async function updateUser(ctx: RequestContext, targetId: string, body: Up
 
   const scopeOrgId = resolveMutationOrgScope(ctx);
 
+  // Only SUPER_ADMIN can modify another SUPER_ADMIN.
+  const targetUser = await userRepo.getUserById(targetId, null);
+  if (!targetUser) throw new UserNotFoundError(targetId);
+  if (targetUser.role === UserRole.SUPER_ADMIN && ctx.actorRole !== UserRole.SUPER_ADMIN) {
+    throw new ForbiddenUserOperationError();
+  }
+
+  // Resolve the target org before validating the position so a promotion to
+  // SUPER_ADMIN is validated against MESTERPLAN, not the user's old org.
+  if (body.role === UserRole.SUPER_ADMIN) {
+    body = { ...body, organization_id: MESTERPLAN_ORG_ID };
+  }
+
   if (body.position_id) {
     // For platform-scoped super-admin (scopeOrgId === null), resolve the target user's
     // actual org so we don't allow cross-org position assignment.
-    let positionOrgId: string | null = scopeOrgId;
+    let positionOrgId: string | null = body.organization_id ?? scopeOrgId;
     if (!positionOrgId) {
       const targetUser = await userRepo.getUserById(targetId, null);
       if (!targetUser) throw new UserNotFoundError(targetId);
@@ -135,6 +151,13 @@ export async function updateUser(ctx: RequestContext, targetId: string, body: Up
 
 export async function deleteUser(ctx: RequestContext, targetId: string) {
   if (ctx.actorRole !== UserRole.ADMIN && ctx.actorRole !== UserRole.SUPER_ADMIN) {
+    throw new ForbiddenUserOperationError();
+  }
+
+  // Only SUPER_ADMIN can delete another SUPER_ADMIN.
+  const targetUser = await userRepo.getUserById(targetId, null);
+  if (!targetUser) throw new UserNotFoundError(targetId);
+  if (targetUser.role === UserRole.SUPER_ADMIN && ctx.actorRole !== UserRole.SUPER_ADMIN) {
     throw new ForbiddenUserOperationError();
   }
 
