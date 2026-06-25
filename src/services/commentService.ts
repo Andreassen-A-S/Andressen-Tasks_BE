@@ -144,7 +144,7 @@ export async function createComment(
   );
 
   if (replyTargetHasAccess && replyTarget.user_id !== ctx.actorUserId) {
-    const replyPushToken = adminMap.get(replyTarget.user_id) ?? await userRepo.getPushToken(replyTarget.user_id);
+    const replyPushToken = adminMap.get(replyTarget.user_id) ?? await userRepo.getPushTokenInOrg(replyTarget.user_id, task.project.organization_id);
     if (replyPushToken) {
       notifiedUserIds.add(replyTarget.user_id);
       void sendPushNotification(
@@ -153,6 +153,26 @@ export async function createComment(
         task.title,
         { taskId: task.task_id, screen: "comments" },
         replyTarget.user_id,
+      );
+    }
+  }
+
+  // Notify explicitly mentioned users first so they receive the mention-specific message
+  // rather than the generic assignee/admin notification sent below.
+  if (mentionUserIds && mentionUserIds.length > 0) {
+    const uniqueMentionIds = [...new Set(mentionUserIds)];
+    for (const mentionedId of uniqueMentionIds) {
+      if (mentionedId === ctx.actorUserId) continue;
+      if (notifiedUserIds.has(mentionedId)) continue;
+      const pushToken = adminMap.get(mentionedId) ?? await userRepo.getPushTokenInOrg(mentionedId, task.project.organization_id);
+      if (!pushToken) continue;
+      notifiedUserIds.add(mentionedId);
+      void sendPushNotification(
+        pushToken,
+        "Du blev nævnt i en kommentar",
+        task.title,
+        { taskId: task.task_id, screen: "comments" },
+        mentionedId,
       );
     }
   }
@@ -185,24 +205,6 @@ export async function createComment(
       { taskId: task.task_id, screen: "comments" },
       adminId,
     );
-  }
-
-  // Notify explicitly mentioned users who haven't been notified yet.
-  if (mentionUserIds && mentionUserIds.length > 0) {
-    for (const mentionedId of mentionUserIds) {
-      if (mentionedId === ctx.actorUserId) continue;
-      if (notifiedUserIds.has(mentionedId)) continue;
-      const pushToken = adminMap.get(mentionedId) ?? await userRepo.getPushToken(mentionedId);
-      if (!pushToken) continue;
-      notifiedUserIds.add(mentionedId);
-      void sendPushNotification(
-        pushToken,
-        "Du blev nævnt i en kommentar",
-        task.title,
-        { taskId: task.task_id, screen: "comments" },
-        mentionedId,
-      );
-    }
   }
 
   return comment;
@@ -281,10 +283,14 @@ export async function updateComment(
   if (mentionUserIds && mentionUserIds.length > 0) {
     const admins = await userRepo.getAdminPushTokens(commentTask.project.organization_id);
     const adminMap = new Map(admins.map(({ user_id, push_token }) => [user_id, push_token]));
-    for (const mentionedId of mentionUserIds) {
+    const notifiedUserIds = new Set<string>();
+    const uniqueMentionIds = [...new Set(mentionUserIds)];
+    for (const mentionedId of uniqueMentionIds) {
       if (mentionedId === ctx.actorUserId) continue;
-      const pushToken = adminMap.get(mentionedId) ?? await userRepo.getPushToken(mentionedId);
+      if (notifiedUserIds.has(mentionedId)) continue;
+      const pushToken = adminMap.get(mentionedId) ?? await userRepo.getPushTokenInOrg(mentionedId, commentTask.project.organization_id);
       if (!pushToken) continue;
+      notifiedUserIds.add(mentionedId);
       void sendPushNotification(
         pushToken,
         "Du blev nævnt i en kommentar",

@@ -35,4 +35,7 @@ export const updateCommentSchema = z
     if (data.upload_tokens && new Set(data.upload_tokens).size !== data.upload_tokens.length) {
       ctx.addIssue({ code: "custom", path: ["upload_tokens"], message: "Duplicate upload tokens" });
     }
+    if (data.mention_user_ids && new Set(data.mention_user_ids).size !== data.mention_user_ids.length) {
+      ctx.addIssue({ code: "custom", path: ["mention_user_ids"], message: "Duplicate mention user IDs" });
+    }
   });
