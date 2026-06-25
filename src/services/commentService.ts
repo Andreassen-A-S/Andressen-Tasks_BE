@@ -67,6 +67,7 @@ export async function createComment(
   message: string | undefined,
   uploadTokens: string[] | undefined,
   replyToCommentId?: string,
+  mentionUserIds?: string[],
 ) {
   // Fetch task with all assignments for notification routing.
   const task = await prisma.task.findFirst({
@@ -186,6 +187,24 @@ export async function createComment(
     );
   }
 
+  // Notify explicitly mentioned users who haven't been notified yet.
+  if (mentionUserIds && mentionUserIds.length > 0) {
+    for (const mentionedId of mentionUserIds) {
+      if (mentionedId === ctx.actorUserId) continue;
+      if (notifiedUserIds.has(mentionedId)) continue;
+      const pushToken = adminMap.get(mentionedId) ?? await userRepo.getPushToken(mentionedId);
+      if (!pushToken) continue;
+      notifiedUserIds.add(mentionedId);
+      void sendPushNotification(
+        pushToken,
+        "Du blev nævnt i en kommentar",
+        task.title,
+        { taskId: task.task_id, screen: "comments" },
+        mentionedId,
+      );
+    }
+  }
+
   return comment;
 }
 
@@ -195,6 +214,7 @@ export async function updateComment(
   message: string | undefined,
   uploadTokens?: string[],
   removeAttachmentIds?: string[],
+  mentionUserIds?: string[],
 ) {
   const comment = await commentRepo.getCommentById(commentId);
   if (!comment) throw new CommentNotFoundError();
@@ -206,9 +226,11 @@ export async function updateComment(
       ...(ctx.effectiveOrgId ? { project: { organization_id: ctx.effectiveOrgId } } : {}),
     },
     select: {
+      title: true,
       status: true,
       created_by: true,
       assignments: { where: { user_id: ctx.actorUserId } },
+      project: { select: { organization_id: true } },
     },
   });
   if (!commentTask || !canAccessTask(commentTask, ctx)) throw new CommentNotFoundError();
@@ -253,6 +275,24 @@ export async function updateComment(
         ),
       ),
     );
+  }
+
+  // Notify explicitly mentioned users.
+  if (mentionUserIds && mentionUserIds.length > 0) {
+    const admins = await userRepo.getAdminPushTokens(commentTask.project.organization_id);
+    const adminMap = new Map(admins.map(({ user_id, push_token }) => [user_id, push_token]));
+    for (const mentionedId of mentionUserIds) {
+      if (mentionedId === ctx.actorUserId) continue;
+      const pushToken = adminMap.get(mentionedId) ?? await userRepo.getPushToken(mentionedId);
+      if (!pushToken) continue;
+      void sendPushNotification(
+        pushToken,
+        "Du blev nævnt i en kommentar",
+        commentTask.title,
+        { taskId: comment.task_id, screen: "comments" },
+        mentionedId,
+      );
+    }
   }
 
   return updatedComment;

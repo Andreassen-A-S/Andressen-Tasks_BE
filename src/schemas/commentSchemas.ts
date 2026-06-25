@@ -5,6 +5,7 @@ export const createCommentSchema = z
     message: z.string().trim().max(2000, "Message too long (max 2000 characters)").optional(),
     upload_tokens: z.array(z.string()).optional(),
     reply_to_comment_id: z.string().uuid("Invalid reply comment ID").optional(),
+    mention_user_ids: z.array(z.string().uuid("Invalid mention user ID")).max(50).optional(),
   })
   .superRefine((data, ctx) => {
     const hasMessage = !!(data.message?.length);
@@ -22,6 +23,7 @@ export const updateCommentSchema = z
     message: z.string().trim().max(2000, "Message too long (max 2000 characters)").optional(),
     upload_tokens: z.array(z.string()).optional(),
     remove_attachment_ids: z.array(z.string()).optional(),
+    mention_user_ids: z.array(z.string().uuid("Invalid mention user ID")).max(50).optional(),
   })
   .superRefine((data, ctx) => {
     const hasMessage = !!(data.message?.length);
