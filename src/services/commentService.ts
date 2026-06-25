@@ -67,6 +67,7 @@ export async function createComment(
   message: string | undefined,
   uploadTokens: string[] | undefined,
   replyToCommentId?: string,
+  mentionUserIds?: string[],
 ) {
   // Fetch task with all assignments for notification routing.
   const task = await prisma.task.findFirst({
@@ -143,7 +144,7 @@ export async function createComment(
   );
 
   if (replyTargetHasAccess && replyTarget.user_id !== ctx.actorUserId) {
-    const replyPushToken = adminMap.get(replyTarget.user_id) ?? await userRepo.getPushToken(replyTarget.user_id);
+    const replyPushToken = adminMap.get(replyTarget.user_id) ?? await userRepo.getPushTokenInOrg(replyTarget.user_id, task.project.organization_id);
     if (replyPushToken) {
       notifiedUserIds.add(replyTarget.user_id);
       void sendPushNotification(
@@ -152,6 +153,26 @@ export async function createComment(
         task.title,
         { taskId: task.task_id, screen: "comments" },
         replyTarget.user_id,
+      );
+    }
+  }
+
+  // Notify explicitly mentioned users first so they receive the mention-specific message
+  // rather than the generic assignee/admin notification sent below.
+  if (mentionUserIds && mentionUserIds.length > 0) {
+    const uniqueMentionIds = [...new Set(mentionUserIds)];
+    for (const mentionedId of uniqueMentionIds) {
+      if (mentionedId === ctx.actorUserId) continue;
+      if (notifiedUserIds.has(mentionedId)) continue;
+      const pushToken = adminMap.get(mentionedId) ?? await userRepo.getPushTokenInOrg(mentionedId, task.project.organization_id);
+      if (!pushToken) continue;
+      notifiedUserIds.add(mentionedId);
+      void sendPushNotification(
+        pushToken,
+        "Du blev nævnt i en kommentar",
+        task.title,
+        { taskId: task.task_id, screen: "comments" },
+        mentionedId,
       );
     }
   }
@@ -195,6 +216,7 @@ export async function updateComment(
   message: string | undefined,
   uploadTokens?: string[],
   removeAttachmentIds?: string[],
+  mentionUserIds?: string[],
 ) {
   const comment = await commentRepo.getCommentById(commentId);
   if (!comment) throw new CommentNotFoundError();
@@ -206,9 +228,11 @@ export async function updateComment(
       ...(ctx.effectiveOrgId ? { project: { organization_id: ctx.effectiveOrgId } } : {}),
     },
     select: {
+      title: true,
       status: true,
       created_by: true,
       assignments: { where: { user_id: ctx.actorUserId } },
+      project: { select: { organization_id: true } },
     },
   });
   if (!commentTask || !canAccessTask(commentTask, ctx)) throw new CommentNotFoundError();
@@ -253,6 +277,28 @@ export async function updateComment(
         ),
       ),
     );
+  }
+
+  // Notify explicitly mentioned users.
+  if (mentionUserIds && mentionUserIds.length > 0) {
+    const admins = await userRepo.getAdminPushTokens(commentTask.project.organization_id);
+    const adminMap = new Map(admins.map(({ user_id, push_token }) => [user_id, push_token]));
+    const notifiedUserIds = new Set<string>();
+    const uniqueMentionIds = [...new Set(mentionUserIds)];
+    for (const mentionedId of uniqueMentionIds) {
+      if (mentionedId === ctx.actorUserId) continue;
+      if (notifiedUserIds.has(mentionedId)) continue;
+      const pushToken = adminMap.get(mentionedId) ?? await userRepo.getPushTokenInOrg(mentionedId, commentTask.project.organization_id);
+      if (!pushToken) continue;
+      notifiedUserIds.add(mentionedId);
+      void sendPushNotification(
+        pushToken,
+        "Du blev nævnt i en kommentar",
+        commentTask.title,
+        { taskId: comment.task_id, screen: "comments" },
+        mentionedId,
+      );
+    }
   }
 
   return updatedComment;

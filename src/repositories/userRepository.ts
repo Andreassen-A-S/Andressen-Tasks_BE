@@ -185,6 +185,14 @@ export async function updatePushToken(
   }
 }
 
+export async function getPushTokenInOrg(userId: string, organizationId: string): Promise<string | null> {
+  const user = await prisma.user.findFirst({
+    where: { user_id: userId, organization_id: organizationId, status: UserStatus.ACTIVE },
+    select: { push_token: true },
+  });
+  return user?.push_token ?? null;
+}
+
 export async function getPushToken(userId: string): Promise<string | null> {
   const user = await prisma.user.findUnique({
     where: { user_id: userId },

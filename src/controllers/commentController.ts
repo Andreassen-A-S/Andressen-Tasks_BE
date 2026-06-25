@@ -26,8 +26,9 @@ export async function createComment(req: Request, res: Response) {
   const ctx = getRequestContext(req);
   if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
-  const { message, upload_tokens, reply_to_comment_id } = req.body as CreateCommentRequest;
+  const { message, upload_tokens, reply_to_comment_id, mention_user_ids } = req.body as CreateCommentRequest;
   const hasTokens = Array.isArray(upload_tokens) && upload_tokens.length > 0;
+  const mentionIds = Array.isArray(mention_user_ids) && mention_user_ids.length > 0 ? mention_user_ids : undefined;
 
   const comment = await commentService.createComment(
     ctx,
@@ -35,6 +36,7 @@ export async function createComment(req: Request, res: Response) {
     message?.trim(),
     hasTokens ? upload_tokens : undefined,
     reply_to_comment_id,
+    mentionIds,
   );
 
   if (comment === null) return res.status(404).json({ success: false, error: "Task not found" });
@@ -71,12 +73,13 @@ export async function updateComment(req: Request, res: Response) {
   const ctx = getRequestContext(req);
   if (!ctx) return res.status(401).json({ success: false, error: "Unauthorized" });
 
-  const { message, upload_tokens, remove_attachment_ids } = req.body;
+  const { message, upload_tokens, remove_attachment_ids, mention_user_ids } = req.body;
 
   const trimmedMessage = message !== undefined ? (message as string).trim() : undefined;
   const hasMessage = trimmedMessage !== undefined && trimmedMessage.length > 0;
   const hasTokens = Array.isArray(upload_tokens) && upload_tokens.length > 0;
   const hasRemovals = Array.isArray(remove_attachment_ids) && remove_attachment_ids.length > 0;
+  const mentionIds = Array.isArray(mention_user_ids) && mention_user_ids.length > 0 ? mention_user_ids : undefined;
 
   const updatedComment = await commentService.updateComment(
     ctx,
@@ -84,6 +87,7 @@ export async function updateComment(req: Request, res: Response) {
     hasMessage ? trimmedMessage : undefined,
     hasTokens ? upload_tokens : undefined,
     hasRemovals ? remove_attachment_ids : undefined,
+    mentionIds,
   );
 
   res.json({ success: true, data: updatedComment });
