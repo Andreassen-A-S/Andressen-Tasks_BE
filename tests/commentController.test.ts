@@ -244,7 +244,7 @@ describe("commentController.createComment", () => {
       attachments: [],
       author: { name: "Alice", email: "alice@example.com" },
     } as never);
-    spyOn(userRepo, "getPushToken").mockResolvedValue(null);
+    spyOn(userRepo, "getPushTokenInOrg").mockResolvedValue(null);
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
     transactionMock.mockImplementation(async (fn: any) => fn({}));
     const createSpy = spyOn(commentRepo, "createComment").mockResolvedValue({
@@ -327,7 +327,7 @@ describe("commentController.createComment", () => {
       attachments: [{ attachment_id: "a1" }],
       author: { name: null, email: "alice@example.com" },
     } as never);
-    spyOn(userRepo, "getPushToken").mockResolvedValue("ExponentPushToken[reply]");
+    spyOn(userRepo, "getPushTokenInOrg").mockResolvedValue("ExponentPushToken[reply]");
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
     transactionMock.mockImplementation(async (fn: any) => fn({}));
     const createSpy = spyOn(commentRepo, "createComment").mockResolvedValue({
@@ -540,7 +540,7 @@ describe("commentController.createComment — notification routing", () => {
       attachments: [],
       author: { name: "Former", email: "former@example.com" },
     } as never);
-    spyOn(userRepo, "getPushToken").mockResolvedValue("ExponentPushToken[former]");
+    spyOn(userRepo, "getPushTokenInOrg").mockResolvedValue("ExponentPushToken[former]");
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
 
     await callController(
@@ -568,7 +568,7 @@ describe("commentController.createComment — notification routing", () => {
       attachments: [],
       author: { name: "Terminated", email: "terminated@example.com" },
     } as never);
-    spyOn(userRepo, "getPushToken").mockResolvedValue(null);
+    spyOn(userRepo, "getPushTokenInOrg").mockResolvedValue(null);
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
 
     await callController(
