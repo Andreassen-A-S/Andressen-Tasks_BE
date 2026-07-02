@@ -367,12 +367,13 @@ export async function upsertProgressLog(
 
       const actorUser = await userRepo.getUserById(ctx.actorUserId, ctx.effectiveOrgId);
       const actorName = actorUser?.name?.trim() || actorUser?.email || "Ukendt bruger";
+      const unitLabel = !unit || unit === "NONE" ? "%" : unit;
       for (const { user_id: adminId, push_token } of admins) {
         const { title, subtitle, body } = notificationMessages.PROGRESS_LOGGED(
           result.updatedTask.title,
           actorName,
           quantityDone,
-          unit ?? "",
+          unitLabel,
         );
         void sendPushNotification(
           push_token,
