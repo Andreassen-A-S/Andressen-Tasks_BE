@@ -509,6 +509,7 @@ describe("taskController.updateTask", () => {
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
       { user_id: "a1", push_token: "token-a1" },
     ]);
+    spyOn(userRepo, "getUserById").mockResolvedValue({ name: "Actor One", email: "actor@example.com" } as never);
     sendPushNotificationMock.mockResolvedValue(undefined);
 
     await callController(
@@ -524,10 +525,11 @@ describe("taskController.updateTask", () => {
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
     expect(sendPushNotificationMock).toHaveBeenCalledWith(
       "token-a1",
-      "Opgave afsluttet",
-      "My Task",
+      "Actor One",
+      "Markerede opgaven som færdig",
       { taskId: "t1" },
       "a1",
+      "My Task",
     );
   });
 
@@ -588,10 +590,11 @@ describe("taskController.updateTask", () => {
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
     expect(sendPushNotificationMock).toHaveBeenCalledWith(
       "token-u2",
-      "Prioritet ændret",
-      "My Task – prioritet ændret til høj",
+      "Høj prioritet",
+      "Opgaven er markeret som høj prioritet",
       { taskId: "t1" },
       "u2",
+      "My Task",
     );
   });
 
@@ -702,6 +705,7 @@ describe("taskController.updateTask", () => {
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
       { user_id: "a1", push_token: "token-a1" },
     ]);
+    spyOn(userRepo, "getUserById").mockResolvedValue({ name: "Actor One", email: "actor@example.com" } as never);
     sendPushNotificationMock.mockResolvedValue(undefined);
 
     await callController(
@@ -717,10 +721,11 @@ describe("taskController.updateTask", () => {
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
     expect(sendPushNotificationMock).toHaveBeenCalledWith(
       "token-a1",
-      "Opgave afsluttet",
-      "My Task",
+      "Actor One",
+      "Markerede opgaven som færdig",
       { taskId: "t1" },
       "a1",
+      "My Task",
     );
   });
 });
@@ -919,6 +924,7 @@ describe("taskController.upsertProgressLog", () => {
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
       { user_id: "a1", push_token: "token-a1" },
     ]);
+    spyOn(userRepo, "getUserById").mockResolvedValue({ name: "Actor One", email: "actor@example.com" } as never);
     sendPushNotificationMock.mockResolvedValue(undefined);
 
     await callController(
@@ -934,10 +940,11 @@ describe("taskController.upsertProgressLog", () => {
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
     expect(sendPushNotificationMock).toHaveBeenCalledWith(
       "token-a1",
-      "Fremgang logget",
-      "My Task",
+      "Actor One",
+      "5 METERS",
       { taskId: "t1" },
       "a1",
+      "Registrerede fremgang på My Task",
     );
   });
 

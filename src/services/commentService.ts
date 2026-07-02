@@ -6,7 +6,9 @@ import * as taskRepo from "../repositories/taskRepository";
 import * as taskEventRepo from "../repositories/taskEventRepository";
 import * as userRepo from "../repositories/userRepository";
 import { sendPushNotification } from "./notificationService";
+import { notificationMessages } from "../constants/notificationMessages";
 import { generateSignedReadUrl, deleteFile } from "./storageService";
+import { tokenToDisplayText } from "../utils/mentionUtils";
 import type { RequestContext } from "../types/requestContext";
 import {
   CommentNotFoundError,
@@ -34,6 +36,30 @@ function canAccessTask(
 // they can delete but not alter another user's words.
 function canModifyComment(comment: { user_id: string }, ctx: RequestContext): boolean {
   return comment.user_id === ctx.actorUserId;
+}
+
+// Falls back to a count-aware attachment label (e.g. "3 billeder") when there's no text, so
+// previews (reply quotes, push notification bodies) never show up blank for image/file-only
+// comments. Mention tokens are converted to plain "@Name" text before truncating, so slicing to
+// 180 chars can't cut a token in half and the display length reflects what the user actually sees.
+function buildCommentPreview(message: string, attachments: { type: string }[]): string {
+  let raw = message.trim();
+  if (!raw) {
+    if (attachments.length === 0) {
+      raw = "Kommentar";
+    } else {
+      const count = attachments.length;
+      const allImages = attachments.every((a) => a.type === "IMAGE");
+      const allFiles = attachments.every((a) => a.type === "FILE");
+      const noun = allImages
+        ? (count > 1 ? "billeder" : "billede")
+        : allFiles
+          ? (count > 1 ? "filer" : "fil")
+          : (count > 1 ? "vedhæftninger" : "vedhæftning");
+      raw = `${count} ${noun}`;
+    }
+  }
+  return tokenToDisplayText(raw).slice(0, 180);
 }
 
 export async function getCommentsByTaskId(ctx: RequestContext, taskId: string) {
@@ -100,7 +126,7 @@ export async function createComment(
   }
 
   const replyPreview = replyTarget
-    ? (replyTarget.message.trim() || (replyTarget.attachments.length > 0 ? "Vedhæftning" : "Kommentar")).slice(0, 180)
+    ? buildCommentPreview(replyTarget.message, replyTarget.attachments)
     : undefined;
   const replyAuthorName = replyTarget
     ? (replyTarget.author?.name?.trim() || replyTarget.author?.email || "Ukendt bruger")
@@ -132,6 +158,8 @@ export async function createComment(
   });
 
   const notifiedUserIds = new Set<string>();
+  const commentPreview = buildCommentPreview(comment.message, comment.attachments);
+  const actorName = comment.author?.name?.trim() || comment.author?.email || "Ukendt bruger";
 
   // Fetch admins early so we can include them in the reply-target access check.
   const admins = await userRepo.getAdminPushTokens(task.project.organization_id);
@@ -147,12 +175,14 @@ export async function createComment(
     const replyPushToken = adminMap.get(replyTarget.user_id) ?? await userRepo.getPushTokenInOrg(replyTarget.user_id, task.project.organization_id);
     if (replyPushToken) {
       notifiedUserIds.add(replyTarget.user_id);
+      const { title, subtitle, body } = notificationMessages.COMMENT_REPLY(task.title, commentPreview, actorName);
       void sendPushNotification(
         replyPushToken,
-        "Nyt svar på din kommentar",
-        task.title,
+        title,
+        body,
         { taskId: task.task_id, screen: "comments" },
         replyTarget.user_id,
+        subtitle,
       );
     }
   }
@@ -167,12 +197,14 @@ export async function createComment(
       const pushToken = adminMap.get(mentionedId) ?? await userRepo.getPushTokenInOrg(mentionedId, task.project.organization_id);
       if (!pushToken) continue;
       notifiedUserIds.add(mentionedId);
+      const { title, subtitle, body } = notificationMessages.COMMENT_MENTION(task.title, commentPreview, actorName);
       void sendPushNotification(
         pushToken,
-        "Du blev nævnt i en kommentar",
-        task.title,
+        title,
+        body,
         { taskId: task.task_id, screen: "comments" },
         mentionedId,
+        subtitle,
       );
     }
   }
@@ -184,12 +216,14 @@ export async function createComment(
     if (assignment.user.role === UserRole.ADMIN) continue;
     if (!assignment.user.push_token) continue;
     notifiedUserIds.add(assignment.user_id);
+    const { title, subtitle, body } = notificationMessages.COMMENT_ON_ASSIGNED_TASK(task.title, commentPreview, actorName);
     void sendPushNotification(
       assignment.user.push_token,
-      "Ny kommentar på din opgave",
-      task.title,
+      title,
+      body,
       { taskId: task.task_id, screen: "comments" },
       assignment.user_id,
+      subtitle,
     );
   }
 
@@ -198,12 +232,14 @@ export async function createComment(
     if (adminId === ctx.actorUserId) continue;
     if (notifiedUserIds.has(adminId)) continue;
     notifiedUserIds.add(adminId);
+    const { title, subtitle, body } = notificationMessages.COMMENT_NEW(task.title, commentPreview, actorName);
     void sendPushNotification(
       push_token,
-      "Ny kommentar",
-      task.title,
+      title,
+      body,
       { taskId: task.task_id, screen: "comments" },
       adminId,
+      subtitle,
     );
   }
 
@@ -284,6 +320,8 @@ export async function updateComment(
     const admins = await userRepo.getAdminPushTokens(commentTask.project.organization_id);
     const adminMap = new Map(admins.map(({ user_id, push_token }) => [user_id, push_token]));
     const notifiedUserIds = new Set<string>();
+    const commentPreview = buildCommentPreview(updatedComment.message, updatedComment.attachments);
+    const actorName = updatedComment.author?.name?.trim() || updatedComment.author?.email || "Ukendt bruger";
     const uniqueMentionIds = [...new Set(mentionUserIds)];
     for (const mentionedId of uniqueMentionIds) {
       if (mentionedId === ctx.actorUserId) continue;
@@ -291,12 +329,14 @@ export async function updateComment(
       const pushToken = adminMap.get(mentionedId) ?? await userRepo.getPushTokenInOrg(mentionedId, commentTask.project.organization_id);
       if (!pushToken) continue;
       notifiedUserIds.add(mentionedId);
+      const { title, subtitle, body } = notificationMessages.COMMENT_MENTION(commentTask.title, commentPreview, actorName);
       void sendPushNotification(
         pushToken,
-        "Du blev nævnt i en kommentar",
-        commentTask.title,
+        title,
+        body,
         { taskId: comment.task_id, screen: "comments" },
         mentionedId,
+        subtitle,
       );
     }
   }

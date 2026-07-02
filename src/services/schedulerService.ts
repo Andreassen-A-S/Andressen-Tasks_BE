@@ -3,6 +3,7 @@ import * as taskRepo from "../repositories/taskRepository";
 import * as attachmentRepo from "../repositories/attachmentRepository";
 import * as taskService from "./taskService";
 import { sendPushNotification } from "./notificationService";
+import { notificationMessages } from "../constants/notificationMessages";
 import { deleteFile } from "./storageService";
 import { APP_TIMEZONE } from "../utils/dateUtils";
 
@@ -23,11 +24,11 @@ export function initScheduler(): void {
       try {
         const groups = await taskRepo.getTodayTasksPerUser(new Date());
         for (const { user_id, push_token, tasks } of groups) {
-          const count = tasks.length;
+          const { title, body } = notificationMessages.MORNING_TASKS(tasks.length);
           void sendPushNotification(
             push_token,
-            `${count} opgave${count > 1 ? "r" : ""} i dag`,
-            "Tryk for at se dagens program",
+            title,
+            body,
             { screen: "tasks" },
             user_id,
           );
@@ -91,10 +92,11 @@ export function initScheduler(): void {
       try {
         const users = await taskRepo.getUsersWithNoActivityToday(new Date());
         for (const { user_id, push_token } of users) {
+          const { title, body } = notificationMessages.NO_ACTIVITY();
           void sendPushNotification(
             push_token,
-            "Ingen aktivitet i dag",
-            "Husk at logge din fremgang",
+            title,
+            body,
             { screen: "tasks" },
             user_id,
           );

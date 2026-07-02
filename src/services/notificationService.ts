@@ -18,6 +18,7 @@ export async function sendPushNotification(
   body: string,
   data?: Record<string, unknown>,
   userId?: string,
+  subtitle?: string,
 ): Promise<void> {
   if (!Expo.isExpoPushToken(pushToken)) {
     console.error(
@@ -30,6 +31,7 @@ export async function sendPushNotification(
     to: pushToken,
     sound: "default",
     title,
+    subtitle,
     body,
     data,
   };

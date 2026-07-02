@@ -5,6 +5,7 @@ import * as taskRepo from "../repositories/taskRepository";
 import * as taskEventRepo from "../repositories/taskEventRepository";
 import * as userRepo from "../repositories/userRepository";
 import { sendPushNotification } from "./notificationService";
+import { notificationMessages } from "../constants/notificationMessages";
 import type { RequestContext } from "../types/requestContext";
 import {
   AssignmentNotFoundError,
@@ -68,12 +69,14 @@ export async function assignTaskToUser(
   const pushToken = await userRepo.getPushToken(userId);
   if (pushToken) {
     const taskTitle = (assignment as any).task?.title ?? "En opgave";
+    const { title, subtitle, body } = notificationMessages.TASK_ASSIGNED(taskTitle);
     void sendPushNotification(
       pushToken,
-      "Ny opgave tildelt",
-      `Du er blevet tildelt: ${taskTitle}`,
+      title,
+      body,
       { taskId: assignment.task_id },
       userId,
+      subtitle,
     );
   }
 
