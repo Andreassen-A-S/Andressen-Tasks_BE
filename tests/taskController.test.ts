@@ -523,14 +523,14 @@ describe("taskController.updateTask", () => {
     );
 
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "token-a1",
-      "Actor One",
-      "Markerede opgaven som færdig",
-      { taskId: "t1" },
-      "a1",
-      "My Task",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-a1",
+      title: "Actor One",
+      body: "Markerede opgaven som færdig",
+      subtitle: "My Task",
+      data: { taskId: "t1" },
+      userId: "a1",
+    });
   });
 
   test("does not notify admins when status does not change to DONE", async () => {
@@ -588,14 +588,14 @@ describe("taskController.updateTask", () => {
     );
 
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "token-u2",
-      "Høj prioritet",
-      "Opgaven er markeret som høj prioritet",
-      { taskId: "t1" },
-      "u2",
-      "My Task",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-u2",
+      title: "Høj prioritet",
+      body: "Opgaven er markeret som høj prioritet",
+      subtitle: "My Task",
+      data: { taskId: "t1" },
+      userId: "u2",
+    });
   });
 
   test("does not notify when priority changes to HIGH but task has not started yet", async () => {
@@ -719,14 +719,14 @@ describe("taskController.updateTask", () => {
     );
 
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "token-a1",
-      "Actor One",
-      "Markerede opgaven som færdig",
-      { taskId: "t1" },
-      "a1",
-      "My Task",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-a1",
+      title: "Actor One",
+      body: "Markerede opgaven som færdig",
+      subtitle: "My Task",
+      data: { taskId: "t1" },
+      userId: "a1",
+    });
   });
 });
 
@@ -938,14 +938,14 @@ describe("taskController.upsertProgressLog", () => {
     );
 
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "token-a1",
-      "Actor One",
-      "5 METERS",
-      { taskId: "t1" },
-      "a1",
-      "Registrerede fremgang på My Task",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-a1",
+      title: "Actor One",
+      body: "5 METERS",
+      subtitle: "Registrerede fremgang på My Task",
+      data: { taskId: "t1" },
+      userId: "a1",
+    });
   });
 
   test("skips admin notification when the logger is the admin", async () => {

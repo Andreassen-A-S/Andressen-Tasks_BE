@@ -354,14 +354,14 @@ describe("commentController.createComment", () => {
       reply_author_name: "alice@example.com",
     });
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "ExponentPushToken[reply]",
-      "Ukendt bruger",
-      "Har svaret: Reply",
-      { taskId: "t1", screen: "comments" },
-      "u2",
-      "Til Test Task",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "ExponentPushToken[reply]",
+      title: "Ukendt bruger",
+      body: "Har svaret: Reply",
+      subtitle: "Til Test Task",
+      data: { taskId: "t1", screen: "comments" },
+      userId: "u2",
+    });
   });
 
   test("returns signed read URL for attachment in response", async () => {
@@ -436,14 +436,14 @@ describe("commentController.createComment — notification routing", () => {
       createMockResponse(),
     );
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "token-u2",
-      "Ukendt bruger",
-      "hello",
-      { taskId: "t1", screen: "comments" },
-      "u2",
-      "Til Test Task",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-u2",
+      title: "Ukendt bruger",
+      body: "hello",
+      subtitle: "Til Test Task",
+      data: { taskId: "t1", screen: "comments" },
+      userId: "u2",
+    });
   });
 
   test("detokenizes mention tokens in the notification body", async () => {
@@ -474,14 +474,14 @@ describe("commentController.createComment — notification routing", () => {
       createMockResponse(),
     );
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "token-u2",
-      "Ukendt bruger",
-      "hey @Alice check this out",
-      { taskId: "t1", screen: "comments" },
-      "u2",
-      "Til Test Task",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-u2",
+      title: "Ukendt bruger",
+      body: "hey @Alice check this out",
+      subtitle: "Til Test Task",
+      data: { taskId: "t1", screen: "comments" },
+      userId: "u2",
+    });
   });
 
   test("skips commenter from assignee notifications", async () => {
@@ -526,14 +526,14 @@ describe("commentController.createComment — notification routing", () => {
       createMockResponse(),
     );
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "token-a1",
-      "Ukendt bruger",
-      "hello",
-      { taskId: "t1", screen: "comments" },
-      "a1",
-      "Til Test Task",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-a1",
+      title: "Ukendt bruger",
+      body: "hello",
+      subtitle: "Til Test Task",
+      data: { taskId: "t1", screen: "comments" },
+      userId: "a1",
+    });
   });
 
   test("notifies admins separately from assignees", async () => {
@@ -555,14 +555,14 @@ describe("commentController.createComment — notification routing", () => {
       createMockResponse(),
     );
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "token-a1",
-      "Ukendt bruger",
-      "hello",
-      { taskId: "t1", screen: "comments" },
-      "a1",
-      "Til Test Task",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-a1",
+      title: "Ukendt bruger",
+      body: "hello",
+      subtitle: "Til Test Task",
+      data: { taskId: "t1", screen: "comments" },
+      userId: "a1",
+    });
   });
 
   test("does not send reply notification to unassigned former participant", async () => {
@@ -648,14 +648,14 @@ describe("commentController.createComment — notification routing", () => {
       createMockResponse(),
     );
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "ExponentPushToken[admin]",
-      "Ukendt bruger",
-      "Har svaret: hello",
-      { taskId: "t1", screen: "comments" },
-      "a1",
-      "Til Test Task",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "ExponentPushToken[admin]",
+      title: "Ukendt bruger",
+      body: "Har svaret: hello",
+      subtitle: "Til Test Task",
+      data: { taskId: "t1", screen: "comments" },
+      userId: "a1",
+    });
   });
 
   test("skips commenter from admin notifications when commenter is an admin", async () => {
@@ -678,14 +678,14 @@ describe("commentController.createComment — notification routing", () => {
       createMockResponse(),
     );
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "token-a2",
-      "Ukendt bruger",
-      "hello",
-      { taskId: "t1", screen: "comments" },
-      "a2",
-      "Til Test Task",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-a2",
+      title: "Ukendt bruger",
+      body: "hello",
+      subtitle: "Til Test Task",
+      data: { taskId: "t1", screen: "comments" },
+      userId: "a2",
+    });
   });
 
   test("unscoped super-admin notifies only admins in the task's own organization", async () => {
@@ -708,14 +708,14 @@ describe("commentController.createComment — notification routing", () => {
     );
     expect(getAdminsSpy).toHaveBeenCalledWith("org-a");
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "token-admin-a",
-      "Ukendt bruger",
-      "hello",
-      { taskId: "t1", screen: "comments" },
-      "admin-a",
-      "Til Test Task",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-admin-a",
+      title: "Ukendt bruger",
+      body: "hello",
+      subtitle: "Til Test Task",
+      data: { taskId: "t1", screen: "comments" },
+      userId: "admin-a",
+    });
   });
 });
 

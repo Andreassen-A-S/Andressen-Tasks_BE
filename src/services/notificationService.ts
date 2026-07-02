@@ -12,14 +12,23 @@ function redactToken(token: string): string {
     : "***";
 }
 
-export async function sendPushNotification(
-  pushToken: string,
-  title: string,
-  body: string,
-  data?: Record<string, unknown>,
-  userId?: string,
-  subtitle?: string,
-): Promise<void> {
+export interface SendPushNotificationParams {
+  pushToken: string;
+  title: string;
+  body: string;
+  subtitle?: string;
+  data?: Record<string, unknown>;
+  userId?: string;
+}
+
+export async function sendPushNotification({
+  pushToken,
+  title,
+  body,
+  subtitle,
+  data,
+  userId,
+}: SendPushNotificationParams): Promise<void> {
   if (!Expo.isExpoPushToken(pushToken)) {
     console.error(
       `Invalid Expo push token: ${redactToken(pushToken)}${userId ? ` (userId: ${userId})` : ""}`,

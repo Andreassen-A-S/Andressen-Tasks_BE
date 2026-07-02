@@ -78,14 +78,14 @@ export async function createTask(ctx: RequestContext, input: CreateTaskInput) {
     const tokenMap = await userRepo.getPushTokensForUsers(task.assignments.map((a: any) => a.user_id));
     for (const [userId, pushToken] of tokenMap) {
       const { title, subtitle, body } = notificationMessages.TASK_ASSIGNED(task.title);
-      void sendPushNotification(
+      void sendPushNotification({
         pushToken,
         title,
         body,
-        { taskId: task.task_id },
-        userId,
         subtitle,
-      );
+        data: { taskId: task.task_id },
+        userId,
+      });
     }
   }
 
@@ -227,14 +227,14 @@ export async function updateTask(ctx: RequestContext, taskId: string, updateData
     const tokenMap = await userRepo.getPushTokensForUsers(added.map((a: any) => a.user_id));
     for (const [uid, pushToken] of tokenMap) {
       const { title, subtitle, body } = notificationMessages.TASK_ASSIGNED(updatedTask.title);
-      void sendPushNotification(
+      void sendPushNotification({
         pushToken,
         title,
         body,
-        { taskId: updatedTask.task_id },
-        uid,
         subtitle,
-      );
+        data: { taskId: updatedTask.task_id },
+        userId: uid,
+      });
     }
   }
 
@@ -245,14 +245,14 @@ export async function updateTask(ctx: RequestContext, taskId: string, updateData
       const actorName = actorUser?.name?.trim() || actorUser?.email || "Ukendt bruger";
       for (const { user_id, push_token } of admins) {
         const { title, subtitle, body } = notificationMessages.TASK_COMPLETED(updatedTask.title, actorName);
-        void sendPushNotification(
-          push_token,
+        void sendPushNotification({
+          pushToken: push_token,
           title,
           body,
-          { taskId: updatedTask.task_id },
-          user_id,
           subtitle,
-        );
+          data: { taskId: updatedTask.task_id },
+          userId: user_id,
+        });
       }
     }
   }
@@ -272,14 +272,14 @@ export async function updateTask(ctx: RequestContext, taskId: string, updateData
     );
     for (const [uid, pushToken] of tokenMap) {
       const { title, subtitle, body } = notificationMessages.TASK_PRIORITY_CHANGED(updatedTask.title);
-      void sendPushNotification(
+      void sendPushNotification({
         pushToken,
         title,
         body,
-        { taskId: updatedTask.task_id },
-        uid,
         subtitle,
-      );
+        data: { taskId: updatedTask.task_id },
+        userId: uid,
+      });
     }
   }
 
@@ -375,14 +375,14 @@ export async function upsertProgressLog(
           quantityDone,
           unitLabel,
         );
-        void sendPushNotification(
-          push_token,
+        void sendPushNotification({
+          pushToken: push_token,
           title,
           body,
-          { taskId: result.updatedTask.task_id },
-          adminId,
           subtitle,
-        );
+          data: { taskId: result.updatedTask.task_id },
+          userId: adminId,
+        });
       }
     } catch (err) {
       console.error("Failed to notify admins of progress log:", err);

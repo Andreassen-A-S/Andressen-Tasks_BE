@@ -176,14 +176,14 @@ export async function createComment(
     if (replyPushToken) {
       notifiedUserIds.add(replyTarget.user_id);
       const { title, subtitle, body } = notificationMessages.COMMENT_REPLY(task.title, commentPreview, actorName);
-      void sendPushNotification(
-        replyPushToken,
+      void sendPushNotification({
+        pushToken: replyPushToken,
         title,
         body,
-        { taskId: task.task_id, screen: "comments" },
-        replyTarget.user_id,
         subtitle,
-      );
+        data: { taskId: task.task_id, screen: "comments" },
+        userId: replyTarget.user_id,
+      });
     }
   }
 
@@ -198,14 +198,14 @@ export async function createComment(
       if (!pushToken) continue;
       notifiedUserIds.add(mentionedId);
       const { title, subtitle, body } = notificationMessages.COMMENT_MENTION(task.title, commentPreview, actorName);
-      void sendPushNotification(
+      void sendPushNotification({
         pushToken,
         title,
         body,
-        { taskId: task.task_id, screen: "comments" },
-        mentionedId,
         subtitle,
-      );
+        data: { taskId: task.task_id, screen: "comments" },
+        userId: mentionedId,
+      });
     }
   }
 
@@ -217,14 +217,14 @@ export async function createComment(
     if (!assignment.user.push_token) continue;
     notifiedUserIds.add(assignment.user_id);
     const { title, subtitle, body } = notificationMessages.COMMENT_ON_ASSIGNED_TASK(task.title, commentPreview, actorName);
-    void sendPushNotification(
-      assignment.user.push_token,
+    void sendPushNotification({
+      pushToken: assignment.user.push_token,
       title,
       body,
-      { taskId: task.task_id, screen: "comments" },
-      assignment.user_id,
       subtitle,
-    );
+      data: { taskId: task.task_id, screen: "comments" },
+      userId: assignment.user_id,
+    });
   }
 
   // Notify admins separately.
@@ -233,14 +233,14 @@ export async function createComment(
     if (notifiedUserIds.has(adminId)) continue;
     notifiedUserIds.add(adminId);
     const { title, subtitle, body } = notificationMessages.COMMENT_NEW(task.title, commentPreview, actorName);
-    void sendPushNotification(
-      push_token,
+    void sendPushNotification({
+      pushToken: push_token,
       title,
       body,
-      { taskId: task.task_id, screen: "comments" },
-      adminId,
       subtitle,
-    );
+      data: { taskId: task.task_id, screen: "comments" },
+      userId: adminId,
+    });
   }
 
   return comment;
@@ -330,14 +330,14 @@ export async function updateComment(
       if (!pushToken) continue;
       notifiedUserIds.add(mentionedId);
       const { title, subtitle, body } = notificationMessages.COMMENT_MENTION(commentTask.title, commentPreview, actorName);
-      void sendPushNotification(
+      void sendPushNotification({
         pushToken,
         title,
         body,
-        { taskId: comment.task_id, screen: "comments" },
-        mentionedId,
         subtitle,
-      );
+        data: { taskId: comment.task_id, screen: "comments" },
+        userId: mentionedId,
+      });
     }
   }
 

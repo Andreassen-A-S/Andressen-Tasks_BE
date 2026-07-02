@@ -70,14 +70,14 @@ export async function assignTaskToUser(
   if (pushToken) {
     const taskTitle = (assignment as any).task?.title ?? "En opgave";
     const { title, subtitle, body } = notificationMessages.TASK_ASSIGNED(taskTitle);
-    void sendPushNotification(
+    void sendPushNotification({
       pushToken,
       title,
       body,
-      { taskId: assignment.task_id },
-      userId,
       subtitle,
-    );
+      data: { taskId: assignment.task_id },
+      userId,
+    });
   }
 
   return assignment;

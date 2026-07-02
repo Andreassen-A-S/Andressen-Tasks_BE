@@ -25,13 +25,13 @@ export function initScheduler(): void {
         const groups = await taskRepo.getTodayTasksPerUser(new Date());
         for (const { user_id, push_token, tasks } of groups) {
           const { title, body } = notificationMessages.MORNING_TASKS(tasks.length);
-          void sendPushNotification(
-            push_token,
+          void sendPushNotification({
+            pushToken: push_token,
             title,
             body,
-            { screen: "tasks" },
-            user_id,
-          );
+            data: { screen: "tasks" },
+            userId: user_id,
+          });
         }
       } catch (err) {
         console.error("Morning task notification error:", err);
@@ -93,13 +93,13 @@ export function initScheduler(): void {
         const users = await taskRepo.getUsersWithNoActivityToday(new Date());
         for (const { user_id, push_token } of users) {
           const { title, body } = notificationMessages.NO_ACTIVITY();
-          void sendPushNotification(
-            push_token,
+          void sendPushNotification({
+            pushToken: push_token,
             title,
             body,
-            { screen: "tasks" },
-            user_id,
-          );
+            data: { screen: "tasks" },
+            userId: user_id,
+          });
         }
       } catch (err) {
         console.error("No activity notification error:", err);
