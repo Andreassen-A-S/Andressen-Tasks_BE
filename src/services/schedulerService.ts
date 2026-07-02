@@ -3,6 +3,7 @@ import * as taskRepo from "../repositories/taskRepository";
 import * as attachmentRepo from "../repositories/attachmentRepository";
 import * as taskService from "./taskService";
 import { sendPushNotification } from "./notificationService";
+import { notificationMessages } from "../constants/notificationMessages";
 import { deleteFile } from "./storageService";
 import { APP_TIMEZONE } from "../utils/dateUtils";
 
@@ -23,14 +24,14 @@ export function initScheduler(): void {
       try {
         const groups = await taskRepo.getTodayTasksPerUser(new Date());
         for (const { user_id, push_token, tasks } of groups) {
-          const count = tasks.length;
-          void sendPushNotification(
-            push_token,
-            `${count} opgave${count > 1 ? "r" : ""} i dag`,
-            "Tryk for at se dagens program",
-            { screen: "tasks" },
-            user_id,
-          );
+          const { title, body } = notificationMessages.MORNING_TASKS(tasks.length);
+          void sendPushNotification({
+            pushToken: push_token,
+            title,
+            body,
+            data: { screen: "tasks" },
+            userId: user_id,
+          });
         }
       } catch (err) {
         console.error("Morning task notification error:", err);
@@ -91,13 +92,14 @@ export function initScheduler(): void {
       try {
         const users = await taskRepo.getUsersWithNoActivityToday(new Date());
         for (const { user_id, push_token } of users) {
-          void sendPushNotification(
-            push_token,
-            "Ingen aktivitet i dag",
-            "Husk at logge din fremgang",
-            { screen: "tasks" },
-            user_id,
-          );
+          const { title, body } = notificationMessages.NO_ACTIVITY();
+          void sendPushNotification({
+            pushToken: push_token,
+            title,
+            body,
+            data: { screen: "tasks" },
+            userId: user_id,
+          });
         }
       } catch (err) {
         console.error("No activity notification error:", err);

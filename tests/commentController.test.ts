@@ -324,7 +324,7 @@ describe("commentController.createComment", () => {
       task_id: "t1",
       user_id: "u2",
       message: "",
-      attachments: [{ attachment_id: "a1" }],
+      attachments: [{ attachment_id: "a1", type: "IMAGE" }],
       author: { name: null, email: "alice@example.com" },
     } as never);
     spyOn(userRepo, "getPushTokenInOrg").mockResolvedValue("ExponentPushToken[reply]");
@@ -349,18 +349,19 @@ describe("commentController.createComment", () => {
     await callController(commentController.createComment, req, res);
 
     expect(createSpy.mock.calls[0]?.[1]).toMatchObject({
-      reply_preview: "Vedhæftning",
+      reply_preview: "1 billede",
       reply_author_id: "u2",
       reply_author_name: "alice@example.com",
     });
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "ExponentPushToken[reply]",
-      "Nyt svar på din kommentar",
-      "Test Task",
-      { taskId: "t1", screen: "comments" },
-      "u2",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "ExponentPushToken[reply]",
+      title: "Ukendt bruger",
+      body: "Har svaret: Reply",
+      subtitle: "Til Test Task",
+      data: { taskId: "t1", screen: "comments" },
+      userId: "u2",
+    });
   });
 
   test("returns signed read URL for attachment in response", async () => {
@@ -435,13 +436,52 @@ describe("commentController.createComment — notification routing", () => {
       createMockResponse(),
     );
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "token-u2",
-      "Ny kommentar på din opgave",
-      "Test Task",
-      { taskId: "t1", screen: "comments" },
-      "u2",
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-u2",
+      title: "Ukendt bruger",
+      body: "hello",
+      subtitle: "Til Test Task",
+      data: { taskId: "t1", screen: "comments" },
+      userId: "u2",
+    });
+  });
+
+  test("detokenizes mention tokens in the notification body", async () => {
+    transactionMock.mockImplementation(async (fn: any) => fn({}));
+    spyOn(commentRepo, "createComment").mockResolvedValue({
+      comment_id: "c1",
+      task_id: "t1",
+      user_id: "u1",
+      message: "hey @[Alice](u2) check this out",
+      attachments: [],
+    } as never);
+    spyOn(taskEventRepo, "createTaskEvent").mockResolvedValue({} as never);
+    sendPushNotificationMock.mockResolvedValue(undefined);
+    findFirstMock.mockResolvedValueOnce({
+      task_id: "t1",
+      title: "Test Task",
+      created_by: "u1",
+      assignments: [
+        { user_id: "u2", user: { user_id: "u2", role: UserRole.USER, push_token: "token-u2" } },
+      ],
+      project: { organization_id: "org1" },
+    } as any);
+    spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([]);
+
+    await callController(
+      commentController.createComment,
+      createRequest({ params: { taskId: "t1", screen: "comments" }, user: { user_id: "u1", role: UserRole.USER }, body: { message: "hey @[Alice](u2) check this out" } }),
+      createMockResponse(),
     );
+    expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-u2",
+      title: "Ukendt bruger",
+      body: "hey @Alice check this out",
+      subtitle: "Til Test Task",
+      data: { taskId: "t1", screen: "comments" },
+      userId: "u2",
+    });
   });
 
   test("skips commenter from assignee notifications", async () => {
@@ -486,13 +526,14 @@ describe("commentController.createComment — notification routing", () => {
       createMockResponse(),
     );
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "token-a1",
-      "Ny kommentar",
-      "Test Task",
-      { taskId: "t1", screen: "comments" },
-      "a1",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-a1",
+      title: "Ukendt bruger",
+      body: "hello",
+      subtitle: "Til Test Task",
+      data: { taskId: "t1", screen: "comments" },
+      userId: "a1",
+    });
   });
 
   test("notifies admins separately from assignees", async () => {
@@ -514,13 +555,14 @@ describe("commentController.createComment — notification routing", () => {
       createMockResponse(),
     );
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "token-a1",
-      "Ny kommentar",
-      "Test Task",
-      { taskId: "t1", screen: "comments" },
-      "a1",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-a1",
+      title: "Ukendt bruger",
+      body: "hello",
+      subtitle: "Til Test Task",
+      data: { taskId: "t1", screen: "comments" },
+      userId: "a1",
+    });
   });
 
   test("does not send reply notification to unassigned former participant", async () => {
@@ -606,13 +648,14 @@ describe("commentController.createComment — notification routing", () => {
       createMockResponse(),
     );
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "ExponentPushToken[admin]",
-      "Nyt svar på din kommentar",
-      "Test Task",
-      { taskId: "t1", screen: "comments" },
-      "a1",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "ExponentPushToken[admin]",
+      title: "Ukendt bruger",
+      body: "Har svaret: hello",
+      subtitle: "Til Test Task",
+      data: { taskId: "t1", screen: "comments" },
+      userId: "a1",
+    });
   });
 
   test("skips commenter from admin notifications when commenter is an admin", async () => {
@@ -635,13 +678,14 @@ describe("commentController.createComment — notification routing", () => {
       createMockResponse(),
     );
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "token-a2",
-      "Ny kommentar",
-      "Test Task",
-      { taskId: "t1", screen: "comments" },
-      "a2",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-a2",
+      title: "Ukendt bruger",
+      body: "hello",
+      subtitle: "Til Test Task",
+      data: { taskId: "t1", screen: "comments" },
+      userId: "a2",
+    });
   });
 
   test("unscoped super-admin notifies only admins in the task's own organization", async () => {
@@ -664,13 +708,14 @@ describe("commentController.createComment — notification routing", () => {
     );
     expect(getAdminsSpy).toHaveBeenCalledWith("org-a");
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "token-admin-a",
-      "Ny kommentar",
-      "Test Task",
-      { taskId: "t1", screen: "comments" },
-      "admin-a",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-admin-a",
+      title: "Ukendt bruger",
+      body: "hello",
+      subtitle: "Til Test Task",
+      data: { taskId: "t1", screen: "comments" },
+      userId: "admin-a",
+    });
   });
 });
 

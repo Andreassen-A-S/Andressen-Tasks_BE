@@ -10,6 +10,7 @@ import * as taskEventRepo from "../repositories/taskEventRepository";
 import * as taskRepo from "../repositories/taskRepository";
 import * as userRepo from "../repositories/userRepository";
 import { sendPushNotification } from "./notificationService";
+import { notificationMessages } from "../constants/notificationMessages";
 import type { CreateTaskInput, UpdateTaskInput } from "../types/task";
 import type { RequestContext } from "../types/requestContext";
 import { appDateKey } from "../utils/dateUtils";
@@ -76,13 +77,15 @@ export async function createTask(ctx: RequestContext, input: CreateTaskInput) {
   if (task.assignments && task.assignments.length > 0) {
     const tokenMap = await userRepo.getPushTokensForUsers(task.assignments.map((a: any) => a.user_id));
     for (const [userId, pushToken] of tokenMap) {
-      void sendPushNotification(
+      const { title, subtitle, body } = notificationMessages.TASK_ASSIGNED(task.title);
+      void sendPushNotification({
         pushToken,
-        "Ny opgave tildelt",
-        `Du er blevet tildelt: ${task.title}`,
-        { taskId: task.task_id },
+        title,
+        body,
+        subtitle,
+        data: { taskId: task.task_id },
         userId,
-      );
+      });
     }
   }
 
@@ -223,26 +226,34 @@ export async function updateTask(ctx: RequestContext, taskId: string, updateData
     const added = updatedTask.assignments.filter((a: any) => !oldUserIds.has(a.user_id));
     const tokenMap = await userRepo.getPushTokensForUsers(added.map((a: any) => a.user_id));
     for (const [uid, pushToken] of tokenMap) {
-      void sendPushNotification(
+      const { title, subtitle, body } = notificationMessages.TASK_ASSIGNED(updatedTask.title);
+      void sendPushNotification({
         pushToken,
-        "Ny opgave tildelt",
-        `Du er blevet tildelt: ${updatedTask.title}`,
-        { taskId: updatedTask.task_id },
-        uid,
-      );
+        title,
+        body,
+        subtitle,
+        data: { taskId: updatedTask.task_id },
+        userId: uid,
+      });
     }
   }
 
   if (updateData.status && oldTask.status !== updatedTask.status && updatedTask.status === TaskStatus.DONE) {
     const admins = await userRepo.getAdminPushTokens(ctx.effectiveOrgId);
-    for (const { user_id, push_token } of admins) {
-      void sendPushNotification(
-        push_token,
-        "Opgave afsluttet",
-        updatedTask.title,
-        { taskId: updatedTask.task_id },
-        user_id,
-      );
+    if (admins.length > 0) {
+      const actorUser = await userRepo.getUserById(ctx.actorUserId, ctx.effectiveOrgId);
+      const actorName = actorUser?.name?.trim() || actorUser?.email || "Ukendt bruger";
+      for (const { user_id, push_token } of admins) {
+        const { title, subtitle, body } = notificationMessages.TASK_COMPLETED(updatedTask.title, actorName);
+        void sendPushNotification({
+          pushToken: push_token,
+          title,
+          body,
+          subtitle,
+          data: { taskId: updatedTask.task_id },
+          userId: user_id,
+        });
+      }
     }
   }
 
@@ -260,13 +271,15 @@ export async function updateTask(ctx: RequestContext, taskId: string, updateData
       updatedTask.assignments.map((a: any) => a.user_id),
     );
     for (const [uid, pushToken] of tokenMap) {
-      void sendPushNotification(
+      const { title, subtitle, body } = notificationMessages.TASK_PRIORITY_CHANGED(updatedTask.title);
+      void sendPushNotification({
         pushToken,
-        "Prioritet ændret",
-        `${updatedTask.title} – prioritet ændret til høj`,
-        { taskId: updatedTask.task_id },
-        uid,
-      );
+        title,
+        body,
+        subtitle,
+        data: { taskId: updatedTask.task_id },
+        userId: uid,
+      });
     }
   }
 
@@ -347,16 +360,29 @@ export async function upsertProgressLog(
   // Notify admins after transaction commits.
   void (async () => {
     try {
-      const admins = await userRepo.getAdminPushTokens(ctx.effectiveOrgId);
+      const admins = await userRepo.getAdminPushTokens(ctx.effectiveOrgId).then(
+        (list) => list.filter(({ user_id }) => user_id !== ctx.actorUserId),
+      );
+      if (admins.length === 0) return;
+
+      const actorUser = await userRepo.getUserById(ctx.actorUserId, ctx.effectiveOrgId);
+      const actorName = actorUser?.name?.trim() || actorUser?.email || "Ukendt bruger";
+      const unitLabel = !unit || unit === "NONE" ? "%" : unit;
       for (const { user_id: adminId, push_token } of admins) {
-        if (adminId === ctx.actorUserId) continue;
-        void sendPushNotification(
-          push_token,
-          "Fremgang logget",
+        const { title, subtitle, body } = notificationMessages.PROGRESS_LOGGED(
           result.updatedTask.title,
-          { taskId: result.updatedTask.task_id },
-          adminId,
+          actorName,
+          quantityDone,
+          unitLabel,
         );
+        void sendPushNotification({
+          pushToken: push_token,
+          title,
+          body,
+          subtitle,
+          data: { taskId: result.updatedTask.task_id },
+          userId: adminId,
+        });
       }
     } catch (err) {
       console.error("Failed to notify admins of progress log:", err);

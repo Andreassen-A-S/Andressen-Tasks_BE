@@ -509,6 +509,7 @@ describe("taskController.updateTask", () => {
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
       { user_id: "a1", push_token: "token-a1" },
     ]);
+    spyOn(userRepo, "getUserById").mockResolvedValue({ name: "Actor One", email: "actor@example.com" } as never);
     sendPushNotificationMock.mockResolvedValue(undefined);
 
     await callController(
@@ -522,13 +523,14 @@ describe("taskController.updateTask", () => {
     );
 
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "token-a1",
-      "Opgave afsluttet",
-      "My Task",
-      { taskId: "t1" },
-      "a1",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-a1",
+      title: "Actor One",
+      body: "Markerede opgaven som færdig",
+      subtitle: "My Task",
+      data: { taskId: "t1" },
+      userId: "a1",
+    });
   });
 
   test("does not notify admins when status does not change to DONE", async () => {
@@ -586,13 +588,14 @@ describe("taskController.updateTask", () => {
     );
 
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "token-u2",
-      "Prioritet ændret",
-      "My Task – prioritet ændret til høj",
-      { taskId: "t1" },
-      "u2",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-u2",
+      title: "Høj prioritet",
+      body: "Opgaven er markeret som høj prioritet",
+      subtitle: "My Task",
+      data: { taskId: "t1" },
+      userId: "u2",
+    });
   });
 
   test("does not notify when priority changes to HIGH but task has not started yet", async () => {
@@ -702,6 +705,7 @@ describe("taskController.updateTask", () => {
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
       { user_id: "a1", push_token: "token-a1" },
     ]);
+    spyOn(userRepo, "getUserById").mockResolvedValue({ name: "Actor One", email: "actor@example.com" } as never);
     sendPushNotificationMock.mockResolvedValue(undefined);
 
     await callController(
@@ -715,13 +719,14 @@ describe("taskController.updateTask", () => {
     );
 
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "token-a1",
-      "Opgave afsluttet",
-      "My Task",
-      { taskId: "t1" },
-      "a1",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-a1",
+      title: "Actor One",
+      body: "Markerede opgaven som færdig",
+      subtitle: "My Task",
+      data: { taskId: "t1" },
+      userId: "a1",
+    });
   });
 });
 
@@ -919,6 +924,7 @@ describe("taskController.upsertProgressLog", () => {
     spyOn(userRepo, "getAdminPushTokens").mockResolvedValue([
       { user_id: "a1", push_token: "token-a1" },
     ]);
+    spyOn(userRepo, "getUserById").mockResolvedValue({ name: "Actor One", email: "actor@example.com" } as never);
     sendPushNotificationMock.mockResolvedValue(undefined);
 
     await callController(
@@ -932,13 +938,14 @@ describe("taskController.upsertProgressLog", () => {
     );
 
     expect(sendPushNotificationMock).toHaveBeenCalledTimes(1);
-    expect(sendPushNotificationMock).toHaveBeenCalledWith(
-      "token-a1",
-      "Fremgang logget",
-      "My Task",
-      { taskId: "t1" },
-      "a1",
-    );
+    expect(sendPushNotificationMock).toHaveBeenCalledWith({
+      pushToken: "token-a1",
+      title: "Actor One",
+      body: "5 METERS",
+      subtitle: "Registrerede fremgang på My Task",
+      data: { taskId: "t1" },
+      userId: "a1",
+    });
   });
 
   test("skips admin notification when the logger is the admin", async () => {
