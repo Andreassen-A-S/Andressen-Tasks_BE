@@ -48,6 +48,7 @@ export const notificationMessages = {
     body: `📣 • ${commentPreview}`,
   }),
 
+  // Maybe merge COMMENT_ON_ASSIGNED_TASK and COMMENT_NEW into one, since they are very similar
   COMMENT_ON_ASSIGNED_TASK: (
     taskTitle: string,
     commentPreview: string,
